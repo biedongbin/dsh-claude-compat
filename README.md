@@ -1,8 +1,20 @@
-# dsh-claude-compat
+<p align="center">
+  <img src="https://img.shields.io/badge/dsh-plugin-blue?style=for-the-badge" alt="DSH Plugin">
+</p>
 
-[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) plugin: bridge Claude Code's `.claude/` directory into DSH natively.
+<h1 align="center">dsh-claude-compat</h1>
 
-Reuse your existing Claude Code project setup — skills, slash commands, and rules work in DSH with zero migration.
+<p align="center">
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🌐_简体中文-点我阅读中文-red?style=for-the-badge" alt="简体中文"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
+  <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
+</p>
+
+<p align="center">DeepSeek Harness plugin that bridges Claude Code's <code>.claude/</code> directory into DSH natively — reuse your skills, slash commands, and rules with zero migration.</p>
 
 ## What it does
 
@@ -23,6 +35,12 @@ Reuse your existing Claude Code project setup — skills, slash commands, and ru
 
 ```bash
 dsh plugin --profile web add dsh-claude-compat
+```
+
+Or from GitHub:
+
+```bash
+dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 ```
 
 Then register it in `~/.dsh/profiles/web/cordis.patch.yml` (merge into your existing patch list):
@@ -55,6 +73,32 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 - **Rules granularity**: rules are read per new session (cached per session cwd). Editing a rule mid-session takes effect in the next session.
 - **Rules content**: rules are injected verbatim as instructions to the model. Only commit rules you want the model to follow — same trust level as `CLAUDE.md`.
 
+## Acknowledgments
+
+- [Linux.do](https://linux.do) — community
+- [Claude Code](https://claude.com/claude-code) — the `.claude/` conventions this plugin bridges
+- [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) — the runtime this plugin extends
+
 ## License
 
-MIT
+[MIT](LICENSE)
+
+## ⭐ Star History
+
+If this project helps you, please give it a ⭐ — it motivates us to keep improving.
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/biedongbin/dsh-claude-compat?style=for-the-badge&logo=github&color=gold" alt="GitHub Stars">
+  <img src="https://img.shields.io/github/forks/biedongbin/dsh-claude-compat?style=for-the-badge&logo=github" alt="GitHub Forks">
+  <img src="https://img.shields.io/github/watchers/biedongbin/dsh-claude-compat?style=for-the-badge&logo=github" alt="GitHub Watchers">
+</p>
+
+<div align="center">
+  <a href="https://www.star-history.com/#biedongbin/dsh-claude-compat&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=biedongbin/dsh-claude-compat&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=biedongbin/dsh-claude-compat&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=biedongbin/dsh-claude-compat&type=Date" width="760" />
+    </picture>
+  </a>
+</div>
