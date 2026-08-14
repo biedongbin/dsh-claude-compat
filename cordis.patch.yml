@@ -1,0 +1,6 @@
+- insert:
+    - id: claude-compat
+      name: 'dsh-claude-compat'
+      config:
+        enableSkills: true
+        enableRules: true
