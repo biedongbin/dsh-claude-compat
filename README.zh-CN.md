@@ -33,6 +33,8 @@
 
 ## 安装
 
+一条命令 —— 包声明了 `dsh.bundle`，DSH 自动激活（无需手改 `cordis.patch.yml`）：
+
 ```bash
 dsh plugin --profile web add dsh-claude-compat
 ```
@@ -41,17 +43,6 @@ dsh plugin --profile web add dsh-claude-compat
 
 ```bash
 dsh plugin --profile web add github:biedongbin/dsh-claude-compat
-```
-
-然后在 `~/.dsh/profiles/web/cordis.patch.yml` 注册（合并进现有 patch 列表）：
-
-```yaml
-- insert:
-    - id: claude-compat
-      name: 'dsh-claude-compat'
-      config:
-        enableSkills: true
-        enableRules: true
 ```
 
 重启 DSH（`dsh web`）。完成 —— skills 出现在 `/` 菜单，rules 注入每个新会话。

@@ -33,6 +33,8 @@
 
 ## Install
 
+One command — the package declares `dsh.bundle`, so DSH activates it automatically (no manual `cordis.patch.yml` editing):
+
 ```bash
 dsh plugin --profile web add dsh-claude-compat
 ```
@@ -41,17 +43,6 @@ Or from GitHub:
 
 ```bash
 dsh plugin --profile web add github:biedongbin/dsh-claude-compat
-```
-
-Then register it in `~/.dsh/profiles/web/cordis.patch.yml` (merge into your existing patch list):
-
-```yaml
-- insert:
-    - id: claude-compat
-      name: 'dsh-claude-compat'
-      config:
-        enableSkills: true
-        enableRules: true
 ```
 
 Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into every new session.

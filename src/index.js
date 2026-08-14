@@ -6,8 +6,11 @@
 //      `/skill-name` slash trigger, the `skill` tool, and the model-visible catalog
 //      pick them up natively. Only name+description load at discovery; the body
 //      loads on demand — same contract as the shipped filesystem provider.
-//   2. System prompt section — injects <projectRoot>/.claude/rules/*.md as ordered
-//      guidance. CLAUDE.md / AGENTS.md are already handled by dsh-agent-instructions,
+//   2. Rules message-stream injection — injects <projectRoot>/.claude/rules/*.md as
+//      ONE user-role <system-reminder> message prepended at the front of the
+//      message array, once per session (agent/pre-step). This mirrors Claude
+//      Code's prependUserContext channel, which models follow reliably.
+//      CLAUDE.md / AGENTS.md are already handled by dsh-agent-instructions,
 //      so we do NOT re-inject them here.
 //
 // Skill name flattening: .claude/skills/gitnexus/gitnexus-guide/SKILL.md →
@@ -17,9 +20,10 @@
 // Commands: .claude/commands/commit-changes.md → skill "commit-changes",
 // user-invocable forced true so `/commit-changes` works in the slash menu.
 //
-// Rules text is re-read every system-prompt assembly (per model step), so rule
-// edits take effect without a DSH restart. No file watcher — the cost of
-// stat'ing a handful of small markdown files is negligible per step.
+// Rules are read once per session (cached per session cwd, from
+// agent.session.header.cwd — NOT process.cwd(), the DSH process may be
+// launched from anywhere). Editing a rule mid-session takes effect in the
+// next session.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
