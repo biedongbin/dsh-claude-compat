@@ -1,0 +1,42 @@
+{
+  "name": "dsh-claude-compat",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directory (skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "claude-code",
+    "claude",
+    "skills",
+    "slash-commands",
+    "rules"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-skill": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-skill": { "optional": true },
+    "@deepseek-ai/dsh-llm": { "optional": true },
+    "@deepseek-ai/schemastery": { "optional": true }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
