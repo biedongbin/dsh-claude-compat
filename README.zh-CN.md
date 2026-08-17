@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
@@ -24,12 +24,19 @@
 | `commands/*.md` | DSH skill provider | 同上，且用户可直接调用：斜杠菜单里 `/command-name` 可用。 |
 | `rules/*.md` | 消息流注入 | rules 全文拼接，包 `<system-reminder>` 信封，每会话一次以 user-role 消息插在消息数组最前 —— 与 Claude Code 同通道（`prependUserContext`），模型可靠遵循。 |
 
+同类三个目录同样读取**用户级** `~/.claude/`（skills、commands、rules）。同名 skill/command/rule 去重，优先级固定：
+
+**项目 `.claude` > DSH 原生 > `~/.claude`**
+
+- 项目条目 rank=`50`，`~/.claude` 条目 rank=`700`，DSH 自带 bundled skills 固定 rank=`600`（`BUNDLED_SKILL_RANK`）——项目 skill 永远压过 DSH 内置与用户副本；用户 skill 永远压不过 DSH 原生。
+- `~/.claude/rules` 中与项目同 basename 的 rule 文件被跳过（项目优先）。
+
 `CLAUDE.md` / `AGENTS.md` **不碰** —— DSH 内置 `dsh-agent-instructions` 已处理。
 
 ## 环境要求
 
 - DSH 及其 profile（如 `web`）
-- 使用 Claude Code 约定的项目：`.claude/skills/`、`.claude/commands/`、`.claude/rules/`
+- 使用 Claude Code 约定的项目：`.claude/skills/`、`.claude/commands/`、`.claude/rules/`（均可选；`~/.claude/` 对应目录同样生效）
 
 ## 安装
 
@@ -51,12 +58,16 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 
 | 选项 | 默认值 | 说明 |
 |---|---|---|
-| `enableSkills` | `true` | 注册 `.claude/skills` + `.claude/commands` provider |
-| `enableRules` | `true` | 注入 `.claude/rules/*.md` 到消息流 |
-| `rulesMaxBytes` | `65536` | 注入 rules 总量硬上限 |
+| `enableSkills` | `true` | 注册 `.claude/skills` + `.claude/commands` provider（项目与 `~/.claude` 均含） |
+| `enableRules` | `true` | 注入项目 + `~/.claude` 的 `rules/*.md` 到消息流 |
+| `rulesMaxBytes` | `65536` | 注入项目 rules 总量硬上限 |
+| `userRulesMaxBytes` | `65536` | 注入 `~/.claude/rules` 总量硬上限 |
 | `projectRootMarkers` | `[".git"]` | 项目根发现的祖先标记 |
-| `skillRank` | `150` | provider 排名：介于 DSH 原生 `.dsh/skills`（100）与 `.agents/skills`（200）之间 —— 冲突时 DSH 原生优先 |
-| `skillSource` | `project-claude` | catalog 条目来源标签 |
+| `skillRank` | `50` | 项目 `.claude` skills 的 provider 排名（压过一切 DSH 原生冲突） |
+| `skillSource` | `project-claude` | 项目 catalog 条目来源标签 |
+| `userSkillRank` | `700` | `~/.claude` skills 的 provider 排名（输给 DSH 原生 `600`） |
+| `userSkillSource` | `user-claude` | `~/.claude` catalog 条目来源标签 |
+| `userClaudeDir` | `~/.claude` | 用户级 `.claude` 目录（`~` 展开为 home 目录） |
 
 ## 说明
 

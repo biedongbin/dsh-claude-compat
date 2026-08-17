@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
@@ -24,12 +24,19 @@
 | `commands/*.md` | DSH skill provider | Same, plus user-invocable: `/command-name` works in the slash menu. |
 | `rules/*.md` | Message-stream injection | Rules are concatenated, wrapped in a `<system-reminder>` envelope, and prepended as a user-role message at the front of the message array once per session — the same channel Claude Code uses (`prependUserContext`), which models follow reliably. |
 
+The same three directories are also read from the **user-level** `~/.claude/` (skills, commands, rules). Same-name skills/commands/rules are deduped with a fixed priority:
+
+**project `.claude` > DSH native > `~/.claude`**
+
+- Project entries carry rank `50`, `~/.claude` entries rank `700`, and DSH's own bundled skills sit at rank `600` (`BUNDLED_SKILL_RANK`) — so a project skill always overrides the DSH-bundled and user copies, and a user skill never overrides a DSH-native one.
+- Rule files with the same basename in `~/.claude/rules` are skipped when the project already provides one.
+
 `CLAUDE.md` / `AGENTS.md` are **not** touched — DSH's built-in `dsh-agent-instructions` already handles those.
 
 ## Requirements
 
 - DSH with a profile (e.g. `web`)
-- A project using Claude Code conventions: `.claude/skills/`, `.claude/commands/`, `.claude/rules/`
+- A project using Claude Code conventions: `.claude/skills/`, `.claude/commands/`, `.claude/rules/` (all optional; `~/.claude/` equivalents are also picked up)
 
 ## Install
 
@@ -51,12 +58,16 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 
 | Option | Default | Description |
 |---|---|---|
-| `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` provider |
-| `enableRules` | `true` | Inject `.claude/rules/*.md` into the message stream |
-| `rulesMaxBytes` | `65536` | Hard cap on total injected rules text |
+| `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` provider (project and `~/.claude`) |
+| `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
+| `rulesMaxBytes` | `65536` | Hard cap on total injected project rules text |
+| `userRulesMaxBytes` | `65536` | Hard cap on total injected `~/.claude/rules` text |
 | `projectRootMarkers` | `[".git"]` | Ancestor markers for project-root discovery |
-| `skillRank` | `150` | Provider rank: between DSH-native `.dsh/skills` (100) and `.agents/skills` (200) — DSH-native wins conflicts |
-| `skillSource` | `project-claude` | Source tag for catalog entries |
+| `skillRank` | `50` | Provider rank for project `.claude` skills (wins every DSH-native collision) |
+| `skillSource` | `project-claude` | Source tag for project catalog entries |
+| `userSkillRank` | `700` | Provider rank for `~/.claude` skills (loses to DSH-native `600`) |
+| `userSkillSource` | `user-claude` | Source tag for `~/.claude` catalog entries |
+| `userClaudeDir` | `~/.claude` | User-level `.claude` directory (`~` expands to the home dir) |
 
 ## Notes
 

@@ -2,14 +2,18 @@
 //
 // Two contributions to the live runtime:
 //   1. Skill provider on ctx.skills — scans <projectRoot>/.claude/skills/**/SKILL.md
-//      and <projectRoot>/.claude/commands/*.md, surfaces them as DSH skills so the
-//      `/skill-name` slash trigger, the `skill` tool, and the model-visible catalog
-//      pick them up natively. Only name+description load at discovery; the body
-//      loads on demand — same contract as the shipped filesystem provider.
-//   2. Rules message-stream injection — injects <projectRoot>/.claude/rules/*.md as
-//      ONE user-role <system-reminder> message prepended at the front of the
-//      message array, once per session (agent/pre-step). This mirrors Claude
-//      Code's prependUserContext channel, which models follow reliably.
+//      and <projectRoot>/.claude/commands/*.md (plus the user-level
+//      ~/.claude/skills and ~/.claude/commands), surfaces them as DSH skills so
+//      the `/skill-name` slash trigger, the `skill` tool, and the model-visible
+//      catalog pick them up natively. Only name+description load at discovery;
+//      the body loads on demand — same contract as the shipped filesystem
+//      provider.
+//   2. Rules message-stream injection — injects <projectRoot>/.claude/rules/*.md
+//      and ~/.claude/rules/*.md as ONE user-role <system-reminder> message
+//      prepended at the front of the message array, once per session
+//      (agent/pre-step). This mirrors Claude Code's prependUserContext channel,
+//      which models follow reliably. Same-name rule files are deduped,
+//      project .claude winning over ~/.claude.
 //      CLAUDE.md / AGENTS.md are already handled by dsh-agent-instructions,
 //      so we do NOT re-inject them here.
 //
@@ -20,6 +24,13 @@
 // Commands: .claude/commands/commit-changes.md → skill "commit-changes",
 // user-invocable forced true so `/commit-changes` works in the slash menu.
 //
+// Precedence (DSH registry semantics: candidates sort by rank ascending and
+// duplicate skill names are first-wins — LOWER rank wins). The native ladder
+// is project-dsh 100, project-agents 200, custom 300, user-dsh 400,
+// user-agents 500, DSH bundled 600 (fixed BUNDLED_SKILL_RANK). This plugin
+// emits project .claude at rank 50 and ~/.claude at rank 700, so conflicts
+// resolve as: project .claude > DSH native (600) > ~/.claude.
+//
 // Rules are read once per session (cached per session cwd, from
 // agent.session.header.cwd — NOT process.cwd(), the DSH process may be
 // launched from anywhere). Editing a rule mid-session takes effect in the
@@ -28,6 +39,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import z from '@deepseek-ai/schemastery';
 import { parse } from 'yaml';
 import { isSkillName } from '@deepseek-ai/dsh-skill';
@@ -38,11 +50,17 @@ export const inject = ['skills'];
 
 export const Config = z.object({
   projectRootMarkers: z.array(z.string()).default(['.git']),
-  // 150: between project-dsh (100) and project-agents (200). DSH-native skills
-  // win over Claude skills; Claude skills win over user-level.
-  skillRank: z.number().default(150),
+  // DSH dedupes by rank ascending (lower wins). 50 beats the DSH-native
+  // project roots (100/200) and the bundled root (600) — project .claude wins
+  // every collision. 700 loses to bundled 600 — DSH native wins over
+  // ~/.claude. Final priority: project .claude > DSH native > ~/.claude.
+  skillRank: z.number().default(50),
   skillSource: z.string().default('project-claude'),
+  userSkillRank: z.number().default(700),
+  userSkillSource: z.string().default('user-claude'),
+  userClaudeDir: z.string().default('~/.claude'),
   rulesMaxBytes: z.number().default(65536),
+  userRulesMaxBytes: z.number().default(65536),
   enableRules: z.boolean().default(true),
   enableSkills: z.boolean().default(true),
 });
@@ -64,27 +82,38 @@ class ClaudeCompatSkillProvider {
     this.ctx = ctx;
     this.name = 'claude-compat';
     this.config = config;
-    this.skillRank = config.skillRank ?? 150;
+    this.skillRank = config.skillRank ?? 50;
     this.source = config.skillSource ?? 'project-claude';
+    this.userSkillRank = config.userSkillRank ?? 700;
+    this.userSkillSource = config.userSkillSource ?? 'user-claude';
+    this.userClaudeDir = resolveUserClaudeDir(config.userClaudeDir);
     control.signal.addEventListener('abort', () => {}, { once: true });
   }
 
   async list(options) {
     const cwd = options?.cwd;
-    if (cwd === undefined || cwd === null) return [];
-    const projectRoot = await findProjectRoot(cwd, this.config.projectRootMarkers);
-    if (projectRoot === undefined) return [];
-    const claudeDir = join(projectRoot, '.claude');
-    if (!(await pathExists(claudeDir))) return [];
-
     const candidates = [];
-    for (const c of await discoverSkills(join(claudeDir, 'skills'), this.name, this.source, this.skillRank)) {
-      candidates.push(c);
+    // Project .claude needs a cwd to locate the project root; user ~/.claude
+    // is cwd-independent (mirrors DSH's own user-dsh/user-agents roots, which
+    // are scanned unconditionally).
+    if (cwd !== undefined && cwd !== null) {
+      const projectRoot = await findProjectRoot(cwd, this.config.projectRootMarkers);
+      if (projectRoot !== undefined) {
+        await this.addRootCandidates(candidates, join(projectRoot, '.claude'), this.source, this.skillRank);
+      }
     }
-    for (const c of await discoverCommands(join(claudeDir, 'commands'), this.name, this.source, this.skillRank)) {
-      candidates.push(c);
-    }
+    await this.addRootCandidates(candidates, this.userClaudeDir, this.userSkillSource, this.userSkillRank);
     return candidates;
+  }
+
+  async addRootCandidates(candidates, claudeDir, source, rank) {
+    if (!(await pathExists(claudeDir))) return;
+    for (const c of await discoverSkills(join(claudeDir, 'skills'), this.name, source, rank)) {
+      candidates.push(c);
+    }
+    for (const c of await discoverCommands(join(claudeDir, 'commands'), this.name, source, rank)) {
+      candidates.push(c);
+    }
   }
 
   async get(candidate) {
@@ -107,7 +136,7 @@ class ClaudeCompatSkillProvider {
   }
 }
 
-// ─── discovery: .claude/skills (recursive, ≤3 levels) ────────────────────────
+// ─── discovery: <root>/.claude/skills (recursive, ≤3 levels) ─────────────────
 
 async function discoverSkills(rootDir, providerName, source, rank) {
   const out = [];
@@ -136,7 +165,7 @@ async function discoverSkills(rootDir, providerName, source, rank) {
   }
 }
 
-// ─── discovery: .claude/commands (flat) ──────────────────────────────────────
+// ─── discovery: <root>/.claude/commands (flat) ───────────────────────────────
 
 async function discoverCommands(rootDir, providerName, source, rank) {
   const out = [];
@@ -245,22 +274,29 @@ function registerRulesSection(ctx, config) {
 }
 
 function buildRulesText(cwd, config, maxBytes) {
-  const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
-  if (projectRoot === undefined) return '';
-  const rulesDir = join(projectRoot, '.claude', 'rules');
-  const files = listMdFilesSync(rulesDir);
-  if (files.length === 0) return '';
   const parts = [];
-  let total = 0;
-  for (const f of files) {
-    let raw;
-    try { raw = readFileSync(f, 'utf8'); } catch { continue; }
-    const basename = f.split('/').pop();
-    const chunk = `## ${basename}\n\n${raw.trim()}\n`;
-    if (total + chunk.length > maxBytes) break;
-    parts.push(chunk);
-    total += chunk.length;
+  const seen = new Set();
+  const pushRoot = (rootDir, cap) => {
+    let remaining = cap;
+    const files = listMdFilesSync(rootDir);
+    for (const f of files) {
+      const basename = f.split('/').pop();
+      if (seen.has(basename)) continue; // higher-priority root already included
+      let raw;
+      try { raw = readFileSync(f, 'utf8'); } catch { continue; }
+      const chunk = `## ${basename}\n\n${raw.trim()}\n`;
+      if (chunk.length > remaining) break;
+      remaining -= chunk.length;
+      seen.add(basename);
+      parts.push(chunk);
+    }
+  };
+  // Project .claude/rules first: wins same-name collisions against ~/.claude.
+  const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
+  if (projectRoot !== undefined) {
+    pushRoot(join(projectRoot, '.claude', 'rules'), maxBytes);
   }
+  pushRoot(join(resolveUserClaudeDir(config.userClaudeDir), 'rules'), config.userRulesMaxBytes ?? maxBytes);
   if (parts.length === 0) return '';
   // Exact envelope Claude Code uses in prependUserContext (api.ts):
   // user-role <system-reminder> with "# claudeMd" framing.
@@ -297,6 +333,13 @@ function listMdFilesSync(dir) {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+function resolveUserClaudeDir(dir) {
+  if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
+  if (dir === '~') return homedir();
+  if (dir.startsWith('~/')) return join(homedir(), dir.slice(2));
+  return resolve(dir);
+}
 
 async function findProjectRoot(cwd, markers = ['.git']) {
   let current = resolve(cwd);

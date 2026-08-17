@@ -1,7 +1,7 @@
 {
   "name": "dsh-claude-compat",
-  "version": "0.2.0",
-  "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directory (skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
+  "version": "0.3.0",
+  "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directories (project and ~/.claude: skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -15,6 +15,7 @@
   "files": [
     "src",
     "README.md",
+    "README.zh-CN.md",
     "cordis.patch.yml"
   ],
   "keywords": [
@@ -44,5 +45,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check src/index.js && node --test test/self-check.test.js"
   }
 }
