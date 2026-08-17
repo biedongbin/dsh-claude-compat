@@ -121,8 +121,13 @@ export async function mountMcpConfigs(ctx, servers) {
       continue;
     }
     mounted.add(server.serverName);
-    ctx.plugin(mcpClient, server).catch((error) => {
-      console.warn(`dsh-claude-compat: server "${server.serverName}" failed to mount: ${error?.message ?? error}`);
-    });
+    // ctx.plugin returns a Fiber (PromiseLike) in real cordis; guard for
+    // non-promise returns in tests/embeddings.
+    const fiber = ctx.plugin(mcpClient, server);
+    if (fiber && typeof fiber.catch === 'function') {
+      fiber.catch((error) => {
+        console.warn(`dsh-claude-compat: server "${server.serverName}" failed to mount: ${error?.message ?? error}`);
+      });
+    }
   }
 }
