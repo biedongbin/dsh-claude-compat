@@ -51,7 +51,8 @@ import { isSkillName } from '@deepseek-ai/dsh-skill';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { discoverAgents, renderAgentContent } from './agents.js';
 import { registerHooks } from './hooks.js';
-import { mountMcpServers } from './mcp.js';
+import { mountMcpServers, mountMcpConfigs } from './mcp.js';
+import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
   findProjectRoot,
   findProjectRootSync,
@@ -85,6 +86,15 @@ export const Config = z.object({
   enableHooks: z.boolean().default(true),
   hooksTimeoutMs: z.number().default(60000),
   enableAgents: z.boolean().default(true),
+  // Claude Code plugin-marketplace installs (~/.claude/plugins). Skills,
+  // commands and agents surface at pluginSkillRank (750: the long tail —
+  // everything else wins collisions). Plugin MCP servers are opt-in via
+  // enablePluginMcp (mounting third-party MCP is a bigger trust step).
+  enablePlugins: z.boolean().default(true),
+  pluginSkillRank: z.number().default(750),
+  pluginSkillSource: z.string().default('claude-plugin'),
+  pluginsRoot: z.string().default('~/.claude/plugins'),
+  enablePluginMcp: z.boolean().default(false),
 });
 
 export function apply(ctx, config = {}) {
@@ -103,6 +113,27 @@ export function apply(ctx, config = {}) {
     mountMcpServers(ctx, config).catch((error) => {
       console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
     });
+    if (config.enablePlugins !== false && config.enablePluginMcp === true) {
+      mountPluginMcp(ctx, config).catch((error) => {
+        console.warn('dsh-claude-compat: plugin MCP mount failed:', error?.message ?? error);
+      });
+    }
+  }
+}
+
+// Opt-in: translate every installed plugin's MCP config and mount alongside
+// the project .mcp.json servers (see src/mcp.js mountMcpConfigs).
+async function mountPluginMcp(ctx, config) {
+  for (const plugin of readInstalledClaudePlugins(config.pluginsRoot)) {
+    const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
+    if (raw === undefined) continue;
+    let manifest;
+    try { manifest = JSON.parse(raw); } catch { continue; }
+    const { servers, warns } = translatePluginMcp(manifest, plugin.installPath, {
+      failOnStartupError: config.mcpFailOnStartupError ?? false,
+    });
+    warns.forEach((w) => console.warn(`dsh-claude-compat: plugin ${plugin.key}: ${w}`));
+    if (servers.length > 0) await mountMcpConfigs(ctx, servers);
   }
 }
 
@@ -134,6 +165,12 @@ class ClaudeCompatSkillProvider {
       }
     }
     await this.addRootCandidates(candidates, this.userClaudeDir, this.userSkillSource, this.userSkillRank);
+    if (this.config.enablePlugins !== false) {
+      const pluginCandidates = await discoverPluginContent(
+        this.config.pluginsRoot, this.name, this.config.pluginSkillSource ?? 'claude-plugin',
+        this.config.pluginSkillRank ?? 750, { enableAgents: this.config.enableAgents });
+      candidates.push(...pluginCandidates);
+    }
     return candidates;
   }
 
@@ -179,7 +216,7 @@ class ClaudeCompatSkillProvider {
 
 // ─── discovery: <root>/.claude/skills (recursive, ≤3 levels) ─────────────────
 
-async function discoverSkills(rootDir, providerName, source, rank) {
+export async function discoverSkills(rootDir, providerName, source, rank) {
   const { readdir } = await import('node:fs/promises');
   const out = [];
   if (!(await pathExistsSafe(rootDir))) return out;
@@ -209,7 +246,7 @@ async function discoverSkills(rootDir, providerName, source, rank) {
 
 // ─── discovery: <root>/.claude/commands (flat) ───────────────────────────────
 
-async function discoverCommands(rootDir, providerName, source, rank) {
+export async function discoverCommands(rootDir, providerName, source, rank) {
   const { readdir } = await import('node:fs/promises');
   const out = [];
   if (!(await pathExistsSafe(rootDir))) return out;

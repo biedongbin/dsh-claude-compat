@@ -44,6 +44,8 @@ async function newHarness({ userClaudeDir }) {
   await ctx.plugin({ name: 'claude-compat', apply, Config }, {
     projectRootMarkers: ['.git'],
     userClaudeDir,
+    // hermetic: don't pick up the real ~/.claude/plugins installs
+    pluginsRoot: makeSandbox('dcc-plugins-none-'),
   });
   return ctx;
 }

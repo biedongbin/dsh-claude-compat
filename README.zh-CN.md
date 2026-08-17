@@ -26,6 +26,7 @@
 | `agents/*.md` | DSH skill provider（委派 shim） | DSH 没有 markdown 子代理格式，因此每个 agent 文件变成 **skill**，正文开头带显式"以此人设委派子代理"指令。模型与用户均可调用，`/agent-name` 可用。同名 agent 与 skill 一样按 rank 去重。 |
 | `.claude/settings.json` → `hooks` | 工具/Prompt 钩子 | Claude Code hooks 子集桥接到 DSH 的 `tools/pre-execute`（PreToolUse）、`tools/post-execute`（PostToolUse）与 `agent/pre-step`（UserPromptSubmit）瀑布。命令经 `/bin/sh -c` 运行，stdin 携带 Claude 风格 JSON；exit 2 拒绝/阻断，`hookSpecificOutput` 覆盖生效，超时放行并告警。 |
 | `<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义在 DSH 启动时（启动工区）翻译成 `dsh-mcp-client` 插件实例：`command` → stdio，`url` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。 |
+| `~/.claude/plugins`（已安装插件） | DSH skill provider | 已安装的 Claude Code 插件市场插件贡献其 skills/commands/agents（读取每个安装的 `.claude-plugin/plugin.json` 清单，无清单时回退目录扫描），rank `750` —— 长尾：project `.claude`、DSH 原生、`~/.claude` 在同名冲突时全部优先。插件的 MCP 服务器（清单 `mcpServers`）仅在显式开启 `enablePluginMcp` 后挂载 —— 挂载第三方 MCP 比列出 skills 信任门槛更高。 |
 
 同类目录同样读取**用户级** `~/.claude/`（skills、commands、rules、agents 与 `~/.claude/settings.json` hooks）。同名 skill/command/rule/agent 去重，优先级固定：
 
@@ -77,6 +78,11 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `userSkillRank` | `700` | `~/.claude` skills 的 provider 排名（输给 DSH 原生 `600`） |
 | `userSkillSource` | `user-claude` | `~/.claude` catalog 条目来源标签 |
 | `userClaudeDir` | `~/.claude` | 用户级 `.claude` 目录（`~` 展开为 home 目录） |
+| `enablePlugins` | `true` | 暴露已安装 Claude Code 插件（`~/.claude/plugins`）的 skills/commands/agents |
+| `pluginSkillRank` | `750` | 插件内容的 provider 排名（长尾 —— 其他一切优先） |
+| `pluginSkillSource` | `claude-plugin` | 插件目录条目来源标签 |
+| `pluginsRoot` | `~/.claude/plugins` | 插件市场根目录（`installed_plugins.json` + `cache/`） |
+| `enablePluginMcp` | `false` | 挂载插件声明的 MCP 服务器（需显式开启；要求 `enablePlugins` 与 `enableMcp`） |
 
 ## 说明
 

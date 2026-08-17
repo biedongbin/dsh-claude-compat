@@ -100,6 +100,11 @@ export async function mountMcpServers(ctx, config) {
     failOnStartupError: config.mcpFailOnStartupError ?? false,
   });
   warns.forEach((w) => console.warn(`dsh-claude-compat: .mcp.json: ${w}`));
+  await mountMcpConfigs(ctx, servers);
+}
+
+// Mount pre-translated server configs (shared by .mcp.json and plugin MCP).
+export async function mountMcpConfigs(ctx, servers) {
   if (servers.length === 0) return;
   let mcpClientModule;
   try {
@@ -112,12 +117,12 @@ export async function mountMcpServers(ctx, config) {
   const mounted = new Set();
   for (const server of servers) {
     if (mounted.has(server.serverName)) {
-      console.warn(`dsh-claude-compat: .mcp.json: duplicate serverName "${server.serverName}" skipped`);
+      console.warn(`dsh-claude-compat: duplicate serverName "${server.serverName}" skipped`);
       continue;
     }
     mounted.add(server.serverName);
     ctx.plugin(mcpClient, server).catch((error) => {
-      console.warn(`dsh-claude-compat: .mcp.json: server "${server.serverName}" failed to mount: ${error?.message ?? error}`);
+      console.warn(`dsh-claude-compat: server "${server.serverName}" failed to mount: ${error?.message ?? error}`);
     });
   }
 }
