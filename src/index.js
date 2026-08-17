@@ -1,13 +1,15 @@
 // dsh-claude-compat — bridge Claude Code's .claude/ into DSH.
 //
-// Two contributions to the live runtime:
-//   1. Skill provider on ctx.skills — scans <projectRoot>/.claude/skills/**/SKILL.md
-//      and <projectRoot>/.claude/commands/*.md (plus the user-level
-//      ~/.claude/skills and ~/.claude/commands), surfaces them as DSH skills so
-//      the `/skill-name` slash trigger, the `skill` tool, and the model-visible
-//      catalog pick them up natively. Only name+description load at discovery;
-//      the body loads on demand — same contract as the shipped filesystem
-//      provider.
+// Contributions to the live runtime:
+//   1. Skill provider on ctx.skills — scans <projectRoot>/.claude/skills/**/SKILL.md,
+//      <projectRoot>/.claude/commands/*.md and <projectRoot>/.claude/agents/*.md
+//      (plus the user-level ~/.claude equivalents), surfaces them as DSH skills
+//      so the `/skill-name` slash trigger, the `skill` tool, and the
+//      model-visible catalog pick them up natively. Only name+description load
+//      at discovery; the body loads on demand — same contract as the shipped
+//      filesystem provider. Agents are a delegation shim: DSH has no markdown
+//      subagent format, so each agent file becomes a skill whose body leads
+//      with an explicit "delegate with this persona" instruction.
 //   2. Rules message-stream injection — injects <projectRoot>/.claude/rules/*.md
 //      and ~/.claude/rules/*.md as ONE user-role <system-reminder> message
 //      prepended at the front of the message array, once per session
@@ -16,6 +18,11 @@
 //      project .claude winning over ~/.claude.
 //      CLAUDE.md / AGENTS.md are already handled by dsh-agent-instructions,
 //      so we do NOT re-inject them here.
+//   3. Hooks (Claude Code subset PreToolUse/PostToolUse/UserPromptSubmit) from
+//      .claude/settings.json — bridged onto tools/pre-execute,
+//      tools/post-execute and agent/pre-step (see src/hooks.js).
+//   4. MCP servers from <projectRoot>/.mcp.json — mounted as dsh-mcp-client
+//      plugin instances at startup from the launch workspace (see src/mcp.js).
 //
 // Skill name flattening: .claude/skills/gitnexus/gitnexus-guide/SKILL.md →
 // "gitnexus-gitnexus-guide" (DSH skill names must be kebab-case; the shipped
@@ -36,14 +43,24 @@
 // launched from anywhere). Editing a rule mid-session takes effect in the
 // next session.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
-import { parse } from 'yaml';
 import { isSkillName } from '@deepseek-ai/dsh-skill';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { discoverAgents, renderAgentContent } from './agents.js';
+import { registerHooks } from './hooks.js';
+import { mountMcpServers } from './mcp.js';
+import {
+  findProjectRoot,
+  findProjectRootSync,
+  listMdFilesSync,
+  parseFrontmatter,
+  readTextSafe,
+  resolveUserClaudeDir,
+  stringField,
+} from './lib.js';
 
 export const name = 'claude-compat';
 export const inject = ['skills'];
@@ -63,6 +80,11 @@ export const Config = z.object({
   userRulesMaxBytes: z.number().default(65536),
   enableRules: z.boolean().default(true),
   enableSkills: z.boolean().default(true),
+  enableMcp: z.boolean().default(true),
+  mcpFailOnStartupError: z.boolean().default(false),
+  enableHooks: z.boolean().default(true),
+  hooksTimeoutMs: z.number().default(60000),
+  enableAgents: z.boolean().default(true),
 });
 
 export function apply(ctx, config = {}) {
@@ -72,6 +94,15 @@ export function apply(ctx, config = {}) {
   }
   if (config.enableRules !== false) {
     registerRulesSection(ctx, config);
+  }
+  if (config.enableHooks !== false) {
+    registerHooks(ctx, config);
+  }
+  if (config.enableMcp !== false) {
+    // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
+    mountMcpServers(ctx, config).catch((error) => {
+      console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
+    });
   }
 }
 
@@ -107,13 +138,17 @@ class ClaudeCompatSkillProvider {
   }
 
   async addRootCandidates(candidates, claudeDir, source, rank) {
-    if (!(await pathExists(claudeDir))) return;
-    for (const c of await discoverSkills(join(claudeDir, 'skills'), this.name, source, rank)) {
-      candidates.push(c);
+    const provider = this.name;
+    const tasks = [discoverSkills(join(claudeDir, 'skills'), provider, source, rank)];
+    for (const [dir, fn] of [
+      ['commands', discoverCommands],
+      ['agents', discoverAgents],
+    ]) {
+      if (dir === 'agents' && this.config.enableAgents === false) continue;
+      tasks.push(fn(join(claudeDir, dir), provider, source, rank));
     }
-    for (const c of await discoverCommands(join(claudeDir, 'commands'), this.name, source, rank)) {
-      candidates.push(c);
-    }
+    const batches = await Promise.all(tasks);
+    for (const batch of batches) candidates.push(...batch);
   }
 
   async get(candidate) {
@@ -121,7 +156,13 @@ class ClaudeCompatSkillProvider {
     const raw = await readTextSafe(locator.path);
     if (raw === undefined) return undefined;
     const parsed = parseFrontmatter(raw);
-    const content = parsed === undefined ? raw.trim() : parsed.body.trim();
+    let content;
+    if (candidate.agentTools !== undefined) {
+      // Agent-backed candidate: lead the body with the delegation instruction.
+      content = renderAgentContent(candidate, (parsed?.body ?? raw).trim());
+    } else {
+      content = parsed === undefined ? raw.trim() : parsed.body.trim();
+    }
     return {
       name: candidate.name,
       description: candidate.description,
@@ -139,8 +180,9 @@ class ClaudeCompatSkillProvider {
 // ─── discovery: <root>/.claude/skills (recursive, ≤3 levels) ─────────────────
 
 async function discoverSkills(rootDir, providerName, source, rank) {
+  const { readdir } = await import('node:fs/promises');
   const out = [];
-  if (!(await pathExists(rootDir))) return out;
+  if (!(await pathExistsSafe(rootDir))) return out;
   await walk(rootDir, '', 0);
   return out;
 
@@ -168,8 +210,9 @@ async function discoverSkills(rootDir, providerName, source, rank) {
 // ─── discovery: <root>/.claude/commands (flat) ───────────────────────────────
 
 async function discoverCommands(rootDir, providerName, source, rank) {
+  const { readdir } = await import('node:fs/promises');
   const out = [];
-  if (!(await pathExists(rootDir))) return out;
+  if (!(await pathExistsSafe(rootDir))) return out;
   let entries;
   try {
     entries = await readdir(rootDir, { withFileTypes: true, encoding: 'utf8' });
@@ -307,104 +350,10 @@ ${parts.join('\n')}
       </system-reminder>`;
 }
 
-function findProjectRootSync(cwd, markers = ['.git']) {
-  let current = resolve(cwd);
-  while (true) {
-    for (const marker of markers) {
-      if (existsSync(join(current, marker))) return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
-}
-
-function listMdFilesSync(dir) {
-  let entries;
-  try { entries = readdirSync(dir); } catch { return []; }
-  const files = [];
-  for (const name of entries) {
-    if (!name.endsWith('.md')) continue;
-    const p = join(dir, name);
-    try { if (statSync(p).isFile()) files.push(p); } catch {}
-  }
-  files.sort();
-  return files;
-}
-
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function resolveUserClaudeDir(dir) {
-  if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
-  if (dir === '~') return homedir();
-  if (dir.startsWith('~/')) return join(homedir(), dir.slice(2));
-  return resolve(dir);
-}
-
-async function findProjectRoot(cwd, markers = ['.git']) {
-  let current = resolve(cwd);
-  while (true) {
-    for (const marker of markers) {
-      if (await pathExists(join(current, marker))) return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
-}
-
-async function pathExists(path) {
+async function pathExistsSafe(path) {
   try { await stat(path); return true; } catch { return false; }
-}
-
-async function readTextSafe(path) {
-  try { return await readFile(path, { encoding: 'utf8' }); }
-  catch { return undefined; }
-}
-
-async function listMdFiles(dir) {
-  let entries;
-  try { entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' }); }
-  catch { return []; }
-  const files = [];
-  for (const e of entries) {
-    if (e.isFile() && e.name.endsWith('.md')) files.push(join(dir, e.name));
-  }
-  files.sort();
-  return files;
-}
-
-function parseFrontmatter(raw) {
-  const firstLineEnd = raw.indexOf('\n');
-  if (firstLineEnd < 0) return undefined;
-  if (raw.slice(0, firstLineEnd).replace(/\r$/, '') !== '---') return undefined;
-  const start = firstLineEnd + 1;
-  const closing = findClosingFrontmatter(raw, start);
-  if (closing === undefined) return undefined;
-  let parsed;
-  try { parsed = parse(raw.slice(start, closing.start)); }
-  catch { return undefined; }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined;
-  return { data: parsed, body: raw.slice(closing.bodyStart) };
-}
-
-function findClosingFrontmatter(raw, start) {
-  let lineStart = start;
-  while (lineStart <= raw.length) {
-    const nextNewline = raw.indexOf('\n', lineStart);
-    const lineEnd = nextNewline < 0 ? raw.length : nextNewline;
-    if (raw.slice(lineStart, lineEnd).replace(/\r$/, '') === '---') {
-      return { start: lineStart, bodyStart: nextNewline < 0 ? raw.length : nextNewline + 1 };
-    }
-    if (nextNewline < 0) return undefined;
-    lineStart = nextNewline + 1;
-  }
-  return undefined;
-}
-
-function stringField(data, key) {
-  const v = data[key];
-  return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
 function parseInvocationPolicy(data) {
