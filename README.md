@@ -26,9 +26,9 @@
 
 The same three directories are also read from the **user-level** `~/.claude/` (skills, commands, rules). Same-name skills/commands/rules are deduped with a fixed priority:
 
-**project `.claude` > DSH native > `~/.claude`**
+**project `.claude` > DSH native (`.dsh`) > `~/.claude`**
 
-- Project entries carry rank `50`, `~/.claude` entries rank `700`, and DSH's own bundled skills sit at rank `600` (`BUNDLED_SKILL_RANK`) — so a project skill always overrides the DSH-bundled and user copies, and a user skill never overrides a DSH-native one.
+- Project `.claude` entries carry rank `50`; DSH's own skills — project `.dsh` roots, `.agents` roots, and bundled skills (ranks `100`–`600`, `BUNDLED_SKILL_RANK`) — sit in between; `~/.claude` entries rank `700`. So a project skill always overrides the DSH-native and user copies, and a user skill never overrides a DSH-native one.
 - Rule files with the same basename in `~/.claude/rules` are skipped when the project already provides one.
 
 `CLAUDE.md` / `AGENTS.md` are **not** touched — DSH's built-in `dsh-agent-instructions` already handles those.
@@ -37,13 +37,14 @@ The same three directories are also read from the **user-level** `~/.claude/` (s
 
 - DSH with a profile (e.g. `web`)
 - A project using Claude Code conventions: `.claude/skills/`, `.claude/commands/`, `.claude/rules/` (all optional; `~/.claude/` equivalents are also picked up)
+- `pnpm` on `PATH` — `dsh plugin` is a thin pnpm forwarder
 
-## Install
+## Install / Update
 
-One command — the package declares `dsh.bundle`, so DSH activates it automatically (no manual `cordis.patch.yml` editing):
+One command — the package declares `dsh.bundle`, so DSH activates it automatically (no manual `cordis.patch.yml` editing). Install or update to the latest release:
 
 ```bash
-dsh plugin --profile web add dsh-claude-compat
+dsh plugin --profile web add dsh-claude-compat@latest
 ```
 
 Or from GitHub:

@@ -26,9 +26,9 @@
 
 同类三个目录同样读取**用户级** `~/.claude/`（skills、commands、rules）。同名 skill/command/rule 去重，优先级固定：
 
-**项目 `.claude` > DSH 原生 > `~/.claude`**
+**项目 `.claude` > DSH 原生（`.dsh`）> `~/.claude`**
 
-- 项目条目 rank=`50`，`~/.claude` 条目 rank=`700`，DSH 自带 bundled skills 固定 rank=`600`（`BUNDLED_SKILL_RANK`）——项目 skill 永远压过 DSH 内置与用户副本；用户 skill 永远压不过 DSH 原生。
+- 项目 `.claude` 条目 rank=`50`；DSH 自身 skills —— 项目 `.dsh` 根、`.agents` 根与 bundled skills（rank=`100`–`600`，`BUNDLED_SKILL_RANK`）—— 位于两者之间；`~/.claude` 条目 rank=`700`。项目 skill 永远压过 DSH 原生与用户副本；用户 skill 永远压不过 DSH 原生。
 - `~/.claude/rules` 中与项目同 basename 的 rule 文件被跳过（项目优先）。
 
 `CLAUDE.md` / `AGENTS.md` **不碰** —— DSH 内置 `dsh-agent-instructions` 已处理。
@@ -37,13 +37,14 @@
 
 - DSH 及其 profile（如 `web`）
 - 使用 Claude Code 约定的项目：`.claude/skills/`、`.claude/commands/`、`.claude/rules/`（均可选；`~/.claude/` 对应目录同样生效）
+- `PATH` 上有 `pnpm` —— `dsh plugin` 是 pnpm 的薄转发层
 
-## 安装
+## 安装 / 更新
 
-一条命令 —— 包声明了 `dsh.bundle`，DSH 自动激活（无需手改 `cordis.patch.yml`）：
+一条命令 —— 包声明了 `dsh.bundle`，DSH 自动激活（无需手改 `cordis.patch.yml`）。安装或更新到最新版：
 
 ```bash
-dsh plugin --profile web add dsh-claude-compat
+dsh plugin --profile web add dsh-claude-compat@latest
 ```
 
 或从 GitHub：
