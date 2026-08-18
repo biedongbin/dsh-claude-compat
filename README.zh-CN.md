@@ -37,6 +37,18 @@
 
 `CLAUDE.md` / `AGENTS.md` **不碰** —— DSH 内置 `dsh-agent-instructions` 已处理。
 
+## 内置命令
+
+安装本插件后 catalog 多出三个管理 skill：
+
+| 命令 | 作用 |
+|---|---|
+| `/cc-plugin` | 完整 Claude Code 插件管理：`list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。一键语法 `/cc-plugin <名>@<市场>` 直接安装。引擎：有 `claude` CLI 时优先调度，否则内置降级（直接操作 JSON + git，被改文件自动时间戳备份）。状态全部落在 Claude 原生位置（`~/.claude/plugins`、`~/.claude/settings.json` 的 `enabledPlugins`），Claude Code 与 DSH 读同一份真相。 |
+| `/reload-cc-plugins` | 热重载 skill catalog：清缓存并广播变更，新装/卸载的插件技能**当前会话**立即可见 —— 无需重启、无需新会话。 |
+| `/reload-skills` | `/reload-cc-plugins` 的别名。 |
+
+典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
+
 ## 环境要求
 
 - DSH 及其 profile（如 `web`）
@@ -83,6 +95,8 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `pluginSkillSource` | `claude-plugin` | 插件目录条目来源标签 |
 | `pluginsRoot` | `~/.claude/plugins` | 插件市场根目录（`installed_plugins.json` + `cache/`） |
 | `enablePluginMcp` | `false` | 挂载插件声明的 MCP 服务器（需显式开启；要求 `enablePlugins` 与 `enableMcp`） |
+| `enablePluginManager` | `true` | 注册 `/cc-plugin`、`/reload-cc-plugins`、`/reload-skills` 管理 skill |
+| `pluginManagerRank` | `40` | 内置管理 skill 的 rank（catalog 顶部） |
 
 ## 说明
 
@@ -91,6 +105,23 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 - **Hooks 范围**：刻意只实现 Claude Code hooks 的一个小子集：PreToolUse / PostToolUse / UserPromptSubmit。matcher 支持精确名、`*` 通配与 `|` 或；命令 stdin 携带 Claude 风格 JSON。exit 2 = 拒绝（Pre）/ 阻断（Post）；其它非零退出与超时放行并告警。
 - **Rules 粒度**：每个新会话读取（按会话 cwd 缓存）。会话中改 rule，下一会话生效。
 - **Rules 内容**：rules 原文注入为模型指令。只提交你想让模型遵循的 rule —— 信任级别同 `CLAUDE.md`。
+- **Catalog 快照时机**：skill catalog 在会话创建时快照。会话中途安装/修改的 skill 通过 `/reload-cc-plugins` 热生效，或下一会话生效。
+
+## 故障排查
+
+**重启后 DSH 起不来 / 3080 端口卡死。** 旧进程占着端口（日志特征 `EADDRINUSE`）。用自带重启脚本 —— 干净等待停止、SIGKILL 兜底、探活端口后才报成功：
+
+```bash
+npx dsh-claude-compat-restart        # bin 别名（装包即得）
+bash node_modules/dsh-claude-compat/scripts/dsh-restart.sh   # 直接跑
+bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
+```
+
+脚本同时会重新幂等打 `dsh-terminal-bash` 的 prompt 补丁（npx/npm 更新会悄悄还原它）。`DSH_RESTART_PORT` 可覆盖端口（默认 3080）。
+
+**`/cc-plugin` 装了插件但技能没出现。** 先 `/reload-cc-plugins`。仍没有 → 重启 DSH（插件自带 MCP 服务器必须重启）。
+
+**`/cc-plugin` 提示 claude CLI 不可用。** 降级引擎已覆盖 install/enable/disable；marketplace add/update 需要安装 Claude Code（`npm install -g @anthropic-ai/claude-code`）或直接在 Claude Code 里管理市场。
 
 ## 社区鸣谢
 

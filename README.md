@@ -37,6 +37,18 @@ The same directories are also read from the **user-level** `~/.claude/` (skills,
 
 `CLAUDE.md` / `AGENTS.md` are **not** touched — DSH's built-in `dsh-agent-instructions` already handles those.
 
+## Built-in commands
+
+Installing this plugin adds three management skills to the catalog:
+
+| Command | What it does |
+|---|---|
+| `/cc-plugin` | Full Claude Code plugin management: `list`, `install <name>[@marketplace]`, `uninstall`, `enable`, `disable`, `update [name]`, `search <term>`, `marketplace list\|add\|remove\|update`. One-shot syntax `/cc-plugin <name>@<marketplace>` installs directly. Engine: the `claude` CLI when available, otherwise a built-in fallback (direct JSON + git, with timestamped backups of every file it touches). All state stays in Claude-native locations (`~/.claude/plugins`, `~/.claude/settings.json` `enabledPlugins`) so Claude Code and DSH read the same truth. |
+| `/reload-cc-plugins` | Hot-reload the skill catalog: drop cached provider lists and notify observers so newly installed/removed skills appear in the **current session** — no restart, no new session. |
+| `/reload-skills` | Alias of `/reload-cc-plugins`. |
+
+Typical loop: `/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → new skills visible immediately. Plugin-shipped MCP servers still require a DSH restart (process-lifetime mount).
+
 ## Requirements
 
 - DSH with a profile (e.g. `web`)
@@ -83,6 +95,8 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `pluginSkillSource` | `claude-plugin` | Source tag for plugin catalog entries |
 | `pluginsRoot` | `~/.claude/plugins` | Plugin-marketplace root (`installed_plugins.json` + `cache/`) |
 | `enablePluginMcp` | `false` | Mount plugin-declared MCP servers (opt-in; requires `enablePlugins` and `enableMcp`) |
+| `enablePluginManager` | `true` | Register the `/cc-plugin`, `/reload-cc-plugins`, `/reload-skills` management skills |
+| `pluginManagerRank` | `40` | Rank for the built-in management skills (top of the catalog) |
 
 ## Notes
 
@@ -91,6 +105,23 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 - **Hooks scope**: a deliberately small subset of Claude Code hooks: PreToolUse / PostToolUse / UserPromptSubmit. Matchers support exact names, `*` wildcards, and `|` alternation; commands run with `stdin` carrying the Claude-style JSON payload. Exit code 2 = deny (Pre) / block (Post); other non-zero exits and timeouts allow through with a warning.
 - **Rules granularity**: rules are read per new session (cached per session cwd). Editing a rule mid-session takes effect in the next session.
 - **Rules content**: rules are injected verbatim as instructions to the model. Only commit rules you want the model to follow — same trust level as `CLAUDE.md`.
+- **Catalog snapshot timing**: the skill catalog is snapshotted when a session is created. Skills installed or edited mid-session surface after `/reload-cc-plugins` (hot reload) or in the next session.
+
+## Troubleshooting
+
+**DSH won't start back up after a restart / port 3080 stuck.** Old process still holding the port (symptom: `EADDRINUSE` in logs). Use the bundled restart script — it waits for a clean stop, falls back to SIGKILL, and verifies the port before reporting success:
+
+```bash
+npx dsh-claude-compat-restart        # bin alias (installed with the package)
+bash node_modules/dsh-claude-compat/scripts/dsh-restart.sh   # direct
+bash scripts/dsh-restart.sh --no-patch   # skip the prompt patch, restart only
+```
+
+The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, which npx/npm updates silently revert. `DSH_RESTART_PORT` overrides the port (default 3080).
+
+**Installed a plugin via `/cc-plugin` but its skills don't show.** Run `/reload-cc-plugins`. Still missing → restart DSH (plugin-shipped MCP servers always need a restart).
+
+**`/cc-plugin` reports "claude CLI unavailable".** The fallback engine handles install/enable/disable; for marketplace add/update, install Claude Code (`npm install -g @anthropic-ai/claude-code`) or manage marketplaces from Claude Code directly.
 
 ## Acknowledgments
 
