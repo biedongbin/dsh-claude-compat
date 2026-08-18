@@ -49,3 +49,30 @@ PASS: 4/4
 
 ## 结论
 零已知缺陷。发布动作（git push / npm publish 0.5.1）留给仓库所有者执行。
+
+---
+# v0.6.0 增量证据 — /plugin 完整插件管理
+生成: 2026-08-18 | commit: 见 git log
+
+## 7. plugin-manager 纯函数（封闭测试 4/4）
+- parsePluginList: CLI 输出→结构化（含 enabled 解析）PASS
+- listFromDisk: installed_plugins.json + enabledPlugins 合并（默认 enabled）PASS
+- searchMarketplaces: manifest 扫描 name/description/tags PASS
+- runPluginCommand: help + 11 种子命令参数编排（注入 fake CLI）PASS
+
+## 8. 真实 CLI 端到端（claude 2.1.220）
+- /plugin list → 17 插件含启停状态 PASS
+- /plugin install asana@claude-plugins-official（一键语法 & install 前缀）PASS
+- /plugin disable asana → list 确认 ✘ disabled PASS
+- /plugin enable asana → list 确认 ✔ enabled PASS
+- /plugin uninstall asana → list 确认移除 PASS
+- /plugin marketplace update → 8/8 市场更新 PASS
+- /plugin marketplace list → 8 市场列出 PASS
+- /plugin search github → github@claude-plugins-official 等命中 PASS
+
+## 9. Live 进程验证
+- profile 安装 0.6.0（tarball 重装）PASS
+- 重启脚本 exit=0, HTTP 200 PASS
+- 真实 SkillRegistry: 472 skills（471+plugin），plugin skill 在册 PASS
+
+## 全套件: 18/18 PASS（14 原有 + 4 v0.6.0）

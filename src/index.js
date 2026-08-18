@@ -165,6 +165,23 @@ class ClaudeCompatSkillProvider {
       }
     }
     await this.addRootCandidates(candidates, this.userClaudeDir, this.userSkillSource, this.userSkillRank);
+    if (this.config.enablePluginManager !== false) {
+      candidates.push({
+        name: 'plugin',
+        description: 'Manage Claude Code plugins and marketplaces: list, install, uninstall, enable, disable, update, search.',
+        whenToUse: 'User wants to install, list, enable/disable, update, or uninstall Claude Code plugins, or manage plugin marketplaces. Usage: /plugin, /plugin <name>[@marketplace], /plugin install|uninstall|enable|disable|update|search ..., /plugin marketplace list|add|remove|update.',
+        invocation: { modelInvocable: true, userInvocable: true },
+        provider: 'claude-compat',
+        source: 'claude-compat-manager',
+        rank: this.config.pluginManagerRank ?? 40,
+        locator: { kind: 'inline', path: import.meta.url },
+        get: async () => ({
+          name: 'plugin',
+          description: 'Manage Claude Code plugins and marketplaces.',
+          body: (await import('./plugin-manager.js')).PLUGIN_SKILL_BODY,
+        }),
+      });
+    }
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(
         this.config.pluginsRoot, this.name, this.config.pluginSkillSource ?? 'claude-plugin',
