@@ -1,6 +1,6 @@
 {
   "name": "dsh-claude-compat",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directories (project and ~/.claude: skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
   "type": "module",
   "main": "src/index.js",

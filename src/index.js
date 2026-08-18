@@ -167,14 +167,14 @@ class ClaudeCompatSkillProvider {
     }
     await this.addRootCandidates(candidates, this.userClaudeDir, this.userSkillSource, this.userSkillRank);
     if (this.config.enablePluginManager !== false) {
-      candidates.push(this.managerSkillCandidate('plugin',
+      candidates.push(this.managerSkillCandidate('cc-plugin',
         'Manage Claude Code plugins and marketplaces: list, install, uninstall, enable, disable, update, search.',
-        'User wants to install, list, enable/disable, update, or uninstall Claude Code plugins, or manage plugin marketplaces. Usage: /plugin, /plugin <name>[@marketplace], /plugin install|uninstall|enable|disable|update|search ..., /plugin marketplace list|add|remove|update.',
+        'User wants to install, list, enable/disable, update, or uninstall Claude Code plugins, or manage plugin marketplaces. Usage: /cc-plugin, /cc-plugin <name>[@marketplace], /cc-plugin install|uninstall|enable|disable|update|search ..., /cc-plugin marketplace list|add|remove|update.',
         (await import('./plugin-manager.js')).PLUGIN_SKILL_BODY));
-      candidates.push(this.reloadSkillDef('reload-plugins',
+      candidates.push(this.reloadSkillDef('reload-cc-plugins',
         'Hot-reload the skill catalog: pick up newly installed/removed Claude Code plugin skills without a new session.'));
       candidates.push(this.reloadSkillDef('reload-skills',
-        'Hot-reload the skill catalog (alias of /reload-plugins).'));
+        'Hot-reload the skill catalog (alias of /reload-cc-plugins).'));
     }
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(
@@ -210,7 +210,7 @@ picker refreshes automatically on the next catalog read).
 Notes:
 - New skills from \`/plugin install\` or edits under \`.claude\` are live now.
 - MCP servers shipped by plugins still require a DSH restart (process-lifetime mount).
-- \`/reload-plugins\` and \`/reload-skills\` are aliases.`,
+- \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`,
         };
       },
     };

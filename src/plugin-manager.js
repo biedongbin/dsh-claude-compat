@@ -37,7 +37,7 @@ locations (~/.claude/plugins, ~/.claude/settings.json enabledPlugins), so
 Claude Code and DSH see the same plugins. Newly installed plugin content
 appears in the DSH skill catalog on next reconcile (MCP servers need a DSH restart).
 
-## Commands
+## Commands (invoked as /cc-plugin <args>)
 - \`/plugin\` — list installed plugins with enable/disable status
 - \`/plugin <name>[@marketplace]\` — one-shot install (e.g. \`/plugin ralph@omc\`)
 - \`/plugin install <name>[@marketplace]\`

@@ -81,7 +81,7 @@ test('runPluginCommand: help with no args; dispatches via injected CLI dep', asy
   ]);
 });
 
-test('reload-plugins/reload-skills: registered, get() triggers control.invalidate()', async () => {
+test('reload-cc-plugins/reload-skills: registered, get() triggers control.invalidate()', async () => {
   const { apply } = await import('../src/index.js');
   let provider; let invalidated = 0;
   apply({
@@ -90,11 +90,11 @@ test('reload-plugins/reload-skills: registered, get() triggers control.invalidat
   }, { enablePlugins: false });
   const list = await provider.list({ cwd: '/tmp' });
   const names = list.map((c) => c.name);
-  assert.ok(names.includes('plugin'));
-  assert.ok(names.includes('reload-plugins'));
+  assert.ok(names.includes('cc-plugin'));
+  assert.ok(names.includes('reload-cc-plugins'));
   assert.ok(names.includes('reload-skills'));
   const before = invalidated;
-  const def = await list.find((c) => c.name === 'reload-plugins').get();
+  const def = await list.find((c) => c.name === 'reload-cc-plugins').get();
   assert.ok(def.body.includes('reloaded'));
   assert.ok(invalidated > before, 'get() must call control.invalidate()');
 });

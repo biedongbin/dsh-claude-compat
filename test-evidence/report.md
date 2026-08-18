@@ -81,3 +81,7 @@ PASS: 4/4
 - 两个 reload skill 注册（rank 40，get() 触发 control.invalidate → registry revision+1 → skills/change 广播 → GUI 刷新）
 - 测试: v060 5/5, 全套件 19/19 PASS
 - Live: profile 0.6.1 重启后 Registry 474（472+2 reload），invalidate 前后 474→474（幂等，缓存语义正确）
+
+# v0.6.2 — 更名: /plugin → /cc-plugin, /reload-plugins → /reload-cc-plugins
+- 全套件 19/19 PASS（测试期望同步更名）
+- Live Registry: 474, cc-plugin/reload-cc-plugins/reload-skills 在册, 旧名零残留
