@@ -85,3 +85,8 @@ PASS: 4/4
 # v0.6.2 — 更名: /plugin → /cc-plugin, /reload-plugins → /reload-cc-plugins
 - 全套件 19/19 PASS（测试期望同步更名）
 - Live Registry: 474, cc-plugin/reload-cc-plugins/reload-skills 在册, 旧名零残留
+
+# v0.7.0 — /cc-resume Claude session 导入
+- 测试: v070 4/4 (parser 配对/turn 平衡/工具事件字段/畸形容错), 全套件 23/23 PASS
+- 真实数据: list 502 会话扫描正常; import 0dd4ea11(38msg) → 85 事件, seq 连续 PASS, user:4 assistant:15 tool/result:15
+- DSH 兼容: 事件格式对照真实会话逐字段核对(turn/step/user/message/assistant/message/tool-result toolCallId)

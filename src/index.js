@@ -175,6 +175,10 @@ class ClaudeCompatSkillProvider {
         'Hot-reload the skill catalog: pick up newly installed/removed Claude Code plugin skills without a new session.'));
       candidates.push(this.reloadSkillDef('reload-skills',
         'Hot-reload the skill catalog (alias of /reload-cc-plugins).'));
+      candidates.push(this.managerSkillCandidate('cc-resume',
+        'List and import Claude Code sessions into DSH: browse ~/.claude/projects history and resume any conversation.',
+        'User wants to resume, list, or import a Claude Code conversation/session into DSH. Usage: /cc-resume list, /cc-resume import <sessionId>.',
+        (await import('./cc-resume-skill.mjs')).CC_RESUME_SKILL_BODY));
     }
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(

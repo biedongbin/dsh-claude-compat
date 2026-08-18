@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.7.0] — 2026-08-18
+
+### Added
+- **`/cc-resume` — Claude Code session resume**: list conversations stored under `~/.claude/projects/<munged-cwd>/*.jsonl` (id, date, message count, first-user-text preview, imported marker) and import any session into DSH as a native event-sourced log (`~/.dsh/sessions/<munged>/session-cc-<id>/session.jsonl.zstd`). Imported sessions carry full user/assistant/tool history, a `cc: <preview>` title, and open/resume like any DSH session.
+- Translation rules: main thread only (Claude sidechains skipped); thinking blocks dropped (DSH reasoning is stream-chunk based); tool_use/tool_result paired into DSH `tool/call`/`tool/result` events; `--limit-turns N` imports just the tail of huge sessions; idempotent re-import.
+- `scripts/cc-resume.mjs` is also a standalone CLI (`list` / `import <sessionId>`); requires the `zstd` binary on PATH.
+
 ## [0.6.2] — 2026-08-18
 
 ### Changed
@@ -65,6 +72,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
   - `commands/*.md` → user-invocable skills (`/command-name` in the slash menu).
   - `rules/*.md` → message-stream injection: concatenated, wrapped in a `<system-reminder>` envelope, prepended once per session — the same channel Claude Code uses (`prependUserContext`), which models follow reliably.
 
+[0.7.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.5.1...v0.6.2
 [0.6.1]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.5.1...v0.6.0

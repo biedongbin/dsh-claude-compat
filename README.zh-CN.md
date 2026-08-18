@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.2-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
@@ -46,6 +46,7 @@
 | `/cc-plugin` | 完整 Claude Code 插件管理：`list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。一键语法 `/cc-plugin <名>@<市场>` 直接安装。引擎：有 `claude` CLI 时优先调度，否则内置降级（直接操作 JSON + git，被改文件自动时间戳备份）。状态全部落在 Claude 原生位置（`~/.claude/plugins`、`~/.claude/settings.json` 的 `enabledPlugins`），Claude Code 与 DSH 读同一份真相。 |
 | `/reload-cc-plugins` | 热重载 skill catalog：清缓存并广播变更，新装/卸载的插件技能**当前会话**立即可见 —— 无需重启、无需新会话。 |
 | `/reload-skills` | `/reload-cc-plugins` 的别名。 |
+| `/cc-resume` | 列出当前项目的 Claude Code 会话（`~/.claude/projects/`），并把任意一个导入 DSH —— 完整 user/assistant/工具历史。导入会话以 `cc: <预览>` 标题出现在 DSH 会话列表，可像原生会话一样恢复。`list` / `import <sessionId>` / `--limit-turns N`（大会话只导最近 N 轮）。 |
 
 典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
 
@@ -120,6 +121,8 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 脚本同时会重新幂等打 `dsh-terminal-bash` 的 prompt 补丁（npx/npm 更新会悄悄还原它）。`DSH_RESTART_PORT` 可覆盖端口（默认 3080）。
 
 **`/cc-plugin` 装了插件但技能没出现。** 先 `/reload-cc-plugins`。仍没有 → 重启 DSH（插件自带 MCP 服务器必须重启）。
+
+**`/cc-resume` 导入时报压缩错误。** 导入器需要 `zstd` 二进制（macOS：`brew install zstd`；多数 Linux 镜像自带）。
 
 **`/cc-plugin` 提示 claude CLI 不可用。** 降级引擎已覆盖 install/enable/disable；marketplace add/update 需要安装 Claude Code（`npm install -g @anthropic-ai/claude-code`）或直接在 Claude Code 里管理市场。
 
