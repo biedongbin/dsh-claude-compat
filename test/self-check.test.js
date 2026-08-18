@@ -101,7 +101,7 @@ test('skill precedence: project .claude > DSH bundled (600) > ~/.claude', async 
 
   const skills = await ctx.skills.list({ cwd: project });
   const byName = new Map(skills.map((s) => [s.name, s]));
-  assert.deepEqual([...byName.keys()].sort(), ['bundled-only', 'plugin', 'shared', 'slash-one', 'user-only'], 'catalog exposes the four discovery skills + built-in plugin manager');
+  assert.deepEqual([...byName.keys()].sort(), ['bundled-only', 'plugin', 'reload-plugins', 'reload-skills', 'shared', 'slash-one', 'user-only'], 'catalog exposes the four discovery skills + built-in plugin manager');
 
   assert.equal(byName.get('shared').source, 'project-claude', 'project .claude beats bundled (600) and ~/.claude (700)');
   assert.equal(byName.get('shared').description, 'project shared');
@@ -118,7 +118,7 @@ test('skill precedence: project .claude > DSH bundled (600) > ~/.claude', async 
   // bundled copy (600) over the user copy (700).
   const noCwd = await ctx.skills.list({});
   const namesNoCwd = noCwd.map((s) => s.name).sort();
-  assert.deepEqual(namesNoCwd, ['bundled-only', 'plugin', 'shared', 'slash-one', 'user-only'], 'without cwd only user ~/.claude + bundled (+ plugin manager) are visible');
+  assert.deepEqual(namesNoCwd, ['bundled-only', 'plugin', 'reload-plugins', 'reload-skills', 'shared', 'slash-one', 'user-only'], 'without cwd only user ~/.claude + bundled (+ plugin manager & reload skills) are visible');
   assert.equal(noCwd.find((s) => s.name === 'bundled-only').source, 'bundled');
   assert.equal(noCwd.find((s) => s.name === 'shared').source, 'bundled', 'bundled (600) beats user (700) without cwd');
   assert.equal(noCwd.find((s) => s.name === 'user-only').source, 'user-claude');

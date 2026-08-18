@@ -149,6 +149,7 @@ class ClaudeCompatSkillProvider {
     this.userSkillRank = config.userSkillRank ?? 700;
     this.userSkillSource = config.userSkillSource ?? 'user-claude';
     this.userClaudeDir = resolveUserClaudeDir(config.userClaudeDir);
+    this.control = control;
     control.signal.addEventListener('abort', () => {}, { once: true });
   }
 
@@ -166,21 +167,14 @@ class ClaudeCompatSkillProvider {
     }
     await this.addRootCandidates(candidates, this.userClaudeDir, this.userSkillSource, this.userSkillRank);
     if (this.config.enablePluginManager !== false) {
-      candidates.push({
-        name: 'plugin',
-        description: 'Manage Claude Code plugins and marketplaces: list, install, uninstall, enable, disable, update, search.',
-        whenToUse: 'User wants to install, list, enable/disable, update, or uninstall Claude Code plugins, or manage plugin marketplaces. Usage: /plugin, /plugin <name>[@marketplace], /plugin install|uninstall|enable|disable|update|search ..., /plugin marketplace list|add|remove|update.',
-        invocation: { modelInvocable: true, userInvocable: true },
-        provider: 'claude-compat',
-        source: 'claude-compat-manager',
-        rank: this.config.pluginManagerRank ?? 40,
-        locator: { kind: 'inline', path: import.meta.url },
-        get: async () => ({
-          name: 'plugin',
-          description: 'Manage Claude Code plugins and marketplaces.',
-          body: (await import('./plugin-manager.js')).PLUGIN_SKILL_BODY,
-        }),
-      });
+      candidates.push(this.managerSkillCandidate('plugin',
+        'Manage Claude Code plugins and marketplaces: list, install, uninstall, enable, disable, update, search.',
+        'User wants to install, list, enable/disable, update, or uninstall Claude Code plugins, or manage plugin marketplaces. Usage: /plugin, /plugin <name>[@marketplace], /plugin install|uninstall|enable|disable|update|search ..., /plugin marketplace list|add|remove|update.',
+        (await import('./plugin-manager.js')).PLUGIN_SKILL_BODY));
+      candidates.push(this.reloadSkillDef('reload-plugins',
+        'Hot-reload the skill catalog: pick up newly installed/removed Claude Code plugin skills without a new session.'));
+      candidates.push(this.reloadSkillDef('reload-skills',
+        'Hot-reload the skill catalog (alias of /reload-plugins).'));
     }
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(
@@ -189,6 +183,51 @@ class ClaudeCompatSkillProvider {
       candidates.push(...pluginCandidates);
     }
     return candidates;
+  }
+
+  // Invalidate fires when the definition is actually loaded (get()), not at
+  // list() time — loading the reload skill IS the reload.
+  reloadSkillDef(name, description) {
+    return {
+      name,
+      description,
+      invocation: { modelInvocable: true, userInvocable: true },
+      provider: 'claude-compat',
+      source: 'claude-compat-manager',
+      rank: this.config.pluginManagerRank ?? 40,
+      locator: { kind: 'inline', path: import.meta.url },
+      get: async () => {
+        try { this.control?.invalidate?.(); } catch { /* best-effort */ }
+        return {
+          name,
+          description,
+          body: `# Catalog reloaded ✅
+
+The DSH skill catalog cache was just dropped and observers notified.
+Freshly installed/removed skills are now visible in this session (the skill
+picker refreshes automatically on the next catalog read).
+
+Notes:
+- New skills from \`/plugin install\` or edits under \`.claude\` are live now.
+- MCP servers shipped by plugins still require a DSH restart (process-lifetime mount).
+- \`/reload-plugins\` and \`/reload-skills\` are aliases.`,
+        };
+      },
+    };
+  }
+
+  managerSkillCandidate(name, description, whenToUse, body) {
+    return {
+      name,
+      description,
+      whenToUse,
+      invocation: { modelInvocable: true, userInvocable: true },
+      provider: 'claude-compat',
+      source: 'claude-compat-manager',
+      rank: this.config.pluginManagerRank ?? 40,
+      locator: { kind: 'inline', path: import.meta.url },
+      get: async () => ({ name, description, body }),
+    };
   }
 
   async addRootCandidates(candidates, claudeDir, source, rank) {
