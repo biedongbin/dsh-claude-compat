@@ -7,7 +7,12 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ### Added
 - **`/cc-resume` — Claude Code session resume**: list conversations stored under `~/.claude/projects/<munged-cwd>/*.jsonl` (id, date, message count, first-user-text preview, imported marker) and import any session into DSH as a native event-sourced log (`~/.dsh/sessions/<munged>/session-cc-<id>/session.jsonl.zstd`). Imported sessions carry full user/assistant/tool history, a `cc: <preview>` title, and open/resume like any DSH session.
 - Translation rules: main thread only (Claude sidechains skipped); thinking blocks dropped (DSH reasoning is stream-chunk based); tool_use/tool_result paired into DSH `tool/call`/`tool/result` events; `--limit-turns N` imports just the tail of huge sessions; idempotent re-import.
+- **zstd frame layout fix**: the session header line is compressed as its own first zstd frame (DSH's `assertZstdHeaderFrame` requires it), events follow in a second frame — single-frame compression made DSH fail to parse imported logs.
+
 - `scripts/cc-resume.mjs` is also a standalone CLI (`list` / `import <sessionId>`); requires the `zstd` binary on PATH.
+
+### Known issues
+- The `skill` tool may fail to resolve plugin-provided skills (`unknown or no longer available`) in agent-scoped runtime layers even though the catalog lists them — a DSH runtime layering behavior. `/cc-resume` degrades gracefully: run `scripts/cc-resume.mjs` directly (the skill body only wraps the CLI).
 
 ## [0.6.2] — 2026-08-18
 

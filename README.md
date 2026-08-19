@@ -110,6 +110,20 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 
 ## Troubleshooting
 
+### Known limitation: `/cc-resume` via the skill tool
+
+In some DSH runtime configurations the `skill` tool resolves in an agent-scoped
+layer where globally registered providers are not visible — the invocation
+returns `skill "cc-resume" is unknown or no longer available` even though the
+catalog lists it. This is a DSH runtime layering behavior, not a plugin bug.
+The skill body only instructs the model to run the CLI, which is always
+available:
+
+```bash
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId>
+```
+
 **DSH won't start back up after a restart / port 3080 stuck.** Old process still holding the port (symptom: `EADDRINUSE` in logs). Use the bundled restart script — it waits for a clean stop, falls back to SIGKILL, and verifies the port before reporting success:
 
 ```bash

@@ -110,6 +110,15 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 
 ## 故障排查
 
+### 已知限制：通过 skill 工具调用 `/cc-resume`
+
+部分 DSH 运行时配置下，`skill` 工具在 agent scoped 层解析，看不到全局层注册的 provider —— 即使 catalog 列表里有，调用仍返回 `skill "cc-resume" is unknown or no longer available`。这是 DSH 运行时分层行为，非插件缺陷。skill 本体只是指导模型跑 CLI，CLI 始终可用：
+
+```bash
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId>
+```
+
 **重启后 DSH 起不来 / 3080 端口卡死。** 旧进程占着端口（日志特征 `EADDRINUSE`）。用自带重启脚本 —— 干净等待停止、SIGKILL 兜底、探活端口后才报成功：
 
 ```bash
