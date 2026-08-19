@@ -135,6 +135,10 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 
 **`/cc-plugin` 提示 claude CLI 不可用。** 降级引擎已覆盖 install/enable/disable；marketplace add/update 需要安装 Claude Code（`npm install -g @anthropic-ai/claude-code`）或直接在 Claude Code 里管理市场。
 
+## Release notes
+
+- **[更新日志](CHANGELOG.md)** — 0.1.0 至最新版本的完整发布历史。
+
 ## 社区鸣谢
 
 - [Linux.do](https://linux.do) —— 社区

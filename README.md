@@ -140,6 +140,10 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 **`/cc-plugin` reports "claude CLI unavailable".** The fallback engine handles install/enable/disable; for marketplace add/update, install Claude Code (`npm install -g @anthropic-ai/claude-code`) or manage marketplaces from Claude Code directly.
 
+## Release notes
+
+- **[Changelog](CHANGELOG.md)** — release history from 0.1.0 to the latest version.
+
 ## Acknowledgments
 
 - [Linux.do](https://linux.do) — community
