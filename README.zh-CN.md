@@ -153,9 +153,9 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 
 ## 📈 NPM 下载趋势
 
-[![NPM Downloads Chart](https://npmcharts.com/embed/dsh-claude-compat?interval=30&minimal=true)](https://npmcharts.com/compare/dsh-claude-compat)
+![NPM Downloads](.github/assets/downloads.svg)
 
-[在 npmcharts.com 查看](https://npmcharts.com/compare/dsh-claude-compat)
+[Data: api.npmjs.org](https://www.npmjs.com/package/dsh-claude-compat) · [npmtrends](https://npmtrends.com/dsh-claude-compat/)
 
 ## ⭐ Star History
 

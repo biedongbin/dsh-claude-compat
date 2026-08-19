@@ -158,9 +158,9 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 ## 📈 NPM Downloads
 
-[![NPM Downloads Chart](https://npmcharts.com/embed/dsh-claude-compat?interval=30&minimal=true)](https://npmcharts.com/compare/dsh-claude-compat)
+![NPM Downloads](.github/assets/downloads.svg)
 
-[View on npmcharts.com](https://npmcharts.com/compare/dsh-claude-compat)
+[Data: api.npmjs.org](https://www.npmjs.com/package/dsh-claude-compat) · [npmtrends](https://npmtrends.com/dsh-claude-compat/)
 
 ## ⭐ Star History
 
