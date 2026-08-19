@@ -5,7 +5,10 @@ import { dirname } from 'node:path';
 
 const PKG = 'dsh-claude-compat';
 const DAYS = 30;
-const res = await fetch(`https://api.npmjs.org/downloads/range/last-${DAYS}-days/${PKG}`);
+const iso = (d) => d.toISOString().slice(0, 10);
+const end = new Date();
+const start = new Date(Date.now() - (DAYS - 1) * 86400000);
+const res = await fetch(`https://api.npmjs.org/downloads/range/${iso(start)}:${iso(end)}/${PKG}`);
 if (!res.ok) throw new Error(`npm API ${res.status}`);
 const { downloads } = await res.json();
 const days = downloads.map((d) => ({ date: d.day, n: d.downloads }));
