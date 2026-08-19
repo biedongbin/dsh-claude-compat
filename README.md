@@ -10,6 +10,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/npm/dm/dsh-claude-compat?style=flat-square&label=downloads/month&color=brightgreen" alt="npm downloads/month">
+  <img src="https://img.shields.io/npm/dt/dsh-claude-compat?style=flat-square&label=total%20downloads&color=blue" alt="npm total downloads">
   <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
@@ -153,6 +155,12 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 ## License
 
 [MIT](LICENSE)
+
+## 📈 NPM Downloads
+
+[![NPM Downloads Chart](https://npmcharts.com/embed/dsh-claude-compat?interval=30&minimal=true)](https://npmcharts.com/compare/dsh-claude-compat)
+
+[View on npmcharts.com](https://npmcharts.com/compare/dsh-claude-compat)
 
 ## ⭐ Star History
 
