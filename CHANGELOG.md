@@ -1,5 +1,7 @@
 # Changelog
 
+English | [简体中文](CHANGELOG.zh-CN.md)
+
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
 ## [0.7.0] — 2026-08-18

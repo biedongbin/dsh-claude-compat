@@ -137,7 +137,7 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 
 ## Release notes
 
-- **[更新日志](CHANGELOG.md)** — 0.1.0 至最新版本的完整发布历史。
+- **[更新日志](CHANGELOG.zh-CN.md)（[English](CHANGELOG.md)）** — 0.1.0 至最新版本的完整发布历史。
 
 ## 社区鸣谢
 

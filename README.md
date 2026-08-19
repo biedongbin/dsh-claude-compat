@@ -142,7 +142,7 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 ## Release notes
 
-- **[Changelog](CHANGELOG.md)** — release history from 0.1.0 to the latest version.
+- **[Changelog](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md))** — release history from 0.1.0 to the latest version.
 
 ## Acknowledgments
 
