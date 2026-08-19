@@ -27,11 +27,10 @@
 // DSH session list. Idempotent: importing twice reuses the same target dir
 // (events are truncated and rewritten).
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { zstdSync } from './zstd-compat.mjs';
+import { zstdFramesSync } from './zstd-compat.mjs';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -200,8 +199,9 @@ export function writeDshSession(sessionDir, id, cwd, events) {
     delegationDepth: 0,
     agentPreset: 'standard',
   };
-  const lines = [JSON.stringify(header), ...events.map((e) => JSON.stringify(e))].join('\n');
-  writeFileSync(logPath, zstdSync(lines));
+  const headerLine = JSON.stringify(header) + '\n';
+  const body = events.map((e) => JSON.stringify(e)).join('\n') + (events.length ? '\n' : '');
+  writeFileSync(logPath, zstdFramesSync(headerLine, body));
   return logPath;
 }
 

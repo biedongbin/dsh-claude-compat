@@ -1,10 +1,11 @@
 // v0.7.0 tests: cc-resume session translation (pure functions, hermetic).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseClaudeSession, buildDshEvents } from '../scripts/cc-resume.mjs';
+import { parseClaudeSession, buildDshEvents, writeDshSession } from '../scripts/cc-resume.mjs';
 import { writeFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { zstdDecompressSync } from 'node:zlib';
 
 function writeClaudeLog(lines) {
   const dir = mkdtempSync(join(tmpdir(), 'ccr-'));
@@ -87,4 +88,40 @@ test('parseClaudeSession: malformed lines and empty log tolerated', () => {
   const f = writeClaudeLog(['not json at all', { type: 'unknown' }]);
   const parsed = parseClaudeSession(f);
   assert.equal(parsed.turns.length, 0);
+});
+
+// Mirrors dsh-session-persistence-jsonl assertZstdHeaderFrame: the first zstd
+// frame must contain exactly one header line, events live in later frames.
+
+test('writeDshSession: first zstd frame is exactly one header line (DSH format)', () => {
+  const events = buildDshEvents({
+    turns: [
+      { kind: 'user', text: 'hi', time: 1 },
+      { kind: 'assistant', text: 'yo', toolUses: [], toolResults: [], time: 2 },
+    ],
+    createdAt: 1,
+    title: null,
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'dshw-'));
+  const logPath = writeDshSession(dir, 'session-cc-test', '/w/p', events);
+  const buf = readFileSync(logPath);
+  // Hand-parse zstd frames: magic 28 B5 2F FD, frame_content_size via descriptor.
+  // Simpler: decode the full stream, verify framing by decoding prefix frames.
+  // Use Node zstd streaming decode on each frame boundary found via magic scan.
+  let pos = 0;
+  const frames = [];
+  const MAGIC = 0xfd2fb528;
+  while (pos + 4 <= buf.length && buf.readUInt32LE(pos) === MAGIC) {
+    let next = pos + 4;
+    while (next + 4 <= buf.length && buf.readUInt32LE(next) !== MAGIC) next++;
+    frames.push(buf.subarray(pos, next));
+    pos = next;
+  }
+  assert.ok(frames.length >= 2, 'header and body are separate frames');
+  const headerPlain = zstdDecompressSync(frames[0]);
+  assert.equal(headerPlain.indexOf(10), headerPlain.length - 1, 'header frame ends with exactly one newline');
+  assert.equal(headerPlain.toString('utf8').trim(), JSON.stringify({
+    type: 'session', version: 0, id: 'session-cc-test',
+    createdAt: 1, cwd: '/w/p', delegationDepth: 0, agentPreset: 'standard',
+  }));
 });
