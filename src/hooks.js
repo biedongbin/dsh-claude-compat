@@ -287,14 +287,17 @@ export function registerHooks(ctx, config) {
 
   // SessionStart / SessionEnd: fire-and-forget. Run hooks on session lifecycle,
   // log stdout/stderr, never block or feed output back into the loop.
-  // NB: DSH agent events dispatch (carrier, name, payload) and inject the agent
-  // onto the payload (fused), so read it from the payload, not the 1st arg.
+  // NB: DSH agent events dispatch (carrier, name, payload). The agent is NOT
+  // in a fixed position: agent-loop's emitAgentEvent fuses it onto the payload
+  // (payload.agent), while the headless path passes it on the carrier
+  // (carrier.agent). Read both defensively.
   const startHooks = Object.values(settings).filter((h) => h.event === 'session-start');
   if (startHooks.length > 0) {
-    ctx.on('agent/session-start', (carrier, name, { agent }) => {
-      const payload = sessionStartPayload(agent);
+    ctx.on('agent/session-start', (carrier, name, payload) => {
+      const agent = carrier?.agent ?? payload?.agent;
+      const hookPayload = sessionStartPayload(agent);
       for (const hook of startHooks) {
-        runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
+        runHookCommand(hook.command, hookPayload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
           .then((run) => {
             if (run.exitCode !== 0) {
               console.warn(`dsh-claude-compat: SessionStart hook exited ${run.exitCode}: ${hook.command}`);
@@ -308,10 +311,11 @@ export function registerHooks(ctx, config) {
 
   const endHooks = Object.values(settings).filter((h) => h.event === 'session-end');
   if (endHooks.length > 0) {
-    ctx.on('agent/disposed', (carrier, name, { agent }) => {
-      const payload = sessionEndPayload(agent);
+    ctx.on('agent/disposed', (carrier, name, payload) => {
+      const agent = carrier?.agent ?? payload?.agent;
+      const hookPayload = sessionEndPayload(agent);
       for (const hook of endHooks) {
-        runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
+        runHookCommand(hook.command, hookPayload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
           .then((run) => {
             if (run.exitCode !== 0) {
               console.warn(`dsh-claude-compat: SessionEnd hook exited ${run.exitCode}: ${hook.command}`);
