@@ -6,19 +6,53 @@
 
 <p align="center">
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🌐_简体中文-点我阅读中文-red?style=for-the-badge" alt="简体中文"></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/npm/dm/dsh-claude-compat?style=flat-square&label=downloads/month&color=brightgreen" alt="npm downloads/month">
   <img src="https://img.shields.io/npm/dt/dsh-claude-compat?style=flat-square&label=total%20downloads&color=blue" alt="npm total downloads">
-  <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square&logo=node.js&logoColor=white" alt="Node">
+  <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 
-<p align="center">DeepSeek Harness plugin that bridges Claude Code's <code>.claude/</code> directory into DSH natively — reuse your skills, slash commands, rules, agents, hooks, and MCP servers with zero migration.</p>
+> **在 DSH 里，直接用回你整套 Claude Code 配置——零迁移。**
+> skills、命令、规则、agents、hooks、MCP，装上就能用，什么都不用重配。
 
-## What it does
+---
+
+## The 10-second pitch
+
+你已经在 Claude Code 里攒了一整套趁手的 `.claude/`——skills、slash commands、rules、agents、hooks、MCP servers。换到 **DSH (DeepSeek Harness)** 时，你不想把这些全部重新搭一遍。
+
+**dsh-claude-compat 就是那座桥。** 它把你的 `.claude/` 目录**原样搬进 DSH**，所有能力即刻生效。装一次，两边的配置从此共用一份，改一处两边都变。
+
+```bash
+dsh plugin --profile web add dsh-claude-compat@latest
+dsh web
+```
+
+搞定。你的 skills 出现在 `/` 菜单里，规则注入每个新会话，agent 能用 `/agent-name` 调起——全都在 DSH 里，跟 Claude Code 里一模一样。
+
+**或用 DSH 自己装（推荐）**：复制下面这句给 DSH，它会读 skill、自动安装并验证：
+
+> 请阅读 https://github.com/biedongbin/dsh-claude-compat/blob/main/.claude/skills/install-dsh-compat/SKILL.md 并按步骤安装 dsh-claude-compat 插件。
+
+> ⭐ 觉得好用？[点这里给个 star](https://github.com/biedongbin/dsh-claude-compat)——它让我们持续改进，也帮更多人找到这个插件。
+
+---
+
+## What it brings over — at a glance
+
+| Claude Code 里的东西 | 在 DSH 里变成 | 怎么用 |
+|---|---|---|
+| `skills/**/SKILL.md` | DSH skill（目录可加载） | `/skill-name`、`skill` 工具、模型目录都能看到 |
+| `commands/*.md` | DSH skill（用户可调） | `/command-name` 出现在 slash 菜单 |
+| `rules/*.md` | 消息流注入（同 Claude 的 `prependUserContext` 通道） | 每个新会话自动生效 |
+| `agents/*.md` | 委托 shim skill | `/agent-name` 按角色调起 |
+| `.claude/settings.json` hooks | Pre/PostToolUse + UserPromptSubmit 桥接 | 命令、权限、拦截照旧 |
+| `<root>/.mcp.json` | `dsh-mcp-client` 实例 | stdio / streamable-http 自动翻译 |
+| `~/.claude/plugins` | DSH skill（`/cc-plugin` 管理） | 安装的插件技能一并可用 |
+
+同一套目录，项目 `.claude/` 和用户级 `~/.claude/` **都会读**。同名项按固定优先级去重：**项目 `.claude` > DSH 原生 > `~/.claude`**——项目技能永远覆盖其他副本，用户技能永远不覆盖 DSH 原生。`CLAUDE.md` / `AGENTS.md` 由 DSH 内置的 `dsh-agent-instructions` 处理，**本插件不碰**。
+
+## What it does (implementation detail)
 
 | `.claude/` path | Mechanism | Behavior |
 |---|---|---|

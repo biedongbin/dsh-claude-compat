@@ -95,9 +95,28 @@ export const Config = z.object({
   pluginSkillSource: z.string().default('claude-plugin'),
   pluginsRoot: z.string().default('~/.claude/plugins'),
   enablePluginMcp: z.boolean().default(false),
+  // Print a one-shot "star it" nudge on the first activation (default true).
+  enableStarNudge: z.boolean().default(true),
 });
 
+const STAR_URL = 'https://github.com/biedongbin/dsh-claude-compat';
+// Module-level once-flag: nudge exactly once per process, on the first profile
+// that activates the plugin, so it never repeats across restarts of the same
+// session. Deliberately NOT persistent — a fresh process nudges again, which
+// is the intended "did this help? star it" cadence without spamming.
+let starNudged = false;
+
 export function apply(ctx, config = {}) {
+  // One-shot "found this useful? star it" nudge, surfaced exactly where the
+  // value lands: the first profile activation of this process.
+  try {
+    if (config.enableStarNudge !== false && !starNudged) {
+      starNudged = true;
+      console.log(
+        `\n⭐ dsh-claude-compat works for you?\n   Show some love: ${STAR_URL}\n`);
+    }
+  } catch { /* the nudge must never break plugin activation */ }
+
   if (config.enableSkills !== false) {
     ctx.skills.registerProvider((control) =>
       new ClaudeCompatSkillProvider(ctx, control, config));
