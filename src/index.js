@@ -198,6 +198,10 @@ class ClaudeCompatSkillProvider {
         'List and import Claude Code sessions into DSH: browse ~/.claude/projects history and resume any conversation.',
         'User wants to resume, list, or import a Claude Code conversation/session into DSH. Usage: /cc-resume list, /cc-resume import <sessionId>.',
         (await import('./cc-resume-skill.mjs')).CC_RESUME_SKILL_BODY));
+      candidates.push(this.managerSkillCandidate('cc-export',
+        'Export DSH-native skills (.dsh/skills) into Claude Code .claude/skills format, closing the DSH → Claude loop.',
+        'User wants to export DSH skills to Claude Code, or bridge DSH-native skills into .claude/skills. Usage: /cc-export list, /cc-export export [--overwrite].',
+        (await import('./cc-export-skill.mjs')).CC_EXPORT_SKILL_BODY));
     }
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(

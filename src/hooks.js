@@ -165,7 +165,36 @@ function runHookCommand(command, stdin, { timeoutMs = 60_000 } = {}) {
 
 // ----- settings loading ------------------------------------------------------
 
-const EVENTS = { PreToolUse: 'pre-tool-use', PostToolUse: 'post-tool-use', UserPromptSubmit: 'user-prompt-submit' };
+const EVENTS = {
+  PreToolUse: 'pre-tool-use',
+  PostToolUse: 'post-tool-use',
+  UserPromptSubmit: 'user-prompt-submit',
+  // SessionStart / SessionEnd are notification-style hooks: DSH has no
+  // `agent/notification` event (Claude Code's Notification hook has no DSH
+  // equivalent), but SessionStart → agent/session-start and SessionEnd →
+  // agent/disposed map cleanly. These run fire-and-forget (their output is
+  // logged, never fed back into the loop).
+  SessionStart: 'session-start',
+  SessionEnd: 'session-end',
+};
+
+// Session hooks are async (not decision-bearing). They run best-effort:
+// a non-zero exit is logged, never blocks a session start/end.
+// Exported for hermetic tests.
+export function sessionStartPayload(agent) {
+  const cwd = agent?.session?.header?.cwd ?? process.cwd();
+  const sessionId = agent?.session?.id ?? 'unknown';
+  return JSON.stringify({ session_id: sessionId, cwd });
+}
+
+function sessionEndPayload(agent) {
+  const cwd = agent?.session?.header?.cwd ?? process.cwd();
+  const sessionId = agent?.session?.id ?? 'unknown';
+  return JSON.stringify({ session_id: sessionId, cwd, reason: 'session_end' });
+}
+
+// Re-export for hermetic tests (keeps the single definition above authoritative).
+export { sessionEndPayload };
 
 // Combined hooks map. Project .claude/settings.json is applied LAST so it wins
 // same (event, matcher, command) keys against ~/.claude/settings.json.
@@ -253,6 +282,44 @@ export function registerHooks(ctx, config) {
       const extra = await runPromptHooks(prompt, agent, config);
       if (extra === undefined) return decision;
       return { kind: 'enter', messages: decision.messages.concat(extra) };
+    });
+  }
+
+  // SessionStart / SessionEnd: fire-and-forget. Run hooks on session lifecycle,
+  // log stdout/stderr, never block or feed output back into the loop.
+  // NB: DSH agent events dispatch (carrier, name, payload) and inject the agent
+  // onto the payload (fused), so read it from the payload, not the 1st arg.
+  const startHooks = Object.values(settings).filter((h) => h.event === 'session-start');
+  if (startHooks.length > 0) {
+    ctx.on('agent/session-start', (carrier, name, { agent }) => {
+      const payload = sessionStartPayload(agent);
+      for (const hook of startHooks) {
+        runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
+          .then((run) => {
+            if (run.exitCode !== 0) {
+              console.warn(`dsh-claude-compat: SessionStart hook exited ${run.exitCode}: ${hook.command}`);
+            } else if (run.stdout.trim() !== '') {
+              console.log(`dsh-claude-compat: SessionStart hook output: ${run.stdout.trim()}`);
+            }
+          });
+      }
+    });
+  }
+
+  const endHooks = Object.values(settings).filter((h) => h.event === 'session-end');
+  if (endHooks.length > 0) {
+    ctx.on('agent/disposed', (carrier, name, { agent }) => {
+      const payload = sessionEndPayload(agent);
+      for (const hook of endHooks) {
+        runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
+          .then((run) => {
+            if (run.exitCode !== 0) {
+              console.warn(`dsh-claude-compat: SessionEnd hook exited ${run.exitCode}: ${hook.command}`);
+            } else if (run.stdout.trim() !== '') {
+              console.log(`dsh-claude-compat: SessionEnd hook output: ${run.stdout.trim()}`);
+            }
+          });
+      }
     });
   }
 }
