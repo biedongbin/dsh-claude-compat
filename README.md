@@ -12,45 +12,45 @@
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 
-> **在 DSH 里，直接用回你整套 Claude Code 配置——零迁移。**
-> skills、命令、规则、agents、hooks、MCP，装上就能用，什么都不用重配。
+> **Reuse your entire Claude Code setup in DSH — zero migration.**
+> skills, commands, rules, agents, hooks, MCP — install and they just work. Nothing to reconfigure.
 
 ---
 
 ## The 10-second pitch
 
-你已经在 Claude Code 里攒了一整套趁手的 `.claude/`——skills、slash commands、rules、agents、hooks、MCP servers。换到 **DSH (DeepSeek Harness)** 时，你不想把这些全部重新搭一遍。
+You've already built up a solid `.claude/` in Claude Code — skills, slash commands, rules, agents, hooks, MCP servers. Moving to **DSH (DeepSeek Harness)** shouldn't mean rebuilding all of it.
 
-**dsh-claude-compat 就是那座桥。** 它把你的 `.claude/` 目录**原样搬进 DSH**，所有能力即刻生效。装一次，两边的配置从此共用一份，改一处两边都变。
+**dsh-claude-compat is that bridge.** It carries your `.claude/` directories **verbatim into DSH** — everything works immediately. Install once, and both sides share one config: change it in one place, it updates in both.
 
 ```bash
 dsh plugin --profile web add dsh-claude-compat@latest
 dsh web
 ```
 
-搞定。你的 skills 出现在 `/` 菜单里，规则注入每个新会话，agent 能用 `/agent-name` 调起——全都在 DSH 里，跟 Claude Code 里一模一样。
+Done. Your skills show up in the `/` menu, rules inject into every new session, and you can invoke agents with `/agent-name` — all inside DSH, exactly like Claude Code.
 
-**或用 DSH 自己装（推荐）**：复制下面这句给 DSH，它会读 skill、自动安装并验证：
+**Or let DSH install it itself (recommended):** copy this line to DSH — it reads the skill, installs, and verifies:
 
-> 请阅读 https://github.com/biedongbin/dsh-claude-compat/blob/main/.claude/skills/install-dsh-compat/SKILL.md 并按步骤安装 dsh-claude-compat 插件。
+> Read https://github.com/biedongbin/dsh-claude-compat/blob/main/.claude/skills/install-dsh-compat/SKILL.md and install the dsh-claude-compat plugin following its steps.
 
-> ⭐ 觉得好用？[点这里给个 star](https://github.com/biedongbin/dsh-claude-compat)——它让我们持续改进，也帮更多人找到这个插件。
+> ⭐ Find this useful? [Give it a star](https://github.com/biedongbin/dsh-claude-compat) — it keeps us improving and helps more people discover it.
 
 ---
 
 ## What it brings over — at a glance
 
-| Claude Code 里的东西 | 在 DSH 里变成 | 怎么用 |
+| Your Claude Code asset | Becomes in DSH | How to use it |
 |---|---|---|
-| `skills/**/SKILL.md` | DSH skill（目录可加载） | `/skill-name`、`skill` 工具、模型目录都能看到 |
-| `commands/*.md` | DSH skill（用户可调） | `/command-name` 出现在 slash 菜单 |
-| `rules/*.md` | 消息流注入（同 Claude 的 `prependUserContext` 通道） | 每个新会话自动生效 |
-| `agents/*.md` | 委托 shim skill | `/agent-name` 按角色调起 |
-| `.claude/settings.json` hooks | Pre/PostToolUse + UserPromptSubmit 桥接 | 命令、权限、拦截照旧 |
-| `<root>/.mcp.json` | `dsh-mcp-client` 实例 | stdio / streamable-http 自动翻译 |
-| `~/.claude/plugins` | DSH skill（`/cc-plugin` 管理） | 安装的插件技能一并可用 |
+| `skills/**/SKILL.md` | DSH skill (lazy-loaded) | `/skill-name`, the `skill` tool, and the model-visible catalog |
+| `commands/*.md` | DSH skill (user-invocable) | `/command-name` in the slash menu |
+| `rules/*.md` | message-stream injection (same channel Claude uses) | auto-applies to every new session |
+| `agents/*.md` | delegation-shim skill | invoke `/agent-name` with its persona |
+| `.claude/settings.json` hooks | Pre/PostToolUse + UserPromptSubmit bridged | commands, permissions, blocks behave as before |
+| `<root>/.mcp.json` | `dsh-mcp-client` instances | stdio / streamable-http auto-translated |
+| `~/.claude/plugins` | DSH skill (managed via `/cc-plugin`) | installed plugin skills work too |
 
-同一套目录，项目 `.claude/` 和用户级 `~/.claude/` **都会读**。同名项按固定优先级去重：**项目 `.claude` > DSH 原生 > `~/.claude`**——项目技能永远覆盖其他副本，用户技能永远不覆盖 DSH 原生。`CLAUDE.md` / `AGENTS.md` 由 DSH 内置的 `dsh-agent-instructions` 处理，**本插件不碰**。
+Both the project `.claude/` and the user-level `~/.claude/` are read. Same-name entries dedupe by fixed priority: **project `.claude` > DSH native > `~/.claude`** — a project skill always wins over other copies, and a user skill never overrides a DSH-native one. `CLAUDE.md` / `AGENTS.md` are handled by DSH's built-in `dsh-agent-instructions` — **this plugin never touches them**.
 
 ## What it does (implementation detail)
 
