@@ -8,7 +8,7 @@
   <a href="README.md"><img src="https://img.shields.io/badge/🌐_English-Click_me-red?style=for-the-badge" alt="English"></a>
   <img src="https://img.shields.io/npm/dm/dsh-claude-compat?style=flat-square&label=downloads/month&color=brightgreen" alt="npm downloads/month">
   <img src="https://img.shields.io/npm/dt/dsh-claude-compat?style=flat-square&label=total%20downloads&color=blue" alt="npm total downloads">
-  <img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.8.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 
@@ -82,6 +82,7 @@ dsh web
 | `/cc-plugin` | 完整 Claude Code 插件管理：`list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。一键语法 `/cc-plugin <名>@<市场>` 直接安装。引擎：有 `claude` CLI 时优先调度，否则内置降级（直接操作 JSON + git，被改文件自动时间戳备份）。状态全部落在 Claude 原生位置（`~/.claude/plugins`、`~/.claude/settings.json` 的 `enabledPlugins`），Claude Code 与 DSH 读同一份真相。 |
 | `/reload-cc-plugins` | 热重载 skill catalog：清缓存并广播变更，新装/卸载的插件技能**当前会话**立即可见 —— 无需重启、无需新会话。 |
 | `/reload-skills` | `/reload-cc-plugins` 的别名。 |
+| `/cc-export` | 把 DSH 原生 skill（`.dsh/skills`）导出为 Claude Code `.claude/skills/<name>/SKILL.md`，frontmatter 保留。`list` / `export [--overwrite] [--target]`。 |
 | `/cc-resume` | 列出当前项目的 Claude Code 会话（`~/.claude/projects/`），并把任意一个导入 DSH —— 完整 user/assistant/工具历史。导入会话以 `cc: <预览>` 标题出现在 DSH 会话列表，可像原生会话一样恢复。`list` / `import <sessionId>` / `--limit-turns N`（大会话只导最近 N 轮）。 |
 
 典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。

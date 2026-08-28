@@ -4,6 +4,15 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.0] — 2026-08-19
+
+### Added
+- **Session lifecycle hooks**: `SessionStart` → `agent/session-start`, `SessionEnd` → `agent/disposed`. Fire-and-forget (best-effort, non-zero exit logged, never blocks the loop). Payload carries `session_id` + `cwd`.
+- **`/cc-export`**: export DSH-native skills (`.dsh/skills`) into Claude Code `.claude/skills/<name>/SKILL.md` with frontmatter preserved; multiline values emit as YAML literal blocks. `list` / `export [--overwrite] [--target]`.
+
+### Fixed
+- **Session hook agent extraction**: DSH agent events dispatch `(carrier, name, payload)` and pass the agent on the **first argument** (`carrier.agent`), not the payload — verified in an isolated sandbox. Listeners now read `carrier?.agent ?? payload?.agent` (defensive against agent-loop's fused-payload path). Previously `session_id` was always `'unknown'`.
+
 ## [0.7.0] — 2026-08-18
 
 ### Added
@@ -79,6 +88,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
   - `commands/*.md` → user-invocable skills (`/command-name` in the slash menu).
   - `rules/*.md` → message-stream injection: concatenated, wrapped in a `<system-reminder>` envelope, prepended once per session — the same channel Claude Code uses (`prependUserContext`), which models follow reliably.
 
+[0.8.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.5.1...v0.6.2
 [0.6.1]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.0...v0.6.1
