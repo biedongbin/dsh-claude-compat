@@ -9,16 +9,9 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ### Added
 - **Session lifecycle hooks**: `SessionStart` → `agent/session-start`, `SessionEnd` → `agent/disposed`. Fire-and-forget (best-effort, non-zero exit logged, never blocks the loop). Payload carries `session_id` + `cwd`.
 - **`/cc-export`**: export DSH-native skills (`.dsh/skills`) into Claude Code `.claude/skills/<name>/SKILL.md` with frontmatter preserved; multiline values emit as YAML literal blocks. `list` / `export [--overwrite] [--target]`.
-- **`install-dsh-compat` skill**: guided install of the plugin (bridge `.claude/` into DSH, zero migration); star nudge is a non-blocking optional tail.
-- **One-shot star nudge**: on first plugin activation per process, prints a "found this useful? star it" hint (disable with `enableStarNudge: false`).
-- **CI-generated npm downloads chart**: `scripts/gen-downloads-chart.mjs` fetches `api.npmjs.org` last-30-day downloads and renders a bar-chart SVG to `.github/assets/downloads.svg`; a daily GitHub Actions workflow regenerates and commits it. README embeds the repo-local SVG (no third-party image service).
-- **npm download badges**: `downloads/month` + `total downloads` shields.io badges in the README header.
-- **Bilingual changelog**: `CHANGELOG.zh-CN.md` with cross-language links; README release-notes section links to it.
 
 ### Fixed
 - **Session hook agent extraction**: DSH agent events dispatch `(carrier, name, payload)` and pass the agent on the **first argument** (`carrier.agent`), not the payload — verified in an isolated sandbox. Listeners now read `carrier?.agent ?? payload?.agent` (defensive against agent-loop's fused-payload path). Previously `session_id` was always `'unknown'`.
-- **npm downloads API date window**: `range/last-N-days` returns a bogus `2030-01-01` window; the chart script now uses an explicit `start:end` date range.
-- **README EN quick-start**: restored English copy that had been mixed with Chinese.
 
 ## [0.7.0] — 2026-08-18
 
