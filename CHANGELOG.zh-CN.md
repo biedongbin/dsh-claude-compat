@@ -9,9 +9,16 @@
 ### 新增
 - **会话生命周期 hooks**：`SessionStart` → `agent/session-start`，`SessionEnd` → `agent/disposed`。fire-and-forget（尽力而为，非零退出仅告警，不阻塞循环）。载荷含 `session_id` + `cwd`。
 - **`/cc-export`**：把 DSH 原生 skill（`.dsh/skills`）导出为 Claude Code `.claude/skills/<name>/SKILL.md`，frontmatter 保留；多行值输出为 YAML literal block。`list` / `export [--overwrite] [--target]`。
+- **`install-dsh-compat` skill**：引导安装插件（把 `.claude/` 桥接进 DSH，零迁移）；star 提示为可选收尾，不阻塞安装流程。
+- **一次性 star 引导**：插件每次进程首次激活时打印"觉得有用就 star 一下"提示（`enableStarNudge: false` 可关）。
+- **CI 生成的 npm 下载图表**：`scripts/gen-downloads-chart.mjs` 拉取 `api.npmjs.org` 近 30 天下载量，渲染柱状图 SVG 到 `.github/assets/downloads.svg`；每日 GitHub Actions 自动重生成并提交。README 内嵌仓库本地 SVG（无第三方图床）。
+- **npm 下载徽章**：README 头部加 `downloads/month` + `total downloads` shields.io 徽章。
+- **双语更新日志**：新增 `CHANGELOG.zh-CN.md` 及中英互切链接；README release notes 段指向它。
 
 ### 修复
 - **session hook agent 提取**：DSH agent 事件 dispatch `(carrier, name, payload)`，agent 在**第一个参数**（`carrier.agent`）而非 payload — 已在隔离沙箱实测。监听器改为 `carrier?.agent ?? payload?.agent`（防御 agent-loop 的 fused-payload 路径）。此前 `session_id` 恒为 `'unknown'`。
+- **npm 下载 API 日期窗口**：`range/last-N-days` 返回假的 `2030-01-01` 窗口；图表脚本改用显式 `start:end` 日期区间。
+- **英文 README 速览区**：还原被混入中文的英文文案。
 
 ## [0.7.0] — 2026-08-18
 
