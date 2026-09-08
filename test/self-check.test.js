@@ -141,8 +141,13 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
   const agent = {
     session: {
       header: { cwd: project },
-      surface: { nodes: [] },
-      events: {},
+      // DSH >= 0.1.2 exposes events through eventAt(); a non-empty surface
+      // catches accidental regressions to the removed session.events API.
+      surface: { nodes: [7] },
+      eventAt(seq) {
+        assert.equal(seq, 7);
+        return { type: 'user/message', data: { source: { kind: 'user' } } };
+      },
     },
   };
   const decision = await ctx.waterfall(
