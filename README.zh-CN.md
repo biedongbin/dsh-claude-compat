@@ -8,7 +8,7 @@
   <a href="README.md"><img src="https://img.shields.io/badge/🌐_English-Click_me-red?style=for-the-badge" alt="English"></a>
   <img src="https://img.shields.io/npm/dm/dsh-claude-compat?style=flat-square&label=downloads/month&color=brightgreen" alt="npm downloads/month">
   <img src="https://img.shields.io/npm/dt/dsh-claude-compat?style=flat-square&label=total%20downloads&color=blue" alt="npm total downloads">
-  <img src="https://img.shields.io/badge/version-0.8.0-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.8.1-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 

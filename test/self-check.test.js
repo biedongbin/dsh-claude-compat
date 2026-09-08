@@ -142,7 +142,7 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
     session: {
       header: { cwd: project },
       surface: { nodes: [] },
-      events: {},
+      snapshotEvents: () => [],
     },
   };
   const decision = await ctx.waterfall(
@@ -160,4 +160,41 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
   assert.doesNotMatch(text, /USER RULE TEXT/, 'user rule with same basename deduped out');
   assert.match(text, /USER ONLY RULE/, 'user-only rule still included');
   assert.match(text, /<system-reminder>/, 'envelope preserved');
+});
+
+// Regression: dsh 0.1.2-rc.1 Session has NO `events` property — the public API
+// is snapshotEvents(). The pre-step hook previously indexed agent.session.events
+// (undefined), which threw on resume when surface.nodes was non-empty. Mock the
+// real Session shape (no events, snapshotEvents present) with a non-empty
+// surface and assert the hook neither throws nor double-injects.
+test('rules: pre-step survives a resumed session (no session.events, snapshotEvents API)', async () => {
+  const project = makeSandbox('dcc-rules-resume-');
+  mkdirSync(join(project, '.git'));
+  mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
+  writeFileSync(join(project, '.claude', 'rules', 'resume.md'), 'RESUME RULE TEXT\n');
+
+  const userClaude = makeSandbox('dcc-rules-resume-user-');
+  const ctx = await newHarness({ userClaudeDir: userClaude });
+
+  // Real dsh 0.1.2-rc.1 Session shape: no `events` key, snapshotEvents() present.
+  const history = [
+    { type: 'user/message', seq: 7, data: { source: { kind: 'user' } } },
+  ];
+  const agent = {
+    session: {
+      header: { cwd: project },
+      surface: { nodes: [7] },
+      snapshotEvents: () => history,
+    },
+  };
+  const decision = await ctx.waterfall(
+    'agent/pre-step',
+    { agent, messages: [] },
+    async () => ({ kind: 'enter', messages: [] }),
+  );
+  assert.equal(decision.kind, 'enter');
+  assert.ok(decision.messages.length >= 1, 'rules message prepended on resume');
+  const injected = decision.messages[0];
+  assert.equal(injected.source?.kind, 'claude-compat');
+  assert.match(injected.content[0].text, /RESUME RULE TEXT/);
 });

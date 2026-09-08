@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.8.1] — 2026-09-08
+
+### 修复
+- **resume 崩溃（`Cannot read properties of undefined (reading '7')`）**：rules 的 `agent/pre-step` 钩子索引 `agent.session.events[seq]`，但 dsh 0.1.2-rc.1 的 `Session` 没有 `events` 属性 — 公开 API 是 `snapshotEvents()`。resume 时 surface 非空，`.some()` 回调首次执行即抛，本轮以 `code UNKNOWN` 失败。钩子改为循环外取一次 `snapshotEvents()` 快照再索引。新会话不受影响（空 surface 短路）。
+
 ## [0.8.0] — 2026-08-19
 
 ### 新增
@@ -87,6 +92,7 @@
   - `commands/*.md` → 用户可调用 skill（斜杠菜单里 `/command-name`）。
   - `rules/*.md` → 消息流注入：拼接后包 `<system-reminder>` 信封，每会话前置一次 — 与 Claude Code 同一通道（`prependUserContext`），模型遵循可靠。
 
+[0.8.1]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.5.1...v0.6.2

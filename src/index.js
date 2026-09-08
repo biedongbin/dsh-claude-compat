@@ -406,10 +406,14 @@ function registerRulesSection(ctx, config) {
     const decision = await next();
     if (decision.kind !== 'enter') return decision;
     const present = (list) => list.some((m) => m?.source?.kind === 'claude-compat');
+    // Take one snapshot outside the loop: Session has no `events` property
+    // (dsh 0.1.2-rc.1) — snapshotEvents() is the public API. Indexing the
+    // snapshot by seq is stable and avoids re-materializing per node.
+    const events = agent.session.snapshotEvents();
     const alreadyInjected = present(messages)
       || present(decision.messages)
       || agent.session.surface.nodes.some((seq) => {
-        const event = agent.session.events[seq];
+        const event = events[seq];
         return event?.type === 'user/message'
           && event.data?.source?.kind === 'claude-compat';
       });

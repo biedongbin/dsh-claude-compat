@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.1] — 2026-09-08
+
+### Fixed
+- **Resume crash (`Cannot read properties of undefined (reading '7')`)**: the rules `agent/pre-step` hook indexed `agent.session.events[seq]`, but dsh 0.1.2-rc.1's `Session` has no `events` property — the public API is `snapshotEvents()`. On a resumed session the surface is non-empty, so the first `.some()` callback threw and the turn failed with `code UNKNOWN`. The hook now takes one `snapshotEvents()` snapshot outside the loop and indexes that. New sessions were unaffected (empty surface short-circuits).
+
 ## [0.8.0] — 2026-08-19
 
 ### Added
@@ -88,6 +93,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
   - `commands/*.md` → user-invocable skills (`/command-name` in the slash menu).
   - `rules/*.md` → message-stream injection: concatenated, wrapped in a `<system-reminder>` envelope, prepended once per session — the same channel Claude Code uses (`prependUserContext`), which models follow reliably.
 
+[0.8.1]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/biedongbin/dsh-claude-compat/compare/v0.5.1...v0.6.2
