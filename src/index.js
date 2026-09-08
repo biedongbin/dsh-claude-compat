@@ -409,7 +409,9 @@ function registerRulesSection(ctx, config) {
     const alreadyInjected = present(messages)
       || present(decision.messages)
       || agent.session.surface.nodes.some((seq) => {
-        const event = agent.session.events[seq];
+        // DSH 0.1.2 made the event log private and replaced session.events
+        // with eventAt(). Keep the optional legacy fallback for older DSH.
+        const event = agent.session.eventAt?.(seq) ?? agent.session.events?.[seq];
         return event?.type === 'user/message'
           && event.data?.source?.kind === 'claude-compat';
       });
