@@ -60,5 +60,9 @@
   },
   "bin": {
     "dsh-claude-compat-restart": "scripts/dsh-restart.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biedongbin/dsh-claude-compat.git"
   }
 }
