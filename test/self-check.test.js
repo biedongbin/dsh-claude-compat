@@ -154,7 +154,8 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
   assert.ok(decision.messages.length >= 1, 'one rules message is prepended');
   const injected = decision.messages[0];
   assert.equal(injected.role, 'user');
-  assert.equal(injected.source?.kind, 'claude-compat');
+  assert.equal(injected.source?.kind, 'plugin');
+  assert.equal(injected.source?.plugin, 'dsh-claude-compat');
   const text = injected.content[0].text;
   assert.match(text, /PROJECT RULE TEXT/, 'project rule included');
   assert.doesNotMatch(text, /USER RULE TEXT/, 'user rule with same basename deduped out');
@@ -195,6 +196,7 @@ test('rules: pre-step survives a resumed session (no session.events, snapshotEve
   assert.equal(decision.kind, 'enter');
   assert.ok(decision.messages.length >= 1, 'rules message prepended on resume');
   const injected = decision.messages[0];
-  assert.equal(injected.source?.kind, 'claude-compat');
+  assert.equal(injected.source?.kind, 'plugin');
+  assert.equal(injected.source?.plugin, 'dsh-claude-compat');
   assert.match(injected.content[0].text, /RESUME RULE TEXT/);
 });

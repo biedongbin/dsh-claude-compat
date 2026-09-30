@@ -108,7 +108,7 @@ export function mapPostHookOutput(exitCode, stdout, { warn = console.warn } = {}
       kind: 'accept',
       additionalContexts: [createUserMessage({
         content: [{ type: 'text', text: additional }],
-        source: { kind: 'claude-compat', form: 'hook-context' },
+        source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'hook-context' },
       })],
     };
   }
@@ -339,7 +339,7 @@ async function runPromptHooks(hooks, agent, config) {
     if (text === '') continue;
     extra.push(createUserMessage({
       content: [{ type: 'text', text }],
-      source: { kind: 'claude-compat', form: 'hook-context' },
+      source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'hook-context' },
     }));
   }
   return extra.length > 0 ? extra : undefined;

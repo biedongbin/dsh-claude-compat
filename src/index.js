@@ -405,7 +405,7 @@ function registerRulesSection(ctx, config) {
   ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
     const decision = await next();
     if (decision.kind !== 'enter') return decision;
-    const present = (list) => list.some((m) => m?.source?.kind === 'claude-compat');
+    const present = (list) => list.some((m) => m?.source?.kind === 'plugin' && m.source.plugin === 'dsh-claude-compat');
     // Take one snapshot outside the loop: Session has no `events` property
     // (dsh 0.1.2-rc.1) — snapshotEvents() is the public API. Indexing the
     // snapshot by seq is stable and avoids re-materializing per node.
@@ -415,7 +415,8 @@ function registerRulesSection(ctx, config) {
       || agent.session.surface.nodes.some((seq) => {
         const event = events[seq];
         return event?.type === 'user/message'
-          && event.data?.source?.kind === 'claude-compat';
+          && event.data?.source?.kind === 'plugin'
+          && event.data.source.plugin === 'dsh-claude-compat';
       });
     if (alreadyInjected) return decision;
     // Session cwd, NOT process.cwd() — the DSH process may be launched from
@@ -430,7 +431,7 @@ function registerRulesSection(ctx, config) {
       // of the message array. Not in system prompt.
       cache.set(cwd, createUserMessage({
         content: [{ type: 'text', text }],
-        source: { kind: 'claude-compat', form: 'rules' },
+        source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'rules' },
       }));
     }
     return {

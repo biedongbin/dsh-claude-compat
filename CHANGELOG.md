@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.2] — 2026-09-30
+
+### Fixed
+- **Session archives unreadable after dsh upgrade (`cannot safely transform unclassified message source`)**: injected messages carried a custom `source.kind: 'claude-compat'`, which is not in dsh's migration whitelist (`SOURCE_KINDS`), so any session log containing one failed v0→v3 migration fail-closed and could not load. Injection sources (rules in `index.js`, hook-context in `hooks.js`) now use the whitelisted `kind: 'plugin'` with `plugin: 'dsh-claude-compat'` — the same shape dsh core plugins (`@deepseek-ai/dsh-system-prompt`, `user-approval`) already write. Duplicate-injection detection updated to match the new identity.
+
 ## [0.8.1] — 2026-09-08
 
 ### Fixed

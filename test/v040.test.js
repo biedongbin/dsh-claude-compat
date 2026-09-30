@@ -125,7 +125,8 @@ test('mapPostHookOutput: exit 2 blocks with feedback, additionalContext becomes 
   const withCtx = mapPostHookOutput(0, JSON.stringify({ additionalContext: 'remember this fact' }));
   assert.equal(withCtx.kind, 'accept');
   assert.equal(withCtx.additionalContexts.length, 1);
-  assert.equal(withCtx.additionalContexts[0].source.kind, 'claude-compat');
+  assert.equal(withCtx.additionalContexts[0].source.kind, 'plugin');
+  assert.equal(withCtx.additionalContexts[0].source.plugin, 'dsh-claude-compat');
   assert.equal(withCtx.additionalContexts[0].content[0].text, 'remember this fact');
 
   const plain = mapPostHookOutput(0, '');

@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.8.2] — 2026-09-30
+
+### 修复
+- **dsh 升级后会话档案无法加载（`cannot safely transform unclassified message source`）**：插件注入的消息携带自定义 `source.kind: 'claude-compat'`，不在 dsh 迁移器白名单（`SOURCE_KINDS`）内，凡含此类消息的会话日志在 v0→v3 迁移时 fail-closed 拒载。注入来源（`index.js` 的 rules、`hooks.js` 的 hook-context）改为白名单内的 `kind: 'plugin'` + `plugin: 'dsh-claude-compat'` — 与 dsh 核心插件（`@deepseek-ai/dsh-system-prompt`、`user-approval`）已写入的形态一致。防重复注入的回读检测同步改为匹配新标识。
+
 ## [0.8.1] — 2026-09-08
 
 ### 修复
