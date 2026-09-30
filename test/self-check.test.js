@@ -142,7 +142,7 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
     session: {
       header: { cwd: project },
       surface: { nodes: [] },
-      snapshotEvents: () => [],
+      eventAt: () => undefined,
     },
   };
   const decision = await ctx.waterfall(
@@ -163,12 +163,12 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
   assert.match(text, /<system-reminder>/, 'envelope preserved');
 });
 
-// Regression: dsh 0.1.2-rc.1 Session has NO `events` property — the public API
-// is snapshotEvents(). The pre-step hook previously indexed agent.session.events
-// (undefined), which threw on resume when surface.nodes was non-empty. Mock the
-// real Session shape (no events, snapshotEvents present) with a non-empty
-// surface and assert the hook neither throws nor double-injects.
-test('rules: pre-step survives a resumed session (no session.events, snapshotEvents API)', async () => {
+// Regression: dsh 0.1.2 Session has NO `events` property — seq lookup is
+// eventAt(seq) (the API dsh core itself uses for surface scans). The pre-step
+// hook previously indexed agent.session.events (undefined), which threw on
+// resume when surface.nodes was non-empty. Mock the real Session shape with a
+// non-empty surface and assert the hook neither throws nor double-injects.
+test('rules: pre-step survives a resumed session (no session.events, eventAt API)', async () => {
   const project = makeSandbox('dcc-rules-resume-');
   mkdirSync(join(project, '.git'));
   mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
@@ -177,7 +177,8 @@ test('rules: pre-step survives a resumed session (no session.events, snapshotEve
   const userClaude = makeSandbox('dcc-rules-resume-user-');
   const ctx = await newHarness({ userClaudeDir: userClaude });
 
-  // Real dsh 0.1.2-rc.1 Session shape: no `events` key, snapshotEvents() present.
+  // Real dsh 0.1.2 Session shape: no `events` key, exact lookup via eventAt().
+  // seq 7 sits behind array index 0 — indexing a snapshot by seq would miss.
   const history = [
     { type: 'user/message', seq: 7, data: { source: { kind: 'user' } } },
   ];
@@ -185,7 +186,7 @@ test('rules: pre-step survives a resumed session (no session.events, snapshotEve
     session: {
       header: { cwd: project },
       surface: { nodes: [7] },
-      snapshotEvents: () => history,
+      eventAt: (seq) => (seq === 7 ? history[0] : undefined),
     },
   };
   const decision = await ctx.waterfall(

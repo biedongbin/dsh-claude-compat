@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.3] — 2026-09-30
+
+### Fixed
+- **Rules dedup scan used the wrong event lookup**: the pre-step hook took one `snapshotEvents()` snapshot and indexed it by surface seq (`events[seq]`). Snapshot indices and session seqs are not guaranteed to align (dsh has `firstLiveSeq`/offset semantics), so the duplicate-injection check could silently miss. Now uses `session.eventAt(seq)` — the exact-lookup API dsh core itself uses for surface scans — with an optional `session.events?.[seq]` fallback for pre-0.1.2 hosts. Based on PR #1 by @SvenKunkka.
+
 ## [0.8.2] — 2026-09-30
 
 ### Fixed

@@ -406,14 +406,13 @@ function registerRulesSection(ctx, config) {
     const decision = await next();
     if (decision.kind !== 'enter') return decision;
     const present = (list) => list.some((m) => m?.source?.kind === 'plugin' && m.source.plugin === 'dsh-claude-compat');
-    // Take one snapshot outside the loop: Session has no `events` property
-    // (dsh 0.1.2-rc.1) — snapshotEvents() is the public API. Indexing the
-    // snapshot by seq is stable and avoids re-materializing per node.
-    const events = agent.session.snapshotEvents();
+    // dsh 0.1.2 made the event log private — exact lookup is eventAt(seq),
+    // the same API dsh core uses for its own surface scans. Legacy dsh
+    // exposed a plain session.events array; keep an optional fallback.
     const alreadyInjected = present(messages)
       || present(decision.messages)
       || agent.session.surface.nodes.some((seq) => {
-        const event = events[seq];
+        const event = agent.session.eventAt?.(seq) ?? agent.session.events?.[seq];
         return event?.type === 'user/message'
           && event.data?.source?.kind === 'plugin'
           && event.data.source.plugin === 'dsh-claude-compat';

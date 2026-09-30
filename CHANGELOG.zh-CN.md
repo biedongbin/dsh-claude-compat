@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.8.3] — 2026-09-30
+
+### 修复
+- **rules 判重扫描用错了事件查询 API**：pre-step 钩子取一次 `snapshotEvents()` 快照后按 surface 的 seq 索引（`events[seq]`）。快照数组下标与会话 seq 并不保证对齐（dsh 有 `firstLiveSeq`/偏移语义），防重复注入检查可能静默落空。现改用 `session.eventAt(seq)` — dsh 核心自身做 surface 扫描所用的精确查询 API — 并保留 `session.events?.[seq]` 回退以兼容 0.1.2 之前宿主。基于 @SvenKunkka 的 PR #1。
+
 ## [0.8.2] — 2026-09-30
 
 ### 修复
