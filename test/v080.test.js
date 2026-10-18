@@ -5,7 +5,24 @@
 // covered here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionStartPayload, sessionEndPayload } from '../src/hooks.js';
+import { mapPostHookOutput, sessionStartPayload, sessionEndPayload } from '../src/hooks.js';
+import { CLAUDE_COMPAT_SOURCE_KIND } from '../src/lib.js';
+
+// dsh session format v4 admission (session-format-v3-to-v4 message-sources.ts)
+// refuses `kind: 'plugin'` — the retired V3 wrapper — and requires a
+// producer-owned kind. A third-party plugin is not in RELEASED_SAME_NAME_PRODUCERS,
+// so dsh derives `plugin:<plugin>` for it; emitting that directly is what keeps
+// a new session loadable. Regression: 0.8.3 emitted the V3 wrapper here and
+// every session with .claude/rules failed admission.
+test('injected source is producer-owned, never the retired V3 plugin wrapper', () => {
+  const out = mapPostHookOutput(0, JSON.stringify({ additionalContext: 'ctx' }));
+  const source = out.additionalContexts[0].source;
+  assert.equal(source.kind, CLAUDE_COMPAT_SOURCE_KIND);
+  assert.equal(source.kind, 'plugin:dsh-claude-compat');
+  assert.notEqual(source.kind, 'plugin');
+  assert.equal(source.plugin, undefined, 'the plugin field is retired with the wrapper');
+});
+
 
 const agent = {
   session: {

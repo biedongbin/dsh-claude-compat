@@ -54,6 +54,7 @@ import { registerHooks } from './hooks.js';
 import { mountMcpServers, mountMcpConfigs } from './mcp.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
+  CLAUDE_COMPAT_SOURCE_KIND,
   findProjectRoot,
   findProjectRootSync,
   listMdFilesSync,
@@ -405,7 +406,7 @@ function registerRulesSection(ctx, config) {
   ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
     const decision = await next();
     if (decision.kind !== 'enter') return decision;
-    const present = (list) => list.some((m) => m?.source?.kind === 'plugin' && m.source.plugin === 'dsh-claude-compat');
+    const present = (list) => list.some((m) => m?.source?.kind === CLAUDE_COMPAT_SOURCE_KIND);
     // dsh 0.1.2 made the event log private — exact lookup is eventAt(seq),
     // the same API dsh core uses for its own surface scans. Legacy dsh
     // exposed a plain session.events array; keep an optional fallback.
@@ -414,8 +415,7 @@ function registerRulesSection(ctx, config) {
       || agent.session.surface.nodes.some((seq) => {
         const event = agent.session.eventAt?.(seq) ?? agent.session.events?.[seq];
         return event?.type === 'user/message'
-          && event.data?.source?.kind === 'plugin'
-          && event.data.source.plugin === 'dsh-claude-compat';
+          && event.data?.source?.kind === CLAUDE_COMPAT_SOURCE_KIND;
       });
     if (alreadyInjected) return decision;
     // Session cwd, NOT process.cwd() — the DSH process may be launched from
@@ -430,7 +430,7 @@ function registerRulesSection(ctx, config) {
       // of the message array. Not in system prompt.
       cache.set(cwd, createUserMessage({
         content: [{ type: 'text', text }],
-        source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'rules' },
+        source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'rules' },
       }));
     }
     return {

@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.8.4] — 2026-10-18
+
+### 修复
+- **dsh 0.2.0 下新会话无法加载（`format v4 message requires a producer-owned source kind`）**：会话格式 v4 准入（`session-format-v3-to-v4/src/message-sources.ts`）拒绝退役的 V3 包装 `source.kind: 'plugin'` —— 第三方生产者须声明自有 kind。三处注入点（`index.js` 的 rules、`hooks.js` 的两处 hook-context）仍在发旧包装，故凡含 `.claude/rules/*.md` 的项目，新会话在加载阶段即被拒。现改发 `source.kind: 'plugin:dsh-claude-compat'` 并删去 `plugin` 字段 —— 此值正是 dsh 自身 `producerKind()` 为我们推导的结果（不在 `RENAMED_PRODUCERS`/`RELEASED_SAME_NAME_PRODUCERS` 中 → `plugin:${plugin}`），故 0.8.3 写下的、经 dsh 迁移的旧日志与今日新写的消息收敛于同一值。判重逻辑改为比对共享常量 `CLAUDE_COMPAT_SOURCE_KIND`。回归由 `test/v080.test.js` 覆盖，并对真实准入谓词验证于 `test-evidence/verify-084-v4-admission.mjs`。对应 Issue #2。
+
 ## [0.8.3] — 2026-09-30
 
 ### 修复

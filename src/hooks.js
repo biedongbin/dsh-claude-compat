@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import {
+  CLAUDE_COMPAT_SOURCE_KIND,
   findProjectRootSync,
   resolveUserClaudeDir,
 } from './lib.js';
@@ -108,7 +109,7 @@ export function mapPostHookOutput(exitCode, stdout, { warn = console.warn } = {}
       kind: 'accept',
       additionalContexts: [createUserMessage({
         content: [{ type: 'text', text: additional }],
-        source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'hook-context' },
+        source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'hook-context' },
       })],
     };
   }
@@ -339,7 +340,7 @@ async function runPromptHooks(hooks, agent, config) {
     if (text === '') continue;
     extra.push(createUserMessage({
       content: [{ type: 'text', text }],
-      source: { kind: 'plugin', plugin: 'dsh-claude-compat', form: 'hook-context' },
+      source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'hook-context' },
     }));
   }
   return extra.length > 0 ? extra : undefined;

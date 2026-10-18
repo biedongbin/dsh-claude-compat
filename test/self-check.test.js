@@ -25,6 +25,7 @@ import { test } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import { BUNDLED_SKILL_RANK, SkillRegistry } from '@deepseek-ai/dsh-skill';
 import { apply, Config } from '../src/index.js';
+import { CLAUDE_COMPAT_SOURCE_KIND } from '../src/lib.js';
 
 function makeSandbox(prefix) {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -154,8 +155,8 @@ test('rules: project .claude/rules wins same-basename ~/.claude/rules in one env
   assert.ok(decision.messages.length >= 1, 'one rules message is prepended');
   const injected = decision.messages[0];
   assert.equal(injected.role, 'user');
-  assert.equal(injected.source?.kind, 'plugin');
-  assert.equal(injected.source?.plugin, 'dsh-claude-compat');
+  assert.equal(injected.source?.kind, CLAUDE_COMPAT_SOURCE_KIND);
+  assert.equal(injected.source?.plugin, undefined);
   const text = injected.content[0].text;
   assert.match(text, /PROJECT RULE TEXT/, 'project rule included');
   assert.doesNotMatch(text, /USER RULE TEXT/, 'user rule with same basename deduped out');
@@ -197,7 +198,7 @@ test('rules: pre-step survives a resumed session (no session.events, eventAt API
   assert.equal(decision.kind, 'enter');
   assert.ok(decision.messages.length >= 1, 'rules message prepended on resume');
   const injected = decision.messages[0];
-  assert.equal(injected.source?.kind, 'plugin');
-  assert.equal(injected.source?.plugin, 'dsh-claude-compat');
+  assert.equal(injected.source?.kind, CLAUDE_COMPAT_SOURCE_KIND);
+  assert.equal(injected.source?.plugin, undefined);
   assert.match(injected.content[0].text, /RESUME RULE TEXT/);
 });

@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.8.4] — 2026-10-18
+
+### Fixed
+- **New sessions failed to load on dsh 0.2.0 (`format v4 message requires a producer-owned source kind`)**: session format v4 admission (`session-format-v3-to-v4/src/message-sources.ts`) rejects the retired V3 wrapper `source.kind: 'plugin'` — a third-party producer must declare its own kind. All three injection sites (rules in `index.js`, hook-context in `hooks.js` ×2) still emitted the wrapper, so every session in a project with `.claude/rules/*.md` failed admission at load. Injection now emits `source.kind: 'plugin:dsh-claude-compat'` with the `plugin` field dropped — the exact kind dsh's own `producerKind()` derives for us (not in `RENAMED_PRODUCERS`/`RELEASED_SAME_NAME_PRODUCERS` → `plugin:${plugin}`), so 0.8.3 logs migrated by dsh and messages written today converge on one value. Duplicate-injection detection compares the shared `CLAUDE_COMPAT_SOURCE_KIND` constant. Regression covered by `test/v080.test.js` and verified against the real admission predicate in `test-evidence/verify-084-v4-admission.mjs`. Issue #2.
+
 ## [0.8.3] — 2026-09-30
 
 ### Fixed

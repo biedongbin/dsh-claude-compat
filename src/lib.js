@@ -8,6 +8,15 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 
+// Producer-owned source kind for every message this plugin injects. dsh's
+// session format v4 admission (session-format-v3-to-v4/src/message-sources.ts)
+// rejects the retired V3 `kind: 'plugin'` wrapper: a third-party producer must
+// emit its own kind. dsh derives exactly this string for us — `producerKind()`
+// falls through RENAMED_PRODUCERS and RELEASED_SAME_NAME_PRODUCERS to
+// `plugin:${plugin}` — so a V3 log migrated by dsh and a message we emit today
+// carry the identical kind. Emission and dedup must both use this constant.
+export const CLAUDE_COMPAT_SOURCE_KIND = 'plugin:dsh-claude-compat';
+
 export function resolveUserClaudeDir(dir) {
   if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
   if (dir === '~') return homedir();
