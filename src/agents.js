@@ -7,20 +7,20 @@
 // the provider's rank (50 < 700) plus the shared dedupe flow.
 
 import { join } from 'node:path';
-import { isSkillName } from '@deepseek-ai/dsh-skill';
 import {
   readTextSafe,
   stringField,
   parseFrontmatter,
   pathExists,
 } from './lib.js';
+import { resolveCandidateName, warnUnmapped, withOriginalName } from './aliases.js';
 
 const AGENT_HEADER = 'Agent delegation: use the subagent/background-agent capability with this persona and instructions.';
 
 // Discover agent candidates from one agents dir (flat: *.md). Returns DSH skill
 // candidates in the same shape as discoverSkills/discoverCommands so the
 // registry's dedupe treats them uniformly.
-export async function discoverAgents(rootDir, providerName, source, rank) {
+export async function discoverAgents(rootDir, providerName, source, rank, aliasOptions) {
   const out = [];
   if (!(await pathExists(rootDir))) return out;
   let entries;
@@ -36,14 +36,22 @@ export async function discoverAgents(rootDir, providerName, source, rank) {
     const parsed = parseFrontmatter(raw);
     const data = parsed?.data ?? {};
     const stem = entry.name.slice(0, -3);
-    let name = stringField(data, 'name');
-    if (name === undefined || !isSkillName(name)) name = stem;
-    if (!isSkillName(name)) continue; // non-kebab names rejected by registry anyway
-    const description = stringField(data, 'description')
+    // Frontmatter name first, then the filename stem — a non-kebab name falls
+    // back to a skillAliases slug (see src/aliases.js).
+    const fmName = stringField(data, 'name');
+    const resolved = resolveCandidateName([fmName, stem], aliasOptions?.aliases);
+    if (resolved === undefined) {
+      warnUnmapped('agent', fmName ?? stem, path);
+      continue;
+    }
+    const baseDescription = stringField(data, 'description')
       ?? firstLine(parsed?.body ?? raw, 100);
+    const description = aliasOptions?.tagOriginal === false
+      ? baseDescription
+      : withOriginalName(baseDescription, resolved.original);
     const tools = stringField(data, 'tools');
     out.push({
-      name,
+      name: resolved.name,
       description,
       whenToUse: description,
       invocation: { modelInvocable: true, userInvocable: true },

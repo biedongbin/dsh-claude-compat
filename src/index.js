@@ -47,9 +47,14 @@ import { readFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
-import { isSkillName } from '@deepseek-ai/dsh-skill';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { discoverAgents, renderAgentContent } from './agents.js';
+import {
+  normalizeAliases,
+  resolveCandidateName,
+  warnUnmapped,
+  withOriginalName,
+} from './aliases.js';
 import { registerHooks } from './hooks.js';
 import { mountMcpServers, mountMcpConfigs } from './mcp.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
@@ -87,6 +92,15 @@ export const Config = z.object({
   enableHooks: z.boolean().default(true),
   hooksTimeoutMs: z.number().default(60000),
   enableAgents: z.boolean().default(true),
+  // Non-ASCII (e.g. Chinese) skill/command/agent names can never satisfy DSH's
+  // kebab-case grammar, so they are dropped by the registry. `skillAliases`
+  // maps the original name to an ASCII slug the registry accepts —
+  // { "三脑": "san-nao" } — and the original name is kept at the front of the
+  // description so the catalog still reads "san-nao: 三脑 — …". Aliased entries
+  // keep their provider rank, so dedupe against DSH-native and ~/.agents names
+  // behaves exactly like any other collision.
+  skillAliases: z.dict(z.string()).default({}),
+  aliasDescriptionPrefix: z.boolean().default(true),
   // Claude Code plugin-marketplace installs (~/.claude/plugins). Skills,
   // commands and agents surface at pluginSkillRank (750: the long tail —
   // everything else wins collisions). Plugin MCP servers are opt-in via
@@ -169,6 +183,11 @@ class ClaudeCompatSkillProvider {
     this.userSkillRank = config.userSkillRank ?? 700;
     this.userSkillSource = config.userSkillSource ?? 'user-claude';
     this.userClaudeDir = resolveUserClaudeDir(config.userClaudeDir);
+    this.aliases = normalizeAliases(config.skillAliases);
+    this.aliasOptions = {
+      aliases: this.aliases,
+      tagOriginal: config.aliasDescriptionPrefix !== false,
+    };
     this.control = control;
     control.signal.addEventListener('abort', () => {}, { once: true });
   }
@@ -207,7 +226,8 @@ class ClaudeCompatSkillProvider {
     if (this.config.enablePlugins !== false) {
       const pluginCandidates = await discoverPluginContent(
         this.config.pluginsRoot, this.name, this.config.pluginSkillSource ?? 'claude-plugin',
-        this.config.pluginSkillRank ?? 750, { enableAgents: this.config.enableAgents });
+        this.config.pluginSkillRank ?? 750,
+        { enableAgents: this.config.enableAgents, ...this.aliasOptions });
       candidates.push(...pluginCandidates);
     }
     return candidates;
@@ -260,13 +280,13 @@ Notes:
 
   async addRootCandidates(candidates, claudeDir, source, rank) {
     const provider = this.name;
-    const tasks = [discoverSkills(join(claudeDir, 'skills'), provider, source, rank)];
+    const tasks = [discoverSkills(join(claudeDir, 'skills'), provider, source, rank, this.aliasOptions)];
     for (const [dir, fn] of [
       ['commands', discoverCommands],
       ['agents', discoverAgents],
     ]) {
       if (dir === 'agents' && this.config.enableAgents === false) continue;
-      tasks.push(fn(join(claudeDir, dir), provider, source, rank));
+      tasks.push(fn(join(claudeDir, dir), provider, source, rank, this.aliasOptions));
     }
     const batches = await Promise.all(tasks);
     for (const batch of batches) candidates.push(...batch);
@@ -300,7 +320,7 @@ Notes:
 
 // ─── discovery: <root>/.claude/skills (recursive, ≤3 levels) ─────────────────
 
-export async function discoverSkills(rootDir, providerName, source, rank) {
+export async function discoverSkills(rootDir, providerName, source, rank, aliasOptions) {
   const { readdir } = await import('node:fs/promises');
   const out = [];
   if (!(await pathExistsSafe(rootDir))) return out;
@@ -314,7 +334,8 @@ export async function discoverSkills(rootDir, providerName, source, rank) {
     } catch { return; }
     if (entries.some(e => e.isFile() && e.name === 'SKILL.md')) {
       const skillPath = join(dir, 'SKILL.md');
-      const c = await parseSkillCandidateFile(skillPath, providerName, source, rank, prefix || undefined);
+      const c = await parseSkillCandidateFile(
+        skillPath, providerName, source, rank, prefix || undefined, aliasOptions);
       if (c !== undefined) out.push(c);
       return; // bundle — don't descend
     }
@@ -330,7 +351,7 @@ export async function discoverSkills(rootDir, providerName, source, rank) {
 
 // ─── discovery: <root>/.claude/commands (flat) ───────────────────────────────
 
-export async function discoverCommands(rootDir, providerName, source, rank) {
+export async function discoverCommands(rootDir, providerName, source, rank, aliasOptions) {
   const { readdir } = await import('node:fs/promises');
   const out = [];
   if (!(await pathExistsSafe(rootDir))) return out;
@@ -342,14 +363,20 @@ export async function discoverCommands(rootDir, providerName, source, rank) {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
     const path = join(rootDir, entry.name);
     const stem = entry.name.slice(0, -3);
-    if (!isSkillName(stem)) continue; // non-kebab names rejected by registry anyway
+    const resolved = resolveCandidateName([stem], aliasOptions?.aliases);
+    if (resolved === undefined) {
+      warnUnmapped('command', stem, path);
+      continue;
+    }
     const raw = await readTextSafe(path);
     if (raw === undefined) continue;
     const parsed = parseFrontmatter(raw);
-    const description = parsed === undefined ? stem : (stringField(parsed.data, 'description') ?? stem);
+    const baseDescription = parsed === undefined ? stem : (stringField(parsed.data, 'description') ?? stem);
     out.push({
-      name: stem,
-      description,
+      name: resolved.name,
+      description: aliasOptions?.tagOriginal === false
+        ? baseDescription
+        : withOriginalName(baseDescription, resolved.original),
       invocation: { modelInvocable: true, userInvocable: true },
       provider: providerName,
       source,
@@ -362,7 +389,7 @@ export async function discoverCommands(rootDir, providerName, source, rank) {
   return out;
 }
 
-async function parseSkillCandidateFile(path, providerName, source, rank, flatName) {
+async function parseSkillCandidateFile(path, providerName, source, rank, flatName, aliasOptions) {
   const raw = await readTextSafe(path);
   if (raw === undefined) return undefined;
   const parsed = parseFrontmatter(raw);
@@ -373,18 +400,24 @@ async function parseSkillCandidateFile(path, providerName, source, rank, flatNam
   // Prefer frontmatter name when it is a valid kebab-case skill name. Some Claude
   // skills use names with ':' or other chars DSH rejects (e.g.
   // "salus:ai-robot-coding-env-check"); for those, fall back to the flattened
-  // directory name, which is virtually always kebab-case.
-  let name;
-  if (fmName !== undefined && isSkillName(fmName)) name = fmName;
-  else if (flatName !== undefined && isSkillName(flatName)) name = flatName;
-  if (name === undefined) return undefined;
+  // directory name, which is virtually always kebab-case. Names that are not
+  // kebab-case at all (e.g. Chinese) can still be surfaced through an explicit
+  // `skillAliases` mapping — see src/aliases.js.
+  const resolved = resolveCandidateName([fmName, flatName], aliasOptions?.aliases);
+  if (resolved === undefined) {
+    warnUnmapped('skill', fmName ?? flatName ?? path, path);
+    return undefined;
+  }
   let invocation;
   try { invocation = parseInvocationPolicy(parsed.data); }
   catch { invocation = { modelInvocable: true, userInvocable: true }; }
   const whenToUse = stringField(parsed.data, 'whenToUse');
   return {
-    name,
-    description,
+    name: resolved.name,
+    description: aliasOptions?.tagOriginal === false
+      ? description
+      : withOriginalName(description, resolved.original),
+    ...(whenToUse !== undefined ? { whenToUse } : {}),
     ...(whenToUse !== undefined ? { whenToUse } : {}),
     invocation,
     provider: providerName,

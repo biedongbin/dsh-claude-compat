@@ -120,6 +120,8 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `enableHooks` | `true` | 运行 `.claude/settings.json` hooks（Pre/PostToolUse、UserPromptSubmit） |
 | `hooksTimeoutMs` | `60000` | 单个 hook 运行超时（UserPromptSubmit 无论如何上限 10s） |
 | `enableAgents` | `true` | 把 `.claude/agents/*.md` 暴露为委派 shim skill |
+| `skillAliases` | `{}` | 非 kebab 名（中文等）→ ASCII slug 的映射，如 `{ "三脑": "san-nao" }`。见下方「中文 / 非 ASCII 技能名」 |
+| `aliasDescriptionPrefix` | `true` | 用了 alias 时把原名放在描述最前：`san-nao: 三脑 — …` |
 | `rulesMaxBytes` | `65536` | 注入项目 rules 总量硬上限 |
 | `userRulesMaxBytes` | `65536` | 注入 `~/.claude/rules` 总量硬上限 |
 | `projectRootMarkers` | `[".git"]` | 项目根发现的祖先标记 |
@@ -144,6 +146,23 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 - **Rules 粒度**：每个新会话读取（按会话 cwd 缓存）。会话中改 rule，下一会话生效。
 - **Rules 内容**：rules 原文注入为模型指令。只提交你想让模型遵循的 rule —— 信任级别同 `CLAUDE.md`。
 - **Catalog 快照时机**：skill catalog 在会话创建时快照。会话中途安装/修改的 skill 通过 `/reload-cc-plugins` 热生效，或下一会话生效。
+
+### 中文 / 非 ASCII 技能名
+
+DSH 的技能名文法写死为 kebab-case（`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`，定义在 `@deepseek-ai/dsh-skill`，registry 取用前先校验），所以**中文名无论插件怎么发都进不了 registry** —— 插件层放行也没用，下一层立刻 `return void 0`。
+
+本插件的做法：把中文名显式映射成一个合法 slug，原名保留在描述最前，目录里读起来仍是中文：
+
+```yaml
+skillAliases:
+  三脑: tri-brain
+  读知乎: read-zhihu
+```
+
+- 映射后 `name` 用 slug（斜杠菜单里是 `/tri-brain`），`description` 变成 `三脑 — 三脑复核（…）`。
+- **合法名永远压过映射**：本来就能加载的技能不会被 alias 改名。
+- 别名条目沿用原 provider 的 rank，所以与 DSH 原生或 `~/.agents` 同名时，按原有优先级去重（`~/.claude` 的 alias 输给 `~/.agents` 同名项，不会顶掉它）。想让 `~/.claude` 赢就把 `userSkillRank` 调到 500 以下。
+- 没配映射的非 kebab 名不再静默消失：每个文件每进程告警一次，并直接给出可粘贴的映射示例。
 
 ## 故障排查
 
