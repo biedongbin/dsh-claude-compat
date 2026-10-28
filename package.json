@@ -66,6 +66,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/biedongbin/dsh-claude-compat.git"
+    "url": "git+https://github.com/biedongbin/dsh-claude-compat.git"
   }
 }
