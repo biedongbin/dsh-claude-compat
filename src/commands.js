@@ -17,7 +17,9 @@ import { execFile } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { runPluginCommand } from './plugin-manager.js';
+import { listClaudeSessions } from '../scripts/cc-resume.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -93,9 +95,57 @@ export function registerManagerCommands(ctx, config, getProvider) {
       const defs = [
         {
           name: 'cc-resume',
-          description: 'List and import Claude Code sessions into DSH',
-          input: { hint: '[list|import <sessionId>] [--limit N | --limit-turns N]' },
-          handler: scriptHandler('cc-resume.mjs', { timeoutMs: 300_000 }),
+          description: 'Import a Claude Code session into DSH — interactive picker by default',
+          input: { hint: '[pick | list | import <sessionId>] — default: interactive picker in chat' },
+          // No args → Claude-Code-/resume-style flow: the command plane cannot
+          // host interaction (static text card only), but a command producer
+          // may steer the receiving Agent (the dsh-plan-mode pattern). The
+          // handler lists sessions host-side, then steers ONE user message
+          // that directs the agent to present the candidates as clickable
+          // ask-options and run the import itself.
+          handler: async ({ agent, rawInput, signal }) => {
+            const args = splitArgs(rawInput);
+            if (args[0] === 'list' || args[0] === 'import') {
+              return runScript('cc-resume.mjs', args, { cwd: invocationCwd(agent), signal, timeoutMs: 300_000 });
+            }
+            const cwd = invocationCwd(agent);
+            let sessions = [];
+            try { sessions = listClaudeSessions(cwd, 12); } catch { /* no claude dir */ }
+            if (sessions.length === 0) {
+              return runScript('cc-resume.mjs', ['list'], { cwd, signal });
+            }
+            const two = (n) => String(n).padStart(2, '0');
+            const rows = sessions.map((s, i) => {
+              const d = s.createdAt ? new Date(s.createdAt) : null;
+              const when = d ? `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` : '?';
+              return `${i + 1}. ${s.id}  ${when}  ${s.messages}msg  ${s.title}${s.imported ? ' ✓imported' : ''}`;
+            }).join('\n');
+            const text = [
+              '/cc-resume 交互模式：用户要在 DSH 里恢复一条 Claude Code 会话。当前目录',
+              `${cwd} 最近活跃的 ${sessions.length} 条候选（full id 如下）：`,
+              '',
+              rows,
+              '',
+              '立即执行（不要再问额外问题，直接调用 ask_user_question 工具让用户点选）：',
+              '- 选项 = 每条会话一项：label 取「序号+8位id前缀+日期+消息数」，description 取标题预览；',
+              '  另加一个选项「换其他项目」。',
+              '- 用户选中后用 bash 执行：',
+              `  node ${join(PLUGIN_ROOT, 'scripts', 'cc-resume.mjs')} import <选中会话的full id> --cwd ${cwd}`,
+              '- 若选中会话超过 1000msg，先在确认框里附带问一句是否加 --limit-turns 200（只导尾部，快很多）。',
+              '- 导入成功后告诉用户：刷新 DSH 会话列表，打开标题为 cc: <预览> 的会话即可继续对话。',
+              '- 用户选「换其他项目」：用 ask_user_question 问目标路径（给 ~/.claude/projects 下存在的常用项目作选项），',
+              `  然后 node ${join(PLUGIN_ROOT, 'scripts', 'cc-resume.mjs')} list --cwd <目标路径>，再回到点选流程。`,
+            ].join('\n');
+            try {
+              agent.steer(createUserMessage({
+                content: [{ type: 'text', text }],
+                source: { kind: 'user' },
+              }));
+            } catch (error) {
+              return { kind: 'error', text: `interactive pick failed to start: ${error?.message ?? error} — use /cc-resume list instead` };
+            }
+            return { kind: 'success', text: `Interactive pick started — ${sessions.length} candidate sessions, choose in chat.` };
+          },
         },
         {
           name: 'cc-plugin',

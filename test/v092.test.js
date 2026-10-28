@@ -3,7 +3,7 @@
 // handlers run against empty temp cwds, reload fires a counting invalidate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerManagerCommands } from '../src/commands.js';
@@ -83,6 +83,45 @@ test('apply(): wires commands next to the provider; manager skills leave the use
   const mgr = (await provider.list({ cwd: '/tmp' })).find((c) => c.name === 'cc-plugin');
   assert.equal(mgr.invocation.userInvocable, false, 'human entry moves to the command');
   assert.equal(mgr.invocation.modelInvocable, true, 'model fallback surface stays');
+});
+
+test('cc-resume command: no args → steers an interactive pick into the agent', async () => {
+  // One fake Claude project under a sandbox HOME; os.homedir() reads $HOME.
+  const home = mkdtempSync(join(tmpdir(), 'dcc-home-'));
+  const pickCwd = '/tmp/dcc-pick';
+  const projDir = join(home, '.claude', 'projects', pickCwd.replaceAll('/', '-'));
+  mkdirSync(projDir, { recursive: true });
+  const sid = 'aaaabbbb-cccc-dddd-eeee-ffff00001111';
+  writeFileSync(join(projDir, `${sid}.jsonl`),
+    `${JSON.stringify({ type: 'user', message: { content: '帮我修登录 bug' }, timestamp: '2026-10-28T02:00:00.000Z', cwd: pickCwd })}\n`);
+  const prevHome = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    const { ctx, defs } = fakeCommandHost();
+    registerManagerCommands(ctx, {}, () => undefined);
+    const steered = [];
+    const out = await defs.get('cc-resume').handler({
+      rawInput: '',
+      agent: { session: { header: { cwd: pickCwd } }, steer: (m) => steered.push(m) },
+      signal: sig(),
+    });
+    assert.equal(out.kind, 'success');
+    assert.match(out.text, /Interactive pick started — 1 candidate/);
+    assert.equal(steered.length, 1, 'exactly one steering message');
+    const text = steered[0].content[0].text;
+    assert.ok(text.includes(sid), 'full session id travels in the message');
+    assert.match(text, /ask_user_question/, 'agent is directed to the clickable picker');
+    assert.match(text, /帮我修登录 bug/, 'session preview included');
+    assert.match(text, /import.*--cwd \/tmp\/dcc-pick/, 'import command pinned to the session cwd');
+    // explicit 'list' stays the static card path
+    const listing = await defs.get('cc-resume').handler({
+      rawInput: 'list', agent: { session: { header: { cwd: pickCwd } }, steer: () => {} }, signal: sig(),
+    });
+    assert.equal(listing.kind, 'success');
+    assert.match(listing.text, /1 Claude sessions/);
+  } finally {
+    process.env.HOME = prevHome;
+  }
 });
 
 test('apply() on a host without ctx.inject: compatibility no-op, skills still work', async () => {
