@@ -4,6 +4,15 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.1] — 2026-10-28
+
+### Fixed
+- **Manager skills were listed but could never load (`skill "cc-plugin" is unknown or no longer available`)** — affected all five inline skills (`/cc-plugin`, `/reload-cc-plugins`, `/reload-skills`, `/cc-resume`, `/cc-export`). The DSH registry loads every definition exclusively through `provider.get(candidate)`; a candidate-carried `get()` closure is never called. These skills carried their bodies in exactly such a closure, and their locator held `import.meta.url` (a `file://` URL) that `provider.get()` then tried to read from disk — `readTextSafe(file://…)` returns `undefined`, so the registry reported the skill as unknown. Two latent defects died with the closure: it returned `{ body }` where `validateDefinition` requires `{ content }`, and `/reload-cc-plugins`' cache drop (`control.invalidate()`) lived inside it, so reload never actually reloaded. Bodies and the invalidate flag now travel in the locator (`{ kind: 'inline', body, invalidate }`); `provider.get()` serves inline candidates directly and fires `invalidate()` at load time — loading the reload skill IS the reload. Resolves the 0.7.0 "known issue": the root cause was this plugin's dead closure, not DSH runtime layering. Covered by `test/v060.test.js` and a real-`SkillRegistry` load assertion in `test/self-check.test.js`.
+- **`/cc-plugin` HELP copy said `/plugin` throughout** while the skill is invoked as `/cc-plugin`; now consistent, and the Execution section explicitly tells the model to run `claude plugin <args>` via bash (`runPluginCommand` has no DSH tool mount, so the body is the only execution path).
+
+### Tooling
+- **npm tarball ships only the runtime scripts.** `files` previously globbed the whole `scripts/` directory, publishing maintainer-only tooling (`deploy-local.sh` — checkout→profile deploy with a macOS app-path hint, meaningless elsewhere; `gen-downloads-chart.mjs`) alongside the four scripts the installed plugin actually needs (`cc-resume.mjs`, `cc-export.mjs`, `zstd-compat.mjs`, `dsh-restart.sh` for the `bin`). Both dev scripts stay in the repo; only the published package slims down.
+
 ## [0.9.0] — 2026-10-28
 
 ### Added
@@ -56,7 +65,7 @@ _Contributed by @liujunctz123-jpg (PR #3)._
 - `scripts/cc-resume.mjs` is also a standalone CLI (`list` / `import <sessionId>`); requires the `zstd` binary on PATH.
 
 ### Known issues
-- The `skill` tool may fail to resolve plugin-provided skills (`unknown or no longer available`) in agent-scoped runtime layers even though the catalog lists them — a DSH runtime layering behavior. `/cc-resume` degrades gracefully: run `scripts/cc-resume.mjs` directly (the skill body only wraps the CLI).
+- The `skill` tool may fail to resolve plugin-provided skills (`unknown or no longer available`) in agent-scoped runtime layers even though the catalog lists them — a DSH runtime layering behavior. `/cc-resume` degrades gracefully: run `scripts/cc-resume.mjs` directly (the skill body only wraps the CLI). **Resolved in 0.9.1 — root cause was this plugin's never-called inline closure, not DSH.**
 
 ## [0.6.2] — 2026-08-18
 

@@ -4,6 +4,15 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.9.1] — 2026-10-28
+
+### 修复
+- **管理技能目录可见但永远加载失败（`skill "cc-plugin" is unknown or no longer available`）** —— 波及全部五个 inline 技能（`/cc-plugin`、`/reload-cc-plugins`、`/reload-skills`、`/cc-resume`、`/cc-export`）。DSH registry 加载定义的唯一通道是 `provider.get(candidate)`，candidate 自带的 `get()` 闭包永远不会被调用；这五个技能的 body 恰恰埋在这种闭包里，locator 又存着 `import.meta.url`（`file://` URL），`provider.get()` 照着它读盘 —— `readTextSafe(file://…)` 返回 `undefined`，registry 于是报技能不存在。闭包还带着两处连带缺陷：返回 `{ body }` 而 `validateDefinition` 要求 `{ content }`；`/reload-cc-plugins` 的缓存刷新（`control.invalidate()`）也埋在闭包里，reload 从未真正刷新过。现在 body 与 invalidate 标志随 locator 传递（`{ kind: 'inline', body, invalidate }`），`provider.get()` 对 inline 候选直接返回定义、在加载时触发 `invalidate()` —— 加载 reload 技能即完成刷新。同时了结 0.7.0 的「已知问题」：根因是本插件的死闭包，并非 DSH 运行时分层。回归由 `test/v060.test.js` 与 `test/self-check.test.js`（真 `SkillRegistry` 加载断言）覆盖。
+- **`/cc-plugin` HELP 文案通篇写 `/plugin`**，与实际技能名 `/cc-plugin` 不一致；已统一，且 Execution 段明确指示模型经 bash 运行 `claude plugin <args>`（`runPluginCommand` 没有 DSH tool 挂载，skill body 是唯一执行通路）。
+
+### 工具
+- **npm 包只发布运行时脚本**。`files` 此前整目录收录 `scripts/`，把仅维护者使用的工具（`deploy-local.sh` —— checkout→profile 部署，错误提示硬编码 macOS app 路径，别处无意义；`gen-downloads-chart.mjs`）一并带了出去。现改为逐个列举安装后真正需要的四个：`cc-resume.mjs`、`cc-export.mjs`、`zstd-compat.mjs`、`dsh-restart.sh`（`bin` 用）。两个开发脚本仍留在仓库，仅瘦身发布包。
+
 ## [0.9.0] — 2026-10-28
 
 ### 新增
@@ -55,7 +64,7 @@ _贡献者 @liujunctz123-jpg（PR #3）。_
 - `scripts/cc-resume.mjs` 亦可独立作为 CLI 使用（`list` / `import <sessionId>`）；需要 PATH 上有 `zstd` 二进制。
 
 ### 已知问题
-- `skill` 工具在 agent scoped 运行层可能无法解析插件提供的 skill（报 `unknown or no longer available`），即使 catalog 列表里存在 — 属 DSH 运行时分层行为。`/cc-resume` 可优雅降级：直接运行 `scripts/cc-resume.mjs`（skill 本体只是 CLI 的包装说明）。
+- `skill` 工具在 agent scoped 运行层可能无法解析插件提供的 skill（报 `unknown or no longer available`），即使 catalog 列表里存在 — 属 DSH 运行时分层行为。`/cc-resume` 可优雅降级：直接运行 `scripts/cc-resume.mjs`（skill 本体只是 CLI 的包装说明）。**0.9.1 已解决 —— 根因是本插件永不被调用的 inline 闭包，并非 DSH。**
 
 ## [0.6.2] — 2026-08-18
 
