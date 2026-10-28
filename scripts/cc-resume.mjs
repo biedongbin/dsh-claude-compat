@@ -250,6 +250,7 @@ if (cmd === 'list') {
   const sessions = listClaudeSessions(cwd, Number(flag('limit') ?? 30));
   if (sessions.length === 0) {
     console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectDir(cwd)})`);
+    console.log('Tip: list another project with --cwd <dir>, e.g. /cc-resume list --cwd ~/workspace/<project>');
     process.exit(0);
   }
   for (const s of sessions) {
