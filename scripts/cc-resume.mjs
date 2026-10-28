@@ -223,7 +223,7 @@ export function listClaudeSessions(cwd, limit = 30) {
           mtime: st.mtimeMs,
           createdAt: parsed.createdAt,
           messages: parsed.msgCount,
-          title: parsed.title ?? (parsed.turns.find((t) => t.kind === 'user' && !t.text.startsWith('<'))?.text ?? '').slice(0, 60),
+          title: parsed.title ?? displayTitle(parsed.turns.find((t) => t.kind === 'user' && !t.text.startsWith('<'))?.text),
           turns: parsed.turns.length,
           imported: existsSync(targetSessionDir(id, cwd)),
         };
@@ -233,6 +233,20 @@ export function listClaudeSessions(cwd, limit = 30) {
     .sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))
     .slice(0, limit);
   return out;
+}
+
+// First user messages are often skill/system injections ("Base directory for
+// this skill: …", a "# /command" heading, …) — useless as a preview. Skip the
+// boilerplate lines and surface the first line a human actually typed.
+const BOILERPLATE_RE = /^(base directory for this skill|below is a conversation log|#{1,6}\s*\/|you are |你是)/i;
+
+function displayTitle(text) {
+  for (const line of String(text ?? '').split('\n').slice(0, 10)) {
+    const t = line.trim();
+    if (t === '' || BOILERPLATE_RE.test(t)) continue;
+    return t.slice(0, 60);
+  }
+  return '(skill / system injection)';
 }
 
 // ── CLI (guarded: only when run directly, not imported for tests) ──────────
@@ -253,15 +267,28 @@ if (cmd === 'list') {
     console.log('Tip: list another project with --cwd <dir>, e.g. /cc-resume list --cwd ~/workspace/<project>');
     process.exit(0);
   }
-  for (const s of sessions) {
-    const date = s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 16).replace('T', ' ') : '?';
-    console.log(`${s.imported ? '*' : ' '} ${s.id}  ${date}  ${String(s.messages).padStart(4)}msg  ${s.title || '(no text)'}`);
-  }
-  console.log(`\nImport with: node cc-resume.mjs import <sessionId> --cwd ${cwd}`);
+  // Local time (ISO strings are UTC — off by the user's offset) and compact
+  // rows: no space-column alignment (command cards render proportional fonts,
+  // alignment collapses), short ids (import accepts prefixes).
+  const two = (n) => String(n).padStart(2, '0');
+  sessions.forEach((s, i) => {
+    const d = s.createdAt ? new Date(s.createdAt) : null;
+    const when = d ? `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` : '?';
+    console.log(`${i + 1}. ${s.id.slice(0, 8)}  ${when}  ${s.messages}msg${s.imported ? '  [imported]' : ''}  ${s.title || '(no text)'}`);
+  });
+  console.log(`\nImport: /cc-resume import <sessionId or 8-char prefix> --cwd ${cwd}`);
 } else if (cmd === 'import') {
-  const sessionId = rest.find((a) => !a.startsWith('--'));
+  let sessionId = rest.find((a) => !a.startsWith('--'));
   if (!sessionId) { console.error('usage: import <sessionId> [--cwd dir] [--limit-turns N]'); process.exit(2); }
-  const src = join(claudeProjectDir(cwd), `${sessionId}.jsonl`);
+  const projectDir = claudeProjectDir(cwd);
+  let src = join(projectDir, `${sessionId}.jsonl`);
+  if (!existsSync(src) && /^[0-9a-f]{4,}$/i.test(sessionId)) {
+    // Short-prefix resolution: the list shows 8-char ids; accept any unique
+    // prefix so the user can copy what they see.
+    const hits = readdirSync(projectDir).filter((f) => f.startsWith(sessionId) && f.endsWith('.jsonl'));
+    if (hits.length === 1) { sessionId = hits[0].replace(/\.jsonl$/, ''); src = join(projectDir, hits[0]); }
+    else if (hits.length > 1) { console.error(`ambiguous prefix "${sessionId}" matches ${hits.length} sessions: ${hits.map((h) => h.slice(0, 8)).join(', ')}`); process.exit(2); }
+  }
   if (!existsSync(src)) { console.error(`not found: ${src}`); process.exit(1); }
   const parsed = parseClaudeSession(src);
   if (parsed.turns.length === 0) { console.error('session has no importable turns'); process.exit(1); }
