@@ -418,7 +418,6 @@ async function parseSkillCandidateFile(path, providerName, source, rank, flatNam
       ? description
       : withOriginalName(description, resolved.original),
     ...(whenToUse !== undefined ? { whenToUse } : {}),
-    ...(whenToUse !== undefined ? { whenToUse } : {}),
     invocation,
     provider: providerName,
     source,

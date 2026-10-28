@@ -4,13 +4,18 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
-## [0.9.0] — 未发布
+## [0.9.0] — 2026-10-28
 
 ### 新增
 - **`skillAliases`：让中文（及任何非 ASCII）技能名可用**。DSH 的技能名文法固定为 kebab-case（`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`，定义在 `@deepseek-ai/dsh-skill`，registry 在 `get()` 取用前先校验），中文名在插件层放行也没用 —— 下一层必然 `return void 0`，所以此前只能整条丢弃。现在可以显式映射成合法 slug：`skillAliases: { "三脑": "san-nao" }`，原名保留在描述最前（`三脑 — …`，可用 `aliasDescriptionPrefix: false` 关掉）。映射同时作用于 skills / commands / agents / 插件技能。合法名永远压过映射，别名沿用原 provider 的 rank，与 DSH 原生或 `~/.agents` 同名时按原有优先级去重。回归由 `test/v090.test.js` 覆盖。
 
 ### 修复
 - **非 kebab 名技能被静默丢弃**：`skills`、`commands`、`agents`、插件命令四处都是裸 `continue`，用户只能靠翻源码才知道哪个技能没进来。现在每个文件每进程告警一次，并直接给出可粘贴的 `skillAliases` 示例。
+
+### 工具
+- **`scripts/deploy-local.sh`**：把本仓库 `src/` 同步进已安装的 DSH profile（`~/.dsh/profiles/<profile>/node_modules/dsh-claude-compat`），并留一份带时间戳的备份。DSH 在进程启动时 import 的是安装副本，直接改 checkout 不生效。（`bash scripts/deploy-local.sh --help`。）由 PR #3 贡献。
+
+_贡献者 @liujunctz123-jpg（PR #3）。_
 
 ## [0.8.4] — 2026-10-18
 

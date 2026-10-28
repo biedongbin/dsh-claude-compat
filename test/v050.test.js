@@ -29,9 +29,11 @@ test('readInstalledClaudePlugins: real ~/.claude/plugins registry', () => {
   const omc = plugins.find((p) => p.name === 'oh-my-claudecode');
   assert.ok(omc, 'oh-my-claudecode present');
   assert.equal(omc.marketplace, 'omc');
-  assert.equal(omc.version, '4.15.7');
+  // Version is whatever the machine has installed — assert the shape, not a
+  // pinned release (a pinned one breaks on every omc upgrade).
+  assert.match(omc.version, /^\d+\.\d+\.\d+/);
   assert.equal(omc.installPath,
-    join(homedir(), '.claude/plugins/cache/omc/oh-my-claudecode/4.15.7'));
+    join(homedir(), `.claude/plugins/cache/omc/oh-my-claudecode/${omc.version}`));
   // every entry carries the 5 fields
   for (const p of plugins) {
     for (const k of ['key', 'name', 'marketplace', 'installPath', 'version']) {
