@@ -4,6 +4,14 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [0.9.2] — 2026-10-28
+
+### 新增
+- **管理面升级为 DSH 原生 slash 命令**（`/cc-resume`、`/cc-plugin`、`/cc-export`、`/reload-cc-plugins`、`/reload-skills`）。DSH 的 `@deepseek-ai/dsh-commands` 服务（随官方 Web 宿主内置）允许插件注册**宿主直接执行**的人类命令：用户提交 slash 行后 handler 在 DSH 进程内运行，结果文本由 UI 直接渲染——命令的发现、执行与输出**不消耗任何模型 token**、绝不进入模型历史（每次运行以 log-only 的 `command/run`+`command/done` 事件对记入会话日志）。handler 直接 spawn 本包 CLI（`scripts/cc-resume.mjs`、`scripts/cc-export.mjs`），并以 `--cwd` 钉死**会话**工作目录（宿主进程 cwd 不是工作区）；`/cc-plugin` 复用 `runPluginCommand`；reload 命令直接调 skill registry 的 `control.invalidate()`。注册走运行时守卫 `ctx.inject(['commands'], …)`——与官方内置 `dsh-plan-mode` 完全同款——无该服务的宿主（UI-less spine、ACP 自动化、旧版本）静默回落到 skill 路径。回归由 `test/v092.test.js` 覆盖。
+
+### 变更
+- **五个管理技能退出用户 slash 菜单**（`userInvocable: false`，保持 `modelInvocable: true`）：人类入口收敛为原生命令，菜单里每个功能只剩一条（不再命令 + 模型中介技能并列）；模型仍保留可加载的说明书作为回落面。
+
 ## [0.9.1] — 2026-10-28
 
 ### 修复

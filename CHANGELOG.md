@@ -4,6 +4,14 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.2] — 2026-10-28
+
+### Added
+- **Native DSH slash commands for the manager surface** (`/cc-resume`, `/cc-plugin`, `/cc-export`, `/reload-cc-plugins`, `/reload-skills`). DSH's `@deepseek-ai/dsh-commands` service (mounted in the shipped Web host) lets a plugin register host-executed human commands: the handler runs in the DSH process when the user submits the slash line, and the result text is rendered by the UI directly — command discovery, execution, and output add **no model tokens** and never enter model history (each run is logged as a log-only `command/run`+`command/done` pair). Handlers spawn this package's own CLIs (`scripts/cc-resume.mjs`, `scripts/cc-export.mjs`) with the **session** cwd pinned via `--cwd` (the host process cwd is not the workspace), `/cc-plugin` reuses `runPluginCommand`, and the reload commands call the skill registry's `control.invalidate()` directly. Registration goes through the runtime guard `ctx.inject(['commands'], …)` — the exact pattern of the built-in `dsh-plan-mode` — so hosts without the service (UI-less spines, ACP automation, older builds) silently keep the skill path. Covered by `test/v092.test.js`.
+
+### Changed
+- **The five manager skills left the user's slash menu** (`userInvocable: false`, still `modelInvocable: true`): the human entry point is now the native command, so the menu shows one entry per surface instead of a command + a model-mediated skill; the model keeps the loadable-instructions fallback.
+
 ## [0.9.1] — 2026-10-28
 
 ### Fixed

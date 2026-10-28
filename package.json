@@ -1,6 +1,6 @@
 {
   "name": "dsh-claude-compat",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directories (project and ~/.claude: skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
   "type": "module",
   "main": "src/index.js",
@@ -59,7 +59,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "check": "node --check src/index.js && node --check src/lib.js && node --check src/mcp.js && node --check src/hooks.js && node --check src/agents.js && node --check src/plugins.js && node --check src/aliases.js && node --test test/self-check.test.js test/v040.test.js test/v050.test.js test/v060.test.js test/v070.test.js test/v080.test.js test/v090.test.js"
+    "check": "node --check src/index.js && node --check src/lib.js && node --check src/mcp.js && node --check src/hooks.js && node --check src/agents.js && node --check src/plugins.js && node --check src/aliases.js && node --check src/commands.js && node --test test/self-check.test.js test/v040.test.js test/v050.test.js test/v060.test.js test/v070.test.js test/v080.test.js test/v090.test.js test/v092.test.js"
   },
   "bin": {
     "dsh-claude-compat-restart": "scripts/dsh-restart.sh"

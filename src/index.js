@@ -57,6 +57,7 @@ import {
 } from './aliases.js';
 import { registerHooks } from './hooks.js';
 import { mountMcpServers, mountMcpConfigs } from './mcp.js';
+import { registerManagerCommands } from './commands.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
   CLAUDE_COMPAT_SOURCE_KIND,
@@ -148,8 +149,18 @@ export function apply(ctx, config = {}) {
   } catch { /* the nudge must never break plugin activation */ }
 
   if (config.enableSkills !== false) {
-    ctx.skills.registerProvider((control) =>
-      new ClaudeCompatSkillProvider(ctx, control, config));
+    let provider;
+    ctx.skills.registerProvider((control) => {
+      provider = new ClaudeCompatSkillProvider(ctx, control, config);
+      return provider;
+    });
+    // Native human commands (host-executed, zero model tokens; see
+    // src/commands.js). The manager skills stay model-invocable as the
+    // fallback surface; the human entry point becomes the command. Needs the
+    // provider reference for reload invalidation.
+    if (config.enablePluginManager !== false) {
+      registerManagerCommands(ctx, config, () => provider);
+    }
   }
   if (config.enableRules !== false) {
     registerRulesSection(ctx, config);
@@ -259,7 +270,10 @@ class ClaudeCompatSkillProvider {
       name,
       description,
       ...(whenToUse !== undefined ? { whenToUse } : {}),
-      invocation: { modelInvocable: true, userInvocable: true },
+      // Human entry is the native command (src/commands.js); keep the skill
+      // model-invocable so the model can still load these instructions, but
+      // out of the user's slash menu to avoid a double entry.
+      invocation: { modelInvocable: true, userInvocable: false },
       provider: this.name,
       source: 'claude-compat-manager',
       rank: this.config.pluginManagerRank ?? 40,
