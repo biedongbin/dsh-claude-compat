@@ -120,6 +120,8 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `enableHooks` | `true` | Run `.claude/settings.json` hooks (Pre/PostToolUse, UserPromptSubmit) |
 | `hooksTimeoutMs` | `60000` | Per-hook run timeout (UserPromptSubmit capped at 10s regardless) |
 | `enableAgents` | `true` | Surface `.claude/agents/*.md` as delegation-shim skills |
+| `skillAliases` | `{}` | Non-kebab (e.g. Chinese) name → ASCII slug map, e.g. `{ "三脑": "san-nao" }`. See “Non-ASCII skill names” below |
+| `aliasDescriptionPrefix` | `true` | When an alias is used, put the original name in front of the description: `san-nao: 三脑 — …` |
 | `rulesMaxBytes` | `65536` | Hard cap on total injected project rules text |
 | `userRulesMaxBytes` | `65536` | Hard cap on total injected `~/.claude/rules` text |
 | `projectRootMarkers` | `[".git"]` | Ancestor markers for project-root discovery |
@@ -144,6 +146,23 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 - **Rules granularity**: rules are read per new session (cached per session cwd). Editing a rule mid-session takes effect in the next session.
 - **Rules content**: rules are injected verbatim as instructions to the model. Only commit rules you want the model to follow — same trust level as `CLAUDE.md`.
 - **Catalog snapshot timing**: the skill catalog is snapshotted when a session is created. Skills installed or edited mid-session surface after `/reload-cc-plugins` (hot reload) or in the next session.
+
+### Non-ASCII skill names
+
+DSH's skill-name grammar is fixed to kebab-case (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`, defined in `@deepseek-ai/dsh-skill` and enforced by the registry before a candidate is read), so **a Chinese name can never reach the registry, no matter what this plugin emits** — emitting it anyway only moves the failure one layer down (`get()` returns `void 0`).
+
+The plugin's answer is an explicit map from the original name to a legal slug, keeping the original name at the front of the description:
+
+```yaml
+skillAliases:
+  三脑: tri-brain
+  读知乎: read-zhihu
+```
+
+- The `name` becomes the slug (`/tri-brain` in the slash menu); the `description` becomes `三脑 — 三脑复核（…）`.
+- **A legal name always beats an alias** — a skill DSH can already load is never renamed.
+- Aliased entries keep their provider's rank, so a collision with a DSH-native or `~/.agents` skill is deduped exactly like any other duplicate (a `~/.claude` alias loses to an `~/.agents` skill of the same name rather than shadowing it). Lower `userSkillRank` below 500 to make `~/.claude` win.
+- Un-mapped non-kebab names no longer vanish silently: one warning per file per process, with a paste-ready mapping example.
 
 ## Troubleshooting
 

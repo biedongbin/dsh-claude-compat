@@ -4,6 +4,14 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.0] — unreleased
+
+### Added
+- **`skillAliases`: make Chinese (and any non-ASCII) skill names usable.** DSH fixes the skill-name grammar to kebab-case (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`, defined in `@deepseek-ai/dsh-skill` and checked by the registry before `get()`), so a Chinese name emitted by the plugin still fails one layer down with `return void 0` — until now the only option was to drop it. Map it to a legal slug instead: `skillAliases: { "三脑": "san-nao" }`; the original name stays at the front of the description (`三脑 — …`, disable with `aliasDescriptionPrefix: false`). The map applies to skills, commands, agents and plugin skills alike. A legal name always beats an alias, and aliased entries keep their provider rank, so collisions with DSH-native or `~/.agents` skills dedupe exactly as before. Covered by `test/v090.test.js`.
+
+### Fixed
+- **Non-kebab skills were dropped silently.** `skills`, `commands`, `agents` and plugin commands all did a bare `continue`; the only way to learn what was missing was to read the source. Each file now warns once per process with a paste-ready `skillAliases` example.
+
 ## [0.8.4] — 2026-10-18
 
 ### Fixed

@@ -21,6 +21,7 @@ import {
   stringField,
 } from './lib.js';
 import { translateMcpServers } from './mcp.js';
+import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
 // Parse installed_plugins.json → [{ key, name, marketplace, installPath,
 // version }] for scope==='user' entries. Dedupe per key, keeping the last
@@ -60,16 +61,17 @@ function claReadSync(p) { return rfs(p, 'utf8'); }
 // Claude Code's discoverCommands drops commands whose only description is the
 // empty string; plugin marketplaces ship many such stubs, so this wrapper
 // re-surfaces them with the filename stem as the description.
-export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents } = {}) {
+export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal } = {}) {
   const out = [];
   const plugins = readInstalledClaudePlugins(pluginsRoot);
   const { discoverSkills, discoverCommands } = await import('./index.js');
   const { discoverAgents } = await import('./agents.js');
+  const aliasOptions = { aliases, tagOriginal };
   const patchedCommands = async (dir) => {
-    const batch = await discoverCommands(dir, providerName, source, rank);
+    const batch = await discoverCommands(dir, providerName, source, rank, aliasOptions);
     if (batch.length > 0) return batch;
     const kept = new Set(batch.map((c) => c.path));
-    const extra = await discoverCommandsAllowEmpty(dir, providerName, source, rank);
+    const extra = await discoverCommandsAllowEmpty(dir, providerName, source, rank, aliasOptions);
     return [...batch, ...extra.filter((c) => !kept.has(c.path))];
   };
   for (const plugin of plugins) {
@@ -89,33 +91,37 @@ export async function discoverPluginContent(pluginsRoot, providerName, source, r
     };
     if (manifest !== undefined) {
       const skillDirs = manifestDirs(manifest, 'skills', installPath);
-      for (const dir of skillDirs) push('skills')(await discoverSkills(dir, providerName, source, rank));
+      for (const dir of skillDirs) push('skills')(await discoverSkills(dir, providerName, source, rank, aliasOptions));
       const commandsDir = typeof manifest.commands === 'string' ? resolve(installPath, manifest.commands) : undefined;
       if (commandsDir !== undefined) push('commands')(await patchedCommands(commandsDir));
     } else {
-      push('skills')(await discoverSkills(join(installPath, 'skills'), providerName, source, rank));
+      push('skills')(await discoverSkills(join(installPath, 'skills'), providerName, source, rank, aliasOptions));
       push('commands')(await patchedCommands(join(installPath, 'commands')));
     }
     if (enableAgents !== false) {
       const agentsDir = join(installPath, 'agents');
-      if (await pathExists(agentsDir)) push('agents')(await discoverAgents(agentsDir, providerName, source, rank));
+      if (await pathExists(agentsDir)) push('agents')(await discoverAgents(agentsDir, providerName, source, rank, aliasOptions));
     }
   }
   return out;
 }
 
 // Like discoverCommands but keeps empty-description stubs (stem as description).
-async function discoverCommandsAllowEmpty(rootDir, providerName, source, rank) {
+async function discoverCommandsAllowEmpty(rootDir, providerName, source, rank, aliasOptions) {
   const { readdir } = await import('node:fs/promises');
-  const { isSkillName } = await import('@deepseek-ai/dsh-skill');
-  const out = [];  if (!(await pathExists(rootDir))) return out;
+  const out = [];
+  if (!(await pathExists(rootDir))) return out;
   let entries;
   try { entries = await readdir(rootDir, { withFileTypes: true, encoding: 'utf8' }); }
   catch { return out; }
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
     const stem = entry.name.slice(0, -3);
-    if (!isSkillName(stem)) continue;
+    const resolved = resolveCandidateName([stem], aliasOptions?.aliases);
+    if (resolved === undefined) {
+      warnUnmapped('command', stem, join(rootDir, entry.name));
+      continue;
+    }
     const raw = await readTextSafe(join(rootDir, entry.name));
     if (raw === undefined) continue;
     const parsed = parseFrontmatter(raw);
@@ -123,8 +129,10 @@ async function discoverCommandsAllowEmpty(rootDir, providerName, source, rank) {
     const description = stringField(parsed.data, 'description');
     if (description !== undefined) continue; // non-empty handled by index.js variant
     out.push({
-      name: stem,
-      description: stem,
+      name: resolved.name,
+      // The stub description IS the name; when an alias was used the original
+      // (Chinese) name is the useful label, not the slug.
+      description: resolved.original ?? stem,
       invocation: { modelInvocable: true, userInvocable: true },
       provider: providerName,
       source,
