@@ -7,16 +7,16 @@
 // Claude-native locations (~/.claude/plugins/*, settings.json enabledPlugins)
 // so both Claude Code and this plugin's discovery bridge read the same truth.
 //
-// Commands (mirroring `claude plugin` semantics):
-//   /plugin                                  — list installed (status incl. enabled/disabled)
-//   /plugin <name>[@market]                  — one-shot install
-//   /plugin install <name>[@market]
-//   /plugin uninstall|remove <name>
-//   /plugin enable <name>
-//   /plugin disable <name>
-//   /plugin update [name]                    — one or all
-//   /plugin search <term>                    — scan known marketplaces
-//   /plugin marketplace list|add|remove|update [...]
+// Commands (mirroring `claude plugin` semantics, invoked as /cc-plugin):
+//   /cc-plugin                                  — list installed (status incl. enabled/disabled)
+//   /cc-plugin <name>[@market]                  — one-shot install
+//   /cc-plugin install <name>[@market]
+//   /cc-plugin uninstall|remove <name>
+//   /cc-plugin enable <name>
+//   /cc-plugin disable <name>
+//   /cc-plugin update [name]                    — one or all
+//   /cc-plugin search <term>                    — scan known marketplaces
+//   /cc-plugin marketplace list|add|remove|update [...]
 //
 // Safety: never mutates installed_plugins.json / known_marketplaces.json /
 // settings.json directly without a timestamped backup beside the file; the
@@ -38,22 +38,23 @@ Claude Code and DSH see the same plugins. Newly installed plugin content
 appears in the DSH skill catalog on next reconcile (MCP servers need a DSH restart).
 
 ## Commands (invoked as /cc-plugin <args>)
-- \`/plugin\` — list installed plugins with enable/disable status
-- \`/plugin <name>[@marketplace]\` — one-shot install (e.g. \`/plugin ralph@omc\`)
-- \`/plugin install <name>[@marketplace]\`
-- \`/plugin uninstall <name>\` (alias: remove)
-- \`/plugin enable <name>\` / \`/plugin disable <name>\`
-- \`/plugin update [name]\` — update one plugin or all
-- \`/plugin search <term>\` — search all known marketplaces
-- \`/plugin marketplace list\`
-- \`/plugin marketplace add <github-repo-or-url>\`
-- \`/plugin marketplace remove <name>\`
-- \`/plugin marketplace update [name]\`
+- \`/cc-plugin\` — list installed plugins with enable/disable status
+- \`/cc-plugin <name>[@marketplace]\` — one-shot install (e.g. \`/cc-plugin ralph@omc\`)
+- \`/cc-plugin install <name>[@marketplace]\`
+- \`/cc-plugin uninstall <name>\` (alias: remove)
+- \`/cc-plugin enable <name>\` / \`/cc-plugin disable <name>\`
+- \`/cc-plugin update [name]\` — update one plugin or all
+- \`/cc-plugin search <term>\` — search all known marketplaces
+- \`/cc-plugin marketplace list\`
+- \`/cc-plugin marketplace add <github-repo-or-url>\`
+- \`/cc-plugin marketplace remove <name>\`
+- \`/cc-plugin marketplace update [name]\`
 
 ## Execution
-Prefers the \`claude plugin\` CLI when available; falls back to direct
-JSON/git manipulation (with automatic timestamped backups of every file it
-touches). Report which engine ran in the result.`;
+Run \`claude plugin <args>\` via bash (e.g. \`claude plugin install ralph@omc\`).
+If the CLI is unavailable, fall back to direct JSON/git manipulation (with
+automatic timestamped backups of every file it touches). Report which engine
+ran in the result.`;
 
 /** Run `claude plugin ...` args; resolve {ok, stdout} or {ok:false, error}. */
 async function claudePlugin(args, timeoutMs = 120_000) {
