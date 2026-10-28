@@ -29,7 +29,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { zstdFramesSync } from './zstd-compat.mjs';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -237,14 +237,18 @@ export function listClaudeSessions(cwd, limit = 30) {
 
 // First user messages are often skill/system injections ("Base directory for
 // this skill: …", a "# /command" heading, …) — useless as a preview. Skip the
-// boilerplate lines and surface the first line a human actually typed.
-const BOILERPLATE_RE = /^(base directory for this skill|below is a conversation log|#{1,6}\s*\/|you are |你是)/i;
+// boilerplate lines and surface the first line a human actually typed. Cards
+// render PLAIN TEXT: strip markdown decoration and collapse whitespace.
+const BOILERPLATE_RE = /^(base directory for this skill|below is a conversation log|create a summary|#{1,6}\s*\/|you are |你是)/i;
 
 function displayTitle(text) {
   for (const line of String(text ?? '').split('\n').slice(0, 10)) {
-    const t = line.trim();
+    const t = line.trim()
+      .replace(/\*\*|__|`/g, '')
+      .replace(/^\[Image #\d+\]\s*/i, '')
+      .replace(/\s+/g, ' ');
     if (t === '' || BOILERPLATE_RE.test(t)) continue;
-    return t.slice(0, 60);
+    return t.slice(0, 36);
   }
   return '(skill / system injection)';
 }
@@ -261,12 +265,19 @@ const flag = (name) => {
 const cwd = flag('cwd') ?? process.cwd();
 
 if (cmd === 'list') {
-  const sessions = listClaudeSessions(cwd, Number(flag('limit') ?? 30));
+  const limit = Number(flag('limit') ?? 12);
+  const sessions = listClaudeSessions(cwd, limit);
   if (sessions.length === 0) {
     console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectDir(cwd)})`);
     console.log('Tip: list another project with --cwd <dir>, e.g. /cc-resume list --cwd ~/workspace/<project>');
     process.exit(0);
   }
+  // The command card takes the FIRST line as its title — lead with a summary
+  // so no data row is eaten. Totals come from a cheap dir count (the list is
+  // already sliced to the limit).
+  const total = readdirSync(claudeProjectDir(cwd)).filter((f) => f.endsWith('.jsonl')).length;
+  const imported = sessions.filter((s) => s.imported).length;
+  console.log(`${total} Claude sessions · ${basename(cwd)} · newest first${imported > 0 ? ` · ${imported} imported` : ''}${total > sessions.length ? ` · showing ${sessions.length}` : ''}`);
   // Local time (ISO strings are UTC — off by the user's offset) and compact
   // rows: no space-column alignment (command cards render proportional fonts,
   // alignment collapses), short ids (import accepts prefixes).
