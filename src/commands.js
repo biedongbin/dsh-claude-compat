@@ -120,21 +120,16 @@ export function registerManagerCommands(ctx, config, getProvider) {
               const when = d ? `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` : '?';
               return `${i + 1}. ${s.id}  ${when}  ${s.messages}msg  ${s.title}${s.imported ? ' ✓imported' : ''}`;
             }).join('\n');
+            // The steered message IS visible as a user bubble — keep it
+            // presentable: candidate data + one line handing off to the
+            // cc-resume skill, which carries the full interactive playbook
+            // (ask picker → import → guidance). No tool names or commands.
             const text = [
-              '/cc-resume 交互模式：用户要在 DSH 里恢复一条 Claude Code 会话。当前目录',
-              `${cwd} 最近活跃的 ${sessions.length} 条候选（full id 如下）：`,
+              `恢复 Claude Code 会话 — ${cwd} 最近 ${sessions.length} 条候选：`,
               '',
               rows,
               '',
-              '立即执行（不要再问额外问题，直接调用 ask_user_question 工具让用户点选）：',
-              '- 选项 = 每条会话一项：label 取「序号+8位id前缀+日期+消息数」，description 取标题预览；',
-              '  另加一个选项「换其他项目」。',
-              '- 用户选中后用 bash 执行：',
-              `  node ${join(PLUGIN_ROOT, 'scripts', 'cc-resume.mjs')} import <选中会话的full id> --cwd ${cwd}`,
-              '- 若选中会话超过 1000msg，先在确认框里附带问一句是否加 --limit-turns 200（只导尾部，快很多）。',
-              '- 导入成功后告诉用户：刷新 DSH 会话列表，打开标题为 cc: <预览> 的会话即可继续对话。',
-              '- 用户选「换其他项目」：用 ask_user_question 问目标路径（给 ~/.claude/projects 下存在的常用项目作选项），',
-              `  然后 node ${join(PLUGIN_ROOT, 'scripts', 'cc-resume.mjs')} list --cwd <目标路径>，再回到点选流程。`,
+              '（请按 cc-resume skill 的 Interactive flow 处理）',
             ].join('\n');
             try {
               agent.steer(createUserMessage({

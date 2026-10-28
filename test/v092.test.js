@@ -110,9 +110,10 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
     assert.equal(steered.length, 1, 'exactly one steering message');
     const text = steered[0].content[0].text;
     assert.ok(text.includes(sid), 'full session id travels in the message');
-    assert.match(text, /ask_user_question/, 'agent is directed to the clickable picker');
+    assert.match(text, /恢复 Claude Code 会话/, 'presentable request header, not internal mechanics');
     assert.match(text, /帮我修登录 bug/, 'session preview included');
-    assert.match(text, /import.*--cwd \/tmp\/dcc-pick/, 'import command pinned to the session cwd');
+    assert.match(text, /cc-resume skill 的 Interactive flow/, 'procedure deferred to the skill playbook');
+    assert.doesNotMatch(text, /bash|node\s|ask_user_question/, 'no tool or command internals leak into the bubble');
     // explicit 'list' stays the static card path
     const listing = await defs.get('cc-resume').handler({
       rawInput: 'list', agent: { session: { header: { cwd: pickCwd } }, steer: () => {} }, signal: sig(),
