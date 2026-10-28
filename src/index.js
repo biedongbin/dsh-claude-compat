@@ -121,6 +121,21 @@ const STAR_URL = 'https://github.com/biedongbin/dsh-claude-compat';
 // is the intended "did this help? star it" cadence without spamming.
 let starNudged = false;
 
+// Body of the reload-cc-plugins / reload-skills skills. Inline skill bodies
+// travel in the locator (`{ kind: 'inline', body }`) — the DSH registry loads
+// definitions exclusively through `provider.get(candidate)`, so the body must
+// be reachable from the candidate itself, never from a closure or disk.
+const RELOAD_BODY = `# Catalog reloaded ✅
+
+The DSH skill catalog cache was just dropped and observers notified.
+Freshly installed/removed skills are now visible in this session (the skill
+picker refreshes automatically on the next catalog read).
+
+Notes:
+- New skills from \`/plugin install\` or edits under \`.claude\` are live now.
+- MCP servers shipped by plugins still require a DSH restart (process-lifetime mount).
+- \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`;
+
 export function apply(ctx, config = {}) {
   // One-shot "found this useful? star it" nudge, surfaced exactly where the
   // value lands: the first profile activation of this process.
@@ -236,45 +251,22 @@ class ClaudeCompatSkillProvider {
   // Invalidate fires when the definition is actually loaded (get()), not at
   // list() time — loading the reload skill IS the reload.
   reloadSkillDef(name, description) {
-    return {
-      name,
-      description,
-      invocation: { modelInvocable: true, userInvocable: true },
-      provider: 'claude-compat',
-      source: 'claude-compat-manager',
-      rank: this.config.pluginManagerRank ?? 40,
-      locator: { kind: 'inline', path: import.meta.url },
-      get: async () => {
-        try { this.control?.invalidate?.(); } catch { /* best-effort */ }
-        return {
-          name,
-          description,
-          body: `# Catalog reloaded ✅
-
-The DSH skill catalog cache was just dropped and observers notified.
-Freshly installed/removed skills are now visible in this session (the skill
-picker refreshes automatically on the next catalog read).
-
-Notes:
-- New skills from \`/plugin install\` or edits under \`.claude\` are live now.
-- MCP servers shipped by plugins still require a DSH restart (process-lifetime mount).
-- \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`,
-        };
-      },
-    };
+    return this.managerSkillCandidate(name, description, undefined, RELOAD_BODY, { invalidate: true });
   }
 
-  managerSkillCandidate(name, description, whenToUse, body) {
+  managerSkillCandidate(name, description, whenToUse, body, { invalidate = false } = {}) {
     return {
       name,
       description,
-      whenToUse,
+      ...(whenToUse !== undefined ? { whenToUse } : {}),
       invocation: { modelInvocable: true, userInvocable: true },
-      provider: 'claude-compat',
+      provider: this.name,
       source: 'claude-compat-manager',
       rank: this.config.pluginManagerRank ?? 40,
-      locator: { kind: 'inline', path: import.meta.url },
-      get: async () => ({ name, description, body }),
+      // kind: 'inline' makes provider.get() serve `body` directly instead of
+      // reading a path from disk. No `path` — import.meta.url is a file:// URL
+      // and the module source is not the skill body.
+      locator: { kind: 'inline', body, invalidate },
     };
   }
 
@@ -294,6 +286,25 @@ Notes:
 
   async get(candidate) {
     const locator = candidate.locator;
+    if (locator?.kind === 'inline') {
+      // Inline manager skills (cc-plugin, reload-*, cc-resume, cc-export):
+      // the body ships in the locator. Loading a reload skill IS the reload —
+      // drop the catalog cache so the next list() recollects fresh state.
+      // (Not in list(): that would fire on every catalog collection and
+      // defeat the cache entirely.)
+      if (locator.invalidate) {
+        try { this.control?.invalidate?.(); } catch { /* best-effort */ }
+      }
+      return {
+        name: candidate.name,
+        description: candidate.description,
+        ...(candidate.whenToUse !== undefined ? { whenToUse: candidate.whenToUse } : {}),
+        invocation: candidate.invocation,
+        source: candidate.source,
+        provider: this.name,
+        content: locator.body,
+      };
+    }
     const raw = await readTextSafe(locator.path);
     if (raw === undefined) return undefined;
     const parsed = parseFrontmatter(raw);

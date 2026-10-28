@@ -115,6 +115,12 @@ test('skill precedence: project .claude > DSH bundled (600) > ~/.claude', async 
   assert.equal(loaded.source, 'project-claude');
   assert.equal(loaded.content.trim(), 'body shared');
 
+  // Manager skills are inline candidates: they must load through the real
+  // registry channel (provider.get → validateDefinition), not a closure.
+  const mgr = await ctx.skills.get('cc-plugin', { cwd: project });
+  assert.equal(mgr.provider, 'claude-compat');
+  assert.ok(mgr.content.includes('Plugin Manager'));
+
   // No cwd: only user ~/.claude + bundled are visible; shared resolves to the
   // bundled copy (600) over the user copy (700).
   const noCwd = await ctx.skills.list({});

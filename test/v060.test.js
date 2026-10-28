@@ -81,7 +81,7 @@ test('runPluginCommand: help with no args; dispatches via injected CLI dep', asy
   ]);
 });
 
-test('reload-cc-plugins/reload-skills: registered, get() triggers control.invalidate()', async () => {
+test('manager skills: provider.get(candidate) loads inline bodies; invalidate fires only for reload', async () => {
   const { apply } = await import('../src/index.js');
   let provider; let invalidated = 0;
   apply({
@@ -93,8 +93,19 @@ test('reload-cc-plugins/reload-skills: registered, get() triggers control.invali
   assert.ok(names.includes('cc-plugin'));
   assert.ok(names.includes('reload-cc-plugins'));
   assert.ok(names.includes('reload-skills'));
-  const before = invalidated;
-  const def = await list.find((c) => c.name === 'reload-cc-plugins').get();
-  assert.ok(def.body.includes('reloaded'));
-  assert.ok(invalidated > before, 'get() must call control.invalidate()');
+  // Registry contract: provider.get(candidate) is the ONLY load channel —
+  // a candidate-carried get() closure is dead code the registry never calls.
+  for (const c of list) assert.equal(c.get, undefined, 'candidates must not carry a get() closure');
+
+  const reload = await provider.get(list.find((c) => c.name === 'reload-cc-plugins'));
+  assert.equal(reload.name, 'reload-cc-plugins');
+  assert.equal(reload.provider, 'claude-compat');
+  assert.ok(reload.content.includes('reloaded'));
+  assert.equal(invalidated, 1, 'loading a reload skill must call control.invalidate()');
+
+  const mgr = await provider.get(list.find((c) => c.name === 'cc-plugin'));
+  assert.equal(mgr.name, 'cc-plugin');
+  assert.equal(mgr.provider, 'claude-compat');
+  assert.ok(mgr.content.includes('Plugin Manager'));
+  assert.equal(invalidated, 1, 'loading cc-plugin must not invalidate');
 });
