@@ -235,11 +235,11 @@ export function listClaudeSessions(cwd, limit = 30) {
   return out;
 }
 
-// First user messages are often skill/system injections ("Base directory for
-// this skill: …", a "# /command" heading, …) — useless as a preview. Skip the
-// boilerplate lines and surface the first line a human actually typed. Cards
-// render PLAIN TEXT: strip markdown decoration and collapse whitespace.
-const BOILERPLATE_RE = /^(base directory for this skill|below is a conversation log|create a summary|#{1,6}\s*\/|you are |你是)/i;
+// First user messages are often skill/system injections — useless as a
+// preview. The boilerplate family is aligned with ccs (claude-code-session-
+// manager)'s INTERNAL_PREFIXES, battle-tested against real ~/.claude data.
+// Cards render PLAIN TEXT: strip markdown decoration and collapse whitespace.
+const BOILERPLATE_RE = /^(base directory for this skill|below is a conversation log|caveat: the messages below|this session is being continued|create a summary|<local-command|<command-name|<command-message|<command-args|#{1,6}\s*\/|you are |你是)/i;
 
 function displayTitle(text) {
   for (const line of String(text ?? '').split('\n').slice(0, 10)) {
@@ -248,9 +248,22 @@ function displayTitle(text) {
       .replace(/^\[Image #\d+\]\s*/i, '')
       .replace(/\s+/g, ' ');
     if (t === '' || BOILERPLATE_RE.test(t)) continue;
-    return t.slice(0, 36);
+    return t;
   }
   return '(skill / system injection)';
+}
+
+// The expanded command card renders <pre> in a MONOSPACE font (ds-font-family-code,
+// ~80 columns wide). Clip by display width — CJK counts as two columns — so a
+// row never wraps and breaks the list structure.
+function clipByWidth(s, maxCols) {
+  let w = 0;
+  const chars = [...String(s)];
+  for (let i = 0; i < chars.length; i++) {
+    w += /[\u3000-\u9fff\uff00-\uffef]/.test(chars[i]) ? 2 : 1;
+    if (w > maxCols) return `${chars.slice(0, i).join('')}…`;
+  }
+  return String(s);
 }
 
 // ── CLI (guarded: only when run directly, not imported for tests) ──────────
@@ -279,13 +292,14 @@ if (cmd === 'list') {
   const imported = sessions.filter((s) => s.imported).length;
   console.log(`${total} Claude sessions · ${basename(cwd)} · newest first${imported > 0 ? ` · ${imported} imported` : ''}${total > sessions.length ? ` · showing ${sessions.length}` : ''}`);
   // Local time (ISO strings are UTC — off by the user's offset) and compact
-  // rows: no space-column alignment (command cards render proportional fonts,
-  // alignment collapses), short ids (import accepts prefixes).
+  // rows sized for the card's monospace pre block (~80 cols): prefix is ~36
+  // display columns, titles clipped to 38 — no row ever wraps.
   const two = (n) => String(n).padStart(2, '0');
   sessions.forEach((s, i) => {
     const d = s.createdAt ? new Date(s.createdAt) : null;
     const when = d ? `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` : '?';
-    console.log(`${i + 1}. ${s.id.slice(0, 8)}  ${when}  ${s.messages}msg${s.imported ? '  [imported]' : ''}  ${s.title || '(no text)'}`);
+    const title = clipByWidth(s.title || '(no text)', s.imported ? 36 : 38);
+    console.log(`${String(i + 1).padStart(2)}. ${s.id.slice(0, 8)}  ${when}  ${String(s.messages).padStart(4)}msg  ${title}${s.imported ? ' ✓' : ''}`);
   });
   console.log(`\nImport: /cc-resume import <sessionId or 8-char prefix> --cwd ${cwd}`);
 } else if (cmd === 'import') {
