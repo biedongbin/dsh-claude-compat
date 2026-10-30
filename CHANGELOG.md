@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.0.0] — 2026-10-30
+
+### Added
+- **Published to the DSH plugin market.** The repo now hosts a market index — `site/index.json`, deployed to GitHub Pages by `.github/workflows/market.yml`. Add `https://biedongbin.github.io/dsh-claude-compat/index.json` as an index source in the 插件市场「发现」 tab to browse and install every release. `scripts/update-market-index.mjs` regenerates the index from the npm registry (non-deprecated versions declaring `dsh.bundle`, matching the official generator's rule); versions already listed are preserved across reruns, so run it after `npm publish` and commit to pick up the new release. 0.9.2 was packed but never pushed to npm — the registry jumps from 0.9.1 straight to 1.0.0.
+
 ## [0.9.2] — 2026-10-28
 
 ### Added

@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [1.0.0] — 2026-10-30
+
+### 新增
+- **发布至 DSH 插件市场。** 仓库现托管市场索引 `site/index.json`，由 `.github/workflows/market.yml` 部署到 GitHub Pages。在 DSH 插件市场的「发现」标签页添加索引源 `https://biedongbin.github.io/dsh-claude-compat/index.json`，即可浏览并安装全部版本。`scripts/update-market-index.mjs` 从 npm registry 再生索引（规则与官方生成器一致：未弃用且声明 `dsh.bundle` 的版本）；已列出的版本跨重跑保留，`npm publish` 后重跑并提交即可收录新版。0.9.2 曾打包但从未推送 npm——registry 从 0.9.1 直接跳到 1.0.0。
+
 ## [0.9.2] — 2026-10-28
 
 ### 新增

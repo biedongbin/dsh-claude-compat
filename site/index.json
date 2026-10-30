@@ -1,0 +1,111 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Claude Compat",
+    "zh": "Claude 兼容桥"
+  },
+  "plugins": [
+    {
+      "name": "dsh-claude-compat",
+      "title": {
+        "en": "Claude Compat",
+        "zh": "Claude 兼容桥"
+      },
+      "description": {
+        "en": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directories (project and ~/.claude: skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
+        "zh": "把 Claude Code 的 .claude/ 目录（skills、commands、rules、agents、hooks、MCP）桥接进 DSH 原生技能注册表与规则注入。"
+      },
+      "author": "biedongbin",
+      "homepage": "https://github.com/biedongbin/dsh-claude-compat#readme",
+      "repository": {
+        "url": "https://github.com/biedongbin/dsh-claude-compat"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishTimestamp": 1793339333,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.9.1",
+          "publishTimestamp": 1793154590,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.9.0",
+          "publishTimestamp": 1793152283,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.8.4",
+          "publishTimestamp": 1792328752,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.8.3",
+          "publishTimestamp": 1790748123,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.8.2",
+          "publishTimestamp": 1790746299,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.8.1",
+          "publishTimestamp": 1788862270,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.8.0",
+          "publishTimestamp": 1787882141,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.7.0",
+          "publishTimestamp": 1787129473,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.6.2",
+          "publishTimestamp": 1787024263,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.3.0",
+          "publishTimestamp": 1786940106,
+          "source": {
+            "type": "npm"
+          }
+        },
+        {
+          "version": "0.2.0",
+          "publishTimestamp": 1786694899,
+          "source": {
+            "type": "npm"
+          }
+        }
+      ]
+    }
+  ]
+}
