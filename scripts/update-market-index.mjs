@@ -33,7 +33,7 @@ const prev = existsSync(outPath) ? JSON.parse(readFileSync(outPath, 'utf8')) : {
 for (const v of prev.plugins.find((p) => p.name === pkg.name)?.versions ?? []) listed.set(v.version, v);
 
 for (const [version, meta] of Object.entries(pack.versions)) {
-  if (meta.deprecated || !meta.dsh?.bundle || listed.has(version)) continue;
+  if (meta.deprecated || !meta.dsh?.bundle) continue;
   const time = pack.time?.[version];
   if (!time) throw new Error(`registry packument has no publish time for ${version}`);
   listed.set(version, { version, publishTimestamp: Math.floor(Date.parse(time) / 1000), source: { type: 'npm' } });
