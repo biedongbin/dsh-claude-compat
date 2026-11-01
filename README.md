@@ -116,6 +116,9 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` + `.claude/agents` provider (project and `~/.claude`) |
 | `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
 | `enableMcp` | `true` | Translate `<projectRoot>/.mcp.json` into mounted MCP server plugins |
+| `mcpScope` | `launch` | `session` uses each chat's original project directory, including already-open chats; connections load before its next prompt or `/mcp-status` |
+| `mcpSources` | `[claude]` | Highest-first source priority: `dsh` (`.dsh/mcp.json`), `claude` (`.mcp.json`), `codex` (`.codex/config.toml`), `agents` (`.agents/mcp.yaml`). Project entries override user entries; disabled entries remain disabled |
+| `mcpExcludedServers` | `[]` | Skip server names, or qualified `source:name` entries, case-insensitively |
 | `mcpFailOnStartupError` | `false` | Forward to `dsh-mcp-client`: fail plugin startup when an MCP server fails to connect |
 | `enableHooks` | `true` | Run `.claude/settings.json` hooks (Pre/PostToolUse, UserPromptSubmit) |
 | `hooksTimeoutMs` | `60000` | Per-hook run timeout (UserPromptSubmit capped at 10s regardless) |
@@ -141,7 +144,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 ## Notes
 
 - **Skill naming**: DSH requires kebab-case skill names. Nested skill directories are flattened (`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`); invalid frontmatter names fall back to the directory name.
-- **MCP lifecycle**: `.mcp.json` is read once at DSH startup from the launch workspace — not per session — and each server mounts for the process lifetime. Restart DSH to pick up edits.
+- **MCP lifecycle**: legacy `launch` scope reads `.mcp.json` once at startup. In `session` scope, configuration and `${VARIABLE}` references refresh before the next prompt or `/mcp-status`; secrets resolve from the inherited environment, then the native credential provider. Native clients own negotiation, tool registration and reconnects; Agent and plugin disposal close connections. `/mcp-status` runs without model tokens and reports registered tools, last discovery time and warnings rather than continuous connectivity. Missing credentials or unavailable native commands are reported; container-only interpreter paths are skipped. Codex URL/headers/bearer references and command/args/env/cwd are translated; Codex OAuth flows and tool allow/deny filters are not imported.
 - **Hooks scope**: a deliberately small subset of Claude Code hooks: PreToolUse / PostToolUse / UserPromptSubmit. Matchers support exact names, `*` wildcards, and `|` alternation; commands run with `stdin` carrying the Claude-style JSON payload. Exit code 2 = deny (Pre) / block (Post); other non-zero exits and timeouts allow through with a warning.
 - **Rules granularity**: rules are read per new session (cached per session cwd). Editing a rule mid-session takes effect in the next session.
 - **Rules content**: rules are injected verbatim as instructions to the model. Only commit rules you want the model to follow — same trust level as `CLAUDE.md`.

@@ -34,12 +34,14 @@
   "license": "MIT",
   "author": "biedongbin",
   "dependencies": {
+    "smol-toml": "^1.8.0",
     "yaml": "^2.0.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-skill": "*",
     "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-skill": "*",
+    "@deepseek-ai/dsh-scope": "*",
     "@deepseek-ai/schemastery": "*"
   },
   "peerDependenciesMeta": {
@@ -47,6 +49,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-scope": {
       "optional": true
     },
     "@deepseek-ai/dsh-llm": {
