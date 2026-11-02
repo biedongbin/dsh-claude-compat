@@ -60,7 +60,7 @@ dsh web
 | `commands/*.md` | DSH skill provider | 同上，且用户可直接调用：斜杠菜单里 `/command-name` 可用。 |
 | `rules/*.md` | 消息流注入 | rules 全文拼接，包 `<system-reminder>` 信封，每会话一次以 user-role 消息插在消息数组最前 —— 与 Claude Code 同通道（`prependUserContext`），模型可靠遵循。 |
 | `agents/*.md` | DSH skill provider（委派 shim） | DSH 没有 markdown 子代理格式，因此每个 agent 文件变成 **skill**，正文开头带显式"以此人设委派子代理"指令。模型与用户均可调用，`/agent-name` 可用。同名 agent 与 skill 一样按 rank 去重。 |
-| `.claude/settings.json` → `hooks` | 工具/Prompt 钩子 | Claude Code hooks 子集桥接到 DSH 的 `tools/pre-execute`（PreToolUse）、`tools/post-execute`（PostToolUse）与 `agent/pre-step`（UserPromptSubmit）瀑布。命令经 `/bin/sh -c` 运行，stdin 携带 Claude 风格 JSON；exit 2 拒绝/阻断，`hookSpecificOutput` 覆盖生效，超时放行并告警。 |
+| `.claude/settings.json` → `hooks` | 工具/Prompt 钩子 | Claude Code hooks 子集桥接到 DSH 的 `tools/pre-execute`（PreToolUse）、`tools/post-execute`（PostToolUse）与 `agent/pre-step`（UserPromptSubmit）瀑布。命令经 `/bin/sh -c` 运行（设置 `args` 时直接执行，不经过 shell），stdin 携带 Claude 风格 JSON；exit 2 拒绝/阻断，`hookSpecificOutput` 覆盖生效，超时放行并告警。 |
 | `<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义在 DSH 启动时（启动工区）翻译成 `dsh-mcp-client` 插件实例：`command` → stdio，`url` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。 |
 | `~/.claude/plugins`（已安装插件） | DSH skill provider | 已安装的 Claude Code 插件市场插件贡献其 skills/commands/agents（读取每个安装的 `.claude-plugin/plugin.json` 清单，无清单时回退目录扫描），rank `750` —— 长尾：project `.claude`、DSH 原生、`~/.claude` 在同名冲突时全部优先。插件的 MCP 服务器（清单 `mcpServers`）仅在显式开启 `enablePluginMcp` 后挂载 —— 挂载第三方 MCP 比列出 skills 信任门槛更高。 |
 
@@ -118,7 +118,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `enableMcp` | `true` | 把 `<projectRoot>/.mcp.json` 翻译为挂载的 MCP 服务器插件 |
 | `mcpFailOnStartupError` | `false` | 转发给 `dsh-mcp-client`：MCP 服务器连接失败时让插件启动失败 |
 | `enableHooks` | `true` | 运行 `.claude/settings.json` hooks（Pre/PostToolUse、UserPromptSubmit） |
-| `hooksTimeoutMs` | `60000` | 单个 hook 运行超时（UserPromptSubmit 无论如何上限 10s） |
+| `hooksTimeoutMs` | `60000` | 每个 hook 的默认运行超时，单位毫秒，取值 1 至 2147483647（hook 自身的 `timeout` 以秒为单位，优先生效；UserPromptSubmit 无论如何上限 10s） |
 | `enableAgents` | `true` | 把 `.claude/agents/*.md` 暴露为委派 shim skill |
 | `skillAliases` | `{}` | 非 kebab 名（中文等）→ ASCII slug 的映射，如 `{ "三脑": "san-nao" }`。见下方「中文 / 非 ASCII 技能名」 |
 | `aliasDescriptionPrefix` | `true` | 用了 alias 时把原名放在描述最前：`san-nao: 三脑 — …` |
