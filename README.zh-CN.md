@@ -46,8 +46,8 @@ dsh web
 | `commands/*.md` | DSH skill（用户可调） | `/command-name` 出现在斜杠菜单 |
 | `rules/*.md` | 消息流注入（同 Claude 的 `prependUserContext` 通道） | 每个新会话自动生效 |
 | `agents/*.md` | 委派 shim skill | `/agent-name` 按角色调起 |
+| `.mcp.json`、`.claude.json`、`managed-mcp.json` | `dsh-mcp-client` 实例 | stdio / streamable-http 自动翻译 |
 | `.claude/settings.json` hooks | 33 个事件中的 26 个，`command`、`http`、`mcp_tool`、`prompt`、`agent` 处理器 | 命令、权限、拦截照旧 |
-| `<root>/.mcp.json` | `dsh-mcp-client` 实例 | stdio / streamable-http 自动翻译 |
 | `~/.claude/plugins` | DSH skill（`/cc-plugin` 管理） | 安装的插件技能一并可用 |
 
 同一套目录，项目 `.claude/` 和用户级 `~/.claude/` **都会读**。同名项按固定优先级去重：**项目 `.claude` > DSH 原生 > `~/.claude`**——项目技能永远覆盖其他副本，用户技能永远不覆盖 DSH 原生。`CLAUDE.md` / `AGENTS.md` 由 DSH 内置的 `dsh-agent-instructions` 处理，**本插件不碰**。
@@ -60,8 +60,8 @@ dsh web
 | `commands/*.md` | DSH skill provider | 同上，且用户可直接调用：斜杠菜单里 `/command-name` 可用。 |
 | `rules/*.md` | 消息流注入 | rules 全文拼接，包 `<system-reminder>` 信封，每会话一次以 user-role 消息插在消息数组最前 —— 与 Claude Code 同通道（`prependUserContext`），模型可靠遵循。 |
 | `agents/*.md` | DSH skill provider（委派 shim） | DSH 没有 markdown 子代理格式，因此每个 agent 文件变成 **skill**，正文开头带显式"以此人设委派子代理"指令。模型与用户均可调用，`/agent-name` 可用。同名 agent 与 skill 一样按 rank 去重。 |
+| `managed-mcp.json`、`managedMcpServers`、`.claude.json`、`<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义按 Claude Code 的优先级读取，并在 DSH 启动时（启动工区）挂载为 `dsh-mcp-client` 插件实例：`command` → stdio，`type: http` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。见 [MCP 服务器](#mcp-服务器)。 |
 | `.claude/settings.json` → `hooks` | Hooks | Claude Code hooks，桥接到 DSH 扩展点。见 [Hooks](#hooks)。 |
-| `<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义在 DSH 启动时（启动工区）翻译成 `dsh-mcp-client` 插件实例：`command` → stdio，`url` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。 |
 | `~/.claude/plugins`（已安装插件） | DSH skill provider | 已安装的 Claude Code 插件市场插件贡献其 skills/commands/agents（读取每个安装的 `.claude-plugin/plugin.json` 清单，无清单时回退目录扫描），rank `750` —— 长尾：project `.claude`、DSH 原生、`~/.claude` 在同名冲突时全部优先。插件的 MCP 服务器（清单 `mcpServers`）仅在显式开启 `enablePluginMcp` 后挂载 —— 挂载第三方 MCP 比列出 skills 信任门槛更高。 |
 
 同类目录同样读取**用户级** `~/.claude/`（skills、commands、rules、agents 与 `~/.claude/settings.json` hooks）。同名 skill/command/rule/agent 去重，优先级固定：
@@ -224,10 +224,60 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 - `prompt` 向会话模型提一个不带工具的问题。`model` 写成 `provider/model`，或写成会话 provider 的模型名。`continueOnBlock` 与 `impossible` 遵循 Claude Code 规则。
 - `agent` 通过 `spawn` provider 启动 DSH 子 agent，并读取它的结构化回答。DSH 无法把它的工具限制为只读，所以提示词要求它不要修改任何文件。该子 agent 内不会运行任何 hook。
 
+## MCP 服务器
+
+插件按以下来源读取 MCP 服务器，优先级从高到低。高优先级来源中的同名条目会覆盖下层的同名条目，并使用胜出来源的整条配置。插件服务器则按 URL 匹配。
+
+| 来源 | 读取位置 |
+|---|---|
+| Managed | 系统 Claude 目录中的 `managed-mcp.json`。它独占控制：只加载此文件与 `managedMcpServers`。 |
+| Managed settings | 系统 Claude 目录中 `managed-settings.json` 的 `managedMcpServers`。 |
+| Local | `.claude.json` 中 `projects["<启动目录>"].mcpServers`。 |
+| Project | `<projectRoot>/.mcp.json`。 |
+| User | `.claude.json` 顶层的 `mcpServers`。设置了 `CLAUDE_CONFIG_DIR` 时位于该目录，否则位于主目录。 |
+| Plugin | 插件的 `.mcp.json`，仅在开启 `enablePluginMcp` 时加载。 |
+
+系统 Claude 目录在 macOS 为 `/Library/Application Support/ClaudeCode`，Linux 为 `/etc/claude-code`，Windows 为 `C:\Program Files\ClaudeCode`。无法读取的 `managed-mcp.json` 会关闭其余所有服务器，并给出指明该文件的告警。
+
+策略来自 settings 文件：
+
+- `deniedMcpServers` 按 URL、命令或名称阻止服务器。拒绝列表始终优先。
+- `allowedMcpServers` 仅允许匹配的服务器。各 settings 文件的列表会合并，除非 managed settings 设置了 `allowManagedMcpServersOnly`。`managedMcpServers` 与 `managed-mcp.json` 中的服务器不受允许列表约束。
+- 任一 settings 文件中的 `disabledMcpjsonServers` 按名称关闭项目服务器。
+- `.claude.json` 中本项目下的 `disabledMcpServers` 按名称关闭用户与 managed 服务器。
+
+条目处理：
+
+- `command`、`args`、`env`、`url` 与 `headers` 中的 `${VAR}` 和 `${VAR:-default}` 会展开。未设置且无默认值的变量保留原文，并在告警中给出变量名。
+- `timeout` 设置每次调用的时限（毫秒）。小于 1000 的值被忽略。
+- `headersHelper` 在挂载时运行，时限 10 秒。其 JSON 输出覆盖静态 `headers`。运行失败的 helper 会跳过其服务器。
+- `type: stdio` 与 `type: http`（或 `streamable-http`）会运行。有 `url` 但无 `type` 的条目会被跳过，与 Claude Code 一致。
+- stdio 服务器的环境中包含 `CLAUDE_PROJECT_DIR`。
+
+### 缺口：DSH 中无法运行的部分
+
+以下 Claude Code 功能在此无法运行。文件用到时插件会给出告警，条目的其余部分仍会加载。
+
+| Claude Code 功能 | 无法运行的原因 |
+|---|---|
+| `type: sse` 与 `type: ws` | DSH 的 MCP 客户端只有 stdio 与 streamable-http。该条目被跳过。 |
+| `oauth` | DSH 的 MCP 客户端没有 OAuth 流程。服务器在无 OAuth 的情况下加载，可能连接失败。 |
+| `alwaysLoad` | DSH 在启动时加载全部工具，没有延迟加载工具的机制。该字段被忽略。 |
+| 重连时的 `headersHelper` | DSH 只在挂载时设置一次 headers。重连或遇到 401 时 helper 不会再次运行。 |
+| 插件服务器的 `headersHelper` | 不运行。插件服务器在没有 helper headers 的情况下加载。 |
+| 服务器下发的 managed settings、MDM 配置文件与注册表策略 | 只读取磁盘上的文件。 |
+| `--mcp-config` 与 `--strict-mcp-config` | DSH 没有对应的启动参数。 |
+| claude.ai 连接器 | 需要获取 claude.ai 账户数据。 |
+| `enableAllProjectMcpServers` 与 `enabledMcpjsonServers` | 被忽略。项目服务器始终加载，与 `claude -p` 一致。DSH 没有审批提示。 |
+| `enabledMcpServers` | 内置服务器的可选列表。DSH 没有内置 MCP 服务器。 |
+| `agents/*.md` 中的子 agent `mcpServers` | 本插件不读取。相关工作见上游 PR #5（agent realm 中的 MCP）。 |
+| 策略条目中的 `${VAR}` | 从实时进程环境展开。Claude Code 会固定该环境。 |
+| 默认 `timeout` | 60 秒。Claude Code 约为 28 小时。 |
+
 ## 说明
 
 - **Skill 命名**：DSH 要求 kebab-case。嵌套 skill 目录扁平化（`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`）；frontmatter 名字非法时回退目录名。
-- **MCP 生命周期**：`.mcp.json` 仅在 DSH 启动时（启动工区）读取一次，每个服务器随进程生命周期挂载 —— 非按会话。修改后需重启 DSH。
+- **MCP 生命周期**：MCP 配置文件仅在 DSH 启动时（启动工区）读取一次，每个服务器随进程生命周期挂载 —— 非按会话。修改后需重启 DSH。
 - **项目级 hook**：插件没有工作区信任提示。`<project>/.claude/settings.json` 或 `<project>/.claude/settings.local.json` 中的 hook 会在 DSH 打开该项目时以你的权限运行，请只打开你信任的项目。
   插件只在启动时读取一次项目设置，读取的是 DSH 启动时所在的目录，而不是每个会话的目录。PermissionRequest hook 还会收到 DSH 发起请求的 `reason`，因此可以区分沙箱升级与普通审批。
 - **Hooks 范围**：33 个 Claude Code hook 事件中有 26 个可运行，五种处理器类型都支持。每个事件对应的 DSH 扩展点以及无法运行的事件见 [Hooks](#hooks)。

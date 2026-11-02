@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 ### 新增
+- **支持 Claude Code 所有来源的 MCP 服务器。** 插件现在按 Claude Code 的优先级读取 `managed-mcp.json`（独占控制）、`managedMcpServers`，以及 `.claude.json` 中的本地与用户 `mcpServers`。还支持 `${VAR}` 展开、`timeout`、`headersHelper`、`disabledMcpjsonServers`、`disabledMcpServers`，以及 `allowedMcpServers` 与 `deniedMcpServers` 策略。README 列出了 DSH 无法运行的功能。
 - **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
 - **Hook 处理器字段。** 命令型 hook 支持 `args`（不经过 shell 直接执行）、`if`（权限规则，如 `Bash(git *)`，仅用于工具事件）、`timeout`（秒）、`async`（仅工具事件；不能改变决定）以及 `onFailure: "block"`。命令与参数中的 `${CLAUDE_PROJECT_DIR}` 会被展开，并设置到 hook 环境变量中。工具 hook 的 stdin 包含 `hook_event_name` 与 `cwd`。其他处理器类型（`http`、`prompt`、`agent`、`mcp_tool`）的条目会被跳过并给出警告。尚未支持的事件与处理器见 issue #2。
 - **33 个 Claude Code hook 事件中的 26 个。** 除 PreToolUse、PostToolUse 和 UserPromptSubmit 外，插件现在还运行 SessionStart（挂在真正的启动点 `agent/created`）、SessionEnd、PostToolUseFailure、PermissionRequest、PermissionDenied、PostToolBatch、TaskCreated、TaskCompleted、Stop、StopFailure、SubagentStart、SubagentStop、Notification、MessageDisplay、UserPromptExpansion、CwdChanged、PreCompact、PostCompact、PostModelSwitch、TeammateIdle、InstructionsLoaded、FileChanged 与 ConfigChange。README 的 Hooks 一节列出了每个事件对应的 DSH 扩展点、无法运行的 7 个事件，以及所有能力比 Claude Code 弱的地方。hooks 也会从 `.claude/settings.local.json` 加载。
@@ -24,6 +25,7 @@
 - **会话与回合 hooks 会对子 agent 会话运行，规则或 hook 上下文被当作用户提示。** SessionStart、SessionEnd、UserPromptSubmit、Stop 等主会话 hooks 现在会跳过子 agent 会话。本插件自己注入的消息不再触发 UserPromptSubmit hooks。
 
 ### 变更
+- 项目之外也会加载 MCP 服务器，因为 `.claude.json` 与 managed 文件对所有目录生效。与 Claude Code 一致，只有 `url` 而无 `type` 的条目会被跳过。`sse` 与 `ws` 条目被跳过并给出告警。
 - `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 为相对路径时，插件不再激活，并输出一行指明变量名的错误。启动时只检查有效配置实际用到的变量，因此显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
 - `CLAUDE_CODE_PLUGIN_DIRS` 接受绝对路径和以 `~` 开头的条目，其他条目会被跳过并给出警告，与 Claude Code 一致。
 - `CLAUDE_CODE_PLUGIN_DIRS` 中的插件会整体替换同一清单名称的已安装插件。每次替换会输出一条警告。
