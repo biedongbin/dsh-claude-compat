@@ -69,3 +69,11 @@ export function harness(hooks, options = {}) {
     },
   };
 }
+
+/** An agent that DSH created for a subagent run. */
+export function fakeSubagent(id = 'sub-1', parent = 'sess-1') {
+  const agent = fakeAgent(id);
+  agent.session.header.origin = 'subagent';
+  agent.session.header.parentSession = parent;
+  return agent;
+}

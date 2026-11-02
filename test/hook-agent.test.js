@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { classifyError, stopCap } from '../src/hook-bridge-agent.js';
-import { fakeAgent, harness, say, tempDir, textOf, waitFor, withWarnings } from './hook-kit.js';
+import { fakeAgent, fakeSubagent, harness, say, tempDir, textOf, waitFor, withWarnings } from './hook-kit.js';
 
 const ALL = { matcher: '.*' };
 const allow = async () => ({ kind: 'allow' });
@@ -331,5 +331,48 @@ test('Notification: the matcher filters by notification type', async () => {
   const h = harness({ Notification: [{ matcher: 'idle_prompt', hooks: [{ command: `echo ran >> "${file}"` }] }] });
   await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'Bash' }], async () => 'allowed-once');
   await h.drain();
+  assert.throws(() => readFileSync(file), /ENOENT/);
+});
+
+// ─── subagent sessions ───────────────────────────────────────────────────────
+
+test('a tool hook inside a subagent gets the main session id plus agent_id and agent_type', async () => {
+  const file = join(tempDir('dcc-subagent-'), 'stdin.json');
+  const h = harness({ PreToolUse: [{ ...ALL, hooks: [{ command: `cat > "${file}"` }] }] });
+  const child = fakeSubagent('sub-9', 'main-1');
+  await h.dispatch('tools/pre-execute', [{ name: 'Read', arguments: {}, callId: 'c', agent: child }], allow);
+  const payload = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual([payload.session_id, payload.agent_id, payload.agent_type], ['main-1', 'sub-9', 'general-purpose']);
+});
+
+test('a main-session payload has no agent_id', async () => {
+  const file = join(tempDir('dcc-subagent-'), 'stdin.json');
+  const h = harness({ PreToolUse: [{ ...ALL, hooks: [{ command: `cat > "${file}"` }] }] });
+  await h.dispatch('tools/pre-execute', [{ name: 'Read', arguments: {}, callId: 'c', agent: fakeAgent('main-1') }], allow);
+  const payload = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal('agent_id' in payload, false);
+  assert.equal('agent_type' in payload, false);
+});
+
+test('session and turn hooks do not run for a subagent session', async () => {
+  const file = join(tempDir('dcc-subagent-'), 'ran');
+  const run = { hooks: [{ command: `echo ran >> "${file}"; exit 2` }] };
+  const h = harness({
+    SessionStart: [run], SessionEnd: [run], UserPromptSubmit: [run], Stop: [run], StopFailure: [run],
+    Notification: [run], MessageDisplay: [run],
+  });
+  const child = fakeSubagent();
+  const userMessage = { content: [{ type: 'text', text: 'task for the subagent' }] };
+  await h.dispatch('agent/created', [{ agent: child, source: 'startup' }], () => {});
+  h.dispatch('agent/disposed', [{ agent: child }], () => {});
+  const decision = await h.dispatch('agent/pre-step', [{ agent: child, messages: [userMessage] }], async () => ({ kind: 'enter', messages: [] }));
+  assert.equal(decision.kind, 'enter');
+  await h.dispatch('agent/turn-stopping', [stopping(child)], () => {});
+  h.dispatch('agent/error', [{ agent: child, turn: 1, step: 0, error: llmError('RATE_LIMIT') }], () => {});
+  h.dispatch('agent/status', [{ agent: child, status: 'running' }], () => {});
+  h.dispatch('agent/status', [{ agent: child, status: 'idle' }], () => {});
+  stream(h, child, start(), chunk('line\n'), end());
+  await h.drain();
+  assert.equal(child.steered.length, 0);
   assert.throws(() => readFileSync(file), /ENOENT/);
 });

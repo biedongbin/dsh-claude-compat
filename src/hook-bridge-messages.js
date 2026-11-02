@@ -6,6 +6,7 @@
 // `displayContent` is ignored.
 
 import { randomUUID } from 'node:crypto';
+import { isSubagent } from './hook-support.js';
 
 const DISPLAY_DEFAULT_MS = 10_000;
 
@@ -75,6 +76,7 @@ export function registerMessageHooks(ctx, engine, support) {
 
   if (wantsText) {
     ctx.on('agent/assistant-stream', ({ agent, frame }) => {
+      if (isSubagent(agent)) return;
       const key = sessionKey(agent);
       if (frame.type === 'start') {
         messages.set(key, freshMessage(messages.get(key), frame.turn));

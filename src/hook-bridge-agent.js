@@ -4,12 +4,9 @@
 // the bridge steers the agent with the reason, as Claude Code does. SubagentStop
 // runs after the subagent ended, so it cannot keep the subagent running.
 
-import { blocksToText } from './hook-support.js';
+import { SUBAGENT_TYPE, blocksToText, isSubagent } from './hook-support.js';
 
 const DEFAULT_STOP_CAP = 8;
-
-// The agent type that DSH subagents report. DSH does not name a type for a run.
-export const SUBAGENT_TYPE = 'general-purpose';
 
 function sessionKey(agent) {
   return agent?.session?.header?.id ?? '';
@@ -52,6 +49,7 @@ function stopFeedback(outcome) {
 
 async function onTurnStopping(deps, { agent }) {
   const { engine, support, messages, continued } = deps;
+  if (isSubagent(agent)) return;
   const key = sessionKey(agent);
   const count = continued.get(key) ?? 0;
   const outcome = await engine.fire('stop', 'Stop', {
@@ -79,7 +77,7 @@ async function onTurnStopping(deps, { agent }) {
 
 // Only a failed model request is an API error. Other errors of the loop are not.
 function onStopFailure({ engine, support }, { agent, error }) {
-  if (error?.name !== 'LlmError') return;
+  if (error?.name !== 'LlmError' || isSubagent(agent)) return;
   const type = classifyError(error);
   support.track(engine.fire('stop-failure', 'StopFailure', {
     subject: type,

@@ -3,6 +3,19 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 
+// The agent type that DSH subagents report. DSH does not name a type for a run.
+export const SUBAGENT_TYPE = 'general-purpose';
+
+/** The session id of an agent, or of an object that only holds a session. */
+export function sessionIdOf(agent) {
+  return agent?.session?.header?.id ?? agent?.session?.id ?? '';
+}
+
+/** True for an agent that DSH created to run a subagent. */
+export function isSubagent(agent) {
+  return agent?.session?.header?.origin === 'subagent';
+}
+
 /** Flatten content blocks to the text a hook payload carries. */
 export function blocksToText(content) {
   if (!Array.isArray(content)) return '';
@@ -32,15 +45,19 @@ export function createSupport(ctx) {
 
     /**
      * Claude-shaped hook input: the common fields plus the event's own.
-     * `session_id` is the DSH session id. `transcript_path` stays empty because
+     * `session_id` is the DSH session id (the main session's id inside a subagent). `transcript_path` stays empty because
      * DSH exposes no transcript file path.
      */
     payload(claudeName, agent, fields = {}) {
+      // Inside a subagent, `session_id` stays the main session and `agent_id` names the subagent.
+      const subagent = isSubagent(agent);
+      const parent = agent?.session?.header?.parentSession;
       return {
-        session_id: agent?.session?.header?.id ?? '',
+        session_id: subagent && parent !== undefined ? parent : sessionIdOf(agent),
         transcript_path: '',
         cwd: this.cwd(agent),
         hook_event_name: claudeName,
+        ...subagent ? { agent_id: sessionIdOf(agent), agent_type: SUBAGENT_TYPE } : {},
         ...fields,
       };
     },

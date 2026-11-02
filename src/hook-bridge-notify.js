@@ -5,6 +5,8 @@
 // A Notification hook cannot change anything, so the bridge never delays the
 // DSH event that triggers it.
 
+import { isSubagent } from './hook-support.js';
+
 function sessionKey(agent) {
   return agent?.session?.header?.id ?? '';
 }
@@ -36,6 +38,7 @@ export function registerNotificationHooks(ctx, engine, support) {
   // `idle_prompt` means the agent finished a run and waits for the next prompt. The
   // first `idle` of a new agent is not a finished run.
   ctx.on('agent/status', ({ agent, status }) => {
+    if (isSubagent(agent)) return;
     const key = sessionKey(agent);
     if (status === 'running') {
       running.add(key);

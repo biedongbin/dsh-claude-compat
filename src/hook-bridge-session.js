@@ -4,7 +4,7 @@
 // SessionStart runs on `agent/created`, the DSH point that announces a new agent
 // with its start source (startup, resume, clear, compact).
 
-import { blocksToText } from './hook-support.js';
+import { blocksToText, isSubagent } from './hook-support.js';
 import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 
 // Claude Code lowers the default timeout of these events (docs, "Common handler fields").
@@ -12,6 +12,7 @@ const PROMPT_DEFAULT_MS = 30_000;
 const SESSION_END_DEFAULT_MS = 1_500;
 
 async function onAgentCreated(engine, support, { agent, source }) {
+  if (isSubagent(agent)) return;
   try {
     const outcome = await engine.fire('session-start', 'SessionStart', {
       subject: source,
@@ -27,6 +28,7 @@ async function onAgentCreated(engine, support, { agent, source }) {
 // SessionEnd runs after the agent is gone, so it cannot delay shutdown. The run
 // is tracked, and plugin disposal waits for it.
 function onAgentDisposed(engine, support, { agent }) {
+  if (isSubagent(agent)) return;
   support.track(engine.fire('session-end', 'SessionEnd', {
     subject: 'other',
     defaultMs: SESSION_END_DEFAULT_MS,
@@ -38,6 +40,7 @@ function onAgentDisposed(engine, support, { agent }) {
 // step. The hook's context follows the user's messages. Context that this plugin
 // injected itself, such as hook context or a Stop hook steer, is not a prompt.
 async function onPreStep(engine, support, { agent, messages }, next) {
+  if (isSubagent(agent)) return next();
   const typed = messages.filter((message) => message.source?.kind !== CLAUDE_COMPAT_SOURCE_KIND);
   if (typed.length === 0) return next();
   const prompt = blocksToText(typed.flatMap((message) => message.content));
