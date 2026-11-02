@@ -3,6 +3,7 @@
 // merges too, unless managed settings set allowManagedMcpServersOnly. A list
 // that is present but not a list counts as an empty list, so the allowlist fails
 // closed. A malformed entry is ignored with a warning, so the rest still applies.
+// A malformed managed policy is worse: it turns every MCP server off (failClosed).
 
 import { docValue } from './lib.js';
 import { expandVars } from './mcp-vars.js';
@@ -33,6 +34,17 @@ function normalizePath(path) {
   }
 }
 
+// A host is compared in the ASCII form that URL() gives it, so `bücher.example`
+// matches its punycode form. A pattern with `*` does not parse as a host, and is
+// only lowercased.
+function normalizeHost(host) {
+  try {
+    return new URL(`http://${host}`).hostname.replace(/\.$/, '');
+  } catch {
+    return host.toLowerCase().replace(/\.$/, '');
+  }
+}
+
 // Split `scheme://host[:port][/path]` into its parts. The fragment is dropped,
 // because a browser never sends it to the server. Returns undefined on a bad shape.
 function parseUrlPattern(pattern) {
@@ -44,7 +56,7 @@ function parseUrlPattern(pattern) {
   const hasPort = portPart !== undefined && /^([0-9]+|\*)$/.test(portPart);
   return {
     scheme,
-    host: hasPort ? authority.slice(0, colon) : authority,
+    host: normalizeHost(hasPort ? authority.slice(0, colon) : authority),
     port: hasPort ? portPart : undefined,
     path: rawPath === undefined ? undefined : normalizePath(rawPath.split('#')[0]),
   };
@@ -68,9 +80,7 @@ export function urlMatches(pattern, url) {
   if (parsed === undefined) return false;
   const scheme = actual.protocol.slice(0, -1);
   if (parsed.scheme !== '*' && parsed.scheme.toLowerCase() !== scheme) return false;
-  const host = parsed.host.toLowerCase().replace(/\.$/, '');
-  const hostname = actual.hostname.toLowerCase().replace(/\.$/, '');
-  if (!globToRegExp(host).test(hostname)) return false;
+  if (!globToRegExp(parsed.host).test(normalizeHost(actual.hostname))) return false;
   const effectivePort = actual.port !== '' ? actual.port : (DEFAULT_PORT.get(scheme) ?? '');
   if (!portAllowed(parsed, effectivePort, scheme)) return false;
   if (parsed.path === undefined || parsed.path === '') return true;
@@ -138,34 +148,38 @@ function validEntries(list, where, warns) {
 
 // Expand ${VAR} in a policy entry. Policy entries expand from the process
 // environment. Claude Code pins that environment, so a settings file cannot change
-// what an entry means.
-function expandEntry(entry, vars) {
-  const none = () => {};
-  if ('serverUrl' in entry) return { serverUrl: expandVars(entry.serverUrl, vars, none) };
+// what an entry means. An unset variable keeps its literal text, and a warning names it.
+function expandEntry(entry, vars, onUnset) {
+  if ('serverUrl' in entry) return { serverUrl: expandVars(entry.serverUrl, vars, onUnset) };
   if ('serverCommand' in entry) {
-    return { serverCommand: entry.serverCommand.map((part) => expandVars(part, vars, none)) };
+    return { serverCommand: entry.serverCommand.map((part) => expandVars(part, vars, onUnset)) };
   }
   return entry;
 }
 
-// Build the merged policy from the settings documents. The result holds the
-// lists to apply (`allowed` is undefined when no allowlist is set) and the warnings.
+// Build the merged policy from the settings documents. `allowed` is undefined when
+// no allowlist is set. `failClosed` is true when a managed policy file is malformed,
+// because then the lock and the lists are unknown and every server must stay off.
 export function buildPolicy(docs, vars) {
   const warns = [];
+  const managedWarns = [];
+  const onUnset = (name) => warns.push(`policy: \${${name}} is not set, so the entry keeps the literal text`);
   const sources = SCOPES.map(([key, label]) => ({ label, settings: docValue(docs[key]) }));
   const managed = sources[0].settings;
   const onlyValue = managed.allowManagedMcpServersOnly;
   if (onlyValue !== undefined && typeof onlyValue !== 'boolean') {
-    warns.push('managed settings: allowManagedMcpServersOnly must be true or false. It is treated as false.');
+    managedWarns.push('managed settings: allowManagedMcpServersOnly must be true or false.');
   }
   const allowSources = onlyValue === true ? sources.slice(0, 1) : sources;
+  const sinkFor = (source) => (source === sources[0] ? managedWarns : warns);
   const allowLists = allowSources
     .filter((s) => s.settings.allowedMcpServers !== undefined)
-    .map((s) => validEntries(s.settings.allowedMcpServers, `${s.label} allowedMcpServers`, warns));
-  const denied = sources.flatMap((s) => validEntries(s.settings.deniedMcpServers, `${s.label} deniedMcpServers`, warns));
+    .map((s) => validEntries(s.settings.allowedMcpServers, `${s.label} allowedMcpServers`, sinkFor(s)));
+  const denied = sources.flatMap((s) => validEntries(s.settings.deniedMcpServers, `${s.label} deniedMcpServers`, sinkFor(s)));
   return {
-    allowed: allowLists.length > 0 ? allowLists.flat().map((e) => expandEntry(e, vars)) : undefined,
-    denied: denied.map((e) => expandEntry(e, vars)),
-    warns,
+    allowed: allowLists.length > 0 ? allowLists.flat().map((e) => expandEntry(e, vars, onUnset)) : undefined,
+    denied: denied.map((e) => expandEntry(e, vars, onUnset)),
+    warns: [...warns, ...managedWarns],
+    failClosed: managedWarns.length > 0,
   };
 }

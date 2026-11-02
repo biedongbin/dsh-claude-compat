@@ -60,34 +60,54 @@ function readErrorWarnings(docs) {
     .map(([key]) => `${docs[key].error}. Consequence: ${CONSEQUENCE[key]}.`);
 }
 
-function pushScope(entries, scope, map) {
-  if (!isObject(map)) return;
+// The name of each scope in a warning, so the reader can find the entry.
+const WHERE = {
+  'managed-file': 'managed-mcp.json mcpServers',
+  'managed-settings': 'managedMcpServers',
+  local: '.claude.json projects[] mcpServers',
+  project: '.mcp.json mcpServers',
+  user: '.claude.json mcpServers',
+};
+
+function pushScope(entries, scope, map, warns) {
+  if (map === undefined) return;
+  if (!isObject(map)) {
+    warns.push(`${WHERE[scope]} must be an object. Its servers are ignored.`);
+    return;
+  }
   for (const [name, raw] of Object.entries(map)) entries.push({ name, scope, raw });
 }
 
+// A disable list must be a list. A value that is not one is reported, not ignored.
+function listOf(value, where, warns) {
+  if (value === undefined) return [];
+  if (Array.isArray(value)) return value;
+  warns.push(`${where} must be a list. It is ignored.`);
+  return [];
+}
+
 // The names a settings list turns off, read from every settings file.
-function projectOffNames(docs) {
+function projectOffNames(docs, warns) {
   const names = new Set();
   for (const doc of [docs.managedSettings, docs.userSettings, docs.projectSettings, docs.localSettings]) {
-    const list = docValue(doc).disabledMcpjsonServers;
-    if (Array.isArray(list)) for (const name of list) names.add(name);
+    for (const name of listOf(docValue(doc).disabledMcpjsonServers, 'disabledMcpjsonServers', warns)) names.add(name);
   }
   return names;
 }
 
 // The `.claude.json` list for this project. Claude Code's `disabledMcpServers`
 // covers user and managed servers only.
-function optOutNames(docs) {
-  const list = docValue(docs.claudeJson).projects?.[docs.cwd]?.disabledMcpServers;
-  return new Set(Array.isArray(list) ? list : []);
+function optOutNames(docs, warns) {
+  const value = docValue(docs.claudeJson).projects?.[docs.cwd]?.disabledMcpServers;
+  return new Set(listOf(value, 'disabledMcpServers in .claude.json', warns));
 }
 
 const OPT_OUT_SCOPES = new Set(['user', 'managed-file', 'managed-settings']);
 
 // Drop the disabled entries, then keep the first entry for each name.
-function applyDisables(entries, docs) {
-  const projectOff = projectOffNames(docs);
-  const optOut = optOutNames(docs);
+function applyDisables(entries, docs, warns) {
+  const projectOff = projectOffNames(docs, warns);
+  const optOut = optOutNames(docs, warns);
   const seen = new Set();
   const kept = [];
   for (const entry of entries) {
@@ -129,13 +149,16 @@ export function selectEntries(docs) {
     warns.push(`${managedProblem}. Servers from user, project and local sources are off.`);
   }
   const entries = [];
-  if (exclusive && managedProblem === undefined) pushScope(entries, 'managed-file', docs.managedMcp.value.mcpServers);
-  pushScope(entries, 'managed-settings', docValue(docs.managedSettings).managedMcpServers);
+  if (exclusive && managedProblem === undefined) {
+    pushScope(entries, 'managed-file', docs.managedMcp.value.mcpServers, warns);
+    warns.push('managed-mcp.json takes exclusive control. User, project and local servers, and plugin servers, are off.');
+  }
+  pushScope(entries, 'managed-settings', docValue(docs.managedSettings).managedMcpServers, warns);
   if (!exclusive) {
-    pushScope(entries, 'local', docValue(docs.claudeJson).projects?.[docs.cwd]?.mcpServers);
-    pushScope(entries, 'project', docValue(docs.projectMcp).mcpServers);
-    pushScope(entries, 'user', docValue(docs.claudeJson).mcpServers);
+    pushScope(entries, 'local', docValue(docs.claudeJson).projects?.[docs.cwd]?.mcpServers, warns);
+    pushScope(entries, 'project', docValue(docs.projectMcp).mcpServers, warns);
+    pushScope(entries, 'user', docValue(docs.claudeJson).mcpServers, warns);
   }
   warns.push(...misplacedKeyWarnings(docs));
-  return { entries: applyDisables(entries, docs), exclusive, warns };
+  return { entries: applyDisables(entries, docs, warns), exclusive, warns };
 }

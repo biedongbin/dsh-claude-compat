@@ -243,6 +243,7 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 
 - 无法读取的 `managed-settings.json` 会关闭所有 MCP 服务器。
 - 无法读取的 `managed-mcp.json` 会关闭用户、项目与本地服务器。`managedMcpServers` 仍会加载。
+- 格式错误的 managed 策略会关闭所有 MCP 服务器。这包括不是列表的策略项、其中格式错误的条目，以及不是布尔值的 `allowManagedMcpServersOnly`。
 - 无法读取的用户、项目或本地文件会给出告警，并说明会停止什么。其中的条目不会被读取。
 
 每条告警都会指明文件或条目，并说明哪些内容被关闭。
@@ -251,7 +252,9 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 
 - `deniedMcpServers` 按 URL、命令或名称阻止服务器。拒绝列表始终优先。插件服务器同样遵守。
 - `allowedMcpServers` 仅允许匹配的服务器。各 settings 文件的列表会合并，除非 managed settings 设置了 `allowManagedMcpServersOnly`。`managedMcpServers` 与 `managed-mcp.json` 中的服务器不受允许列表约束。
-- 格式错误的策略条目会被忽略并给出告警。不是列表的策略项：`allowedMcpServers` 视为允许零个服务器，`deniedMcpServers` 视为不拒绝任何服务器，并给出告警。
+- 用户、项目或本地 settings 文件中格式错误的策略条目会被忽略并给出告警。managed settings 中的此类条目会关闭所有 MCP 服务器。不是列表的策略项：`allowedMcpServers` 视为允许零个服务器，`deniedMcpServers` 视为不拒绝任何服务器，并给出告警。
+- 不带端口的 URL 模式只覆盖默认端口（`https` 为 443），与 Claude Code 文档一致。主机中含 `*` 或端口为 `*` 时覆盖所有端口。`serverCommand` 条目比较命令及其参数，不比较 `env`（与 Claude Code 文档一致），也不比较 `cwd`。
+- 策略条目引用未设置的变量时，保留原文，并在告警中给出变量名。
 - 任一 settings 文件中的 `disabledMcpjsonServers` 按名称关闭项目服务器。
 - `.claude.json` 中本项目下的 `disabledMcpServers` 按名称关闭用户与 managed 服务器。
 

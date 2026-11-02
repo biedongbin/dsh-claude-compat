@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { buildPolicy, urlMatches } from '../src/mcp-policy.js';
 import { applyPolicy, extraServers, loadMcpServers, translateMcpServers, withoutDuplicateUrls } from '../src/mcp.js';
 
 function tempDir(prefix) {
@@ -122,14 +123,14 @@ test('an allowlist that is not a list allows nothing, and says so', async () => 
   assert.match(result.warns.join('\n'), /allowedMcpServers must be a list/);
 });
 
-test('allowManagedMcpServersOnly that is not a boolean is reported, and treated as false', async () => {
+test('allowManagedMcpServersOnly that is not a boolean fails closed, and says so', async () => {
   const fx = fixture();
   write(join(fx.managedDir, 'managed-settings.json'), { allowManagedMcpServersOnly: 'true' });
   write(join(fx.userDir, 'settings.json'), { allowedMcpServers: [{ serverName: 'mine' }] });
   write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
   const result = await load(fx);
-  assert.deepEqual(names(result), ['mine']);
-  assert.match(result.warns.join('\n'), /allowManagedMcpServersOnly must be true or false/);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /Managed policy is malformed/);
 });
 
 test('a headersHelper under an allowlist is refused, since the allowlist cannot see the helper', async () => {
@@ -199,6 +200,79 @@ test('extraServers drops a denied plugin server and a plugin URL that a loaded s
     { serverName: 'dup', url: 'https://m.example/mcp' },
     { serverName: 'ok', url: 'https://p.example/mcp' },
   ];
-  assert.deepEqual(extraServers(loaded, plugin).map((s) => s.serverName), ['ok']);
+  assert.deepEqual(extraServers(loaded, { servers: plugin, labels: {} }).map((s) => s.serverName), ['ok']);
   assert.equal(loaded.warns.length, 2);
+});
+
+test('a managed deniedMcpServers that is not a list fails closed: every server is off', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), { deniedMcpServers: { serverName: 'x' } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.equal(result.exclusive, true);
+  assert.match(result.warns.join('\n'), /Managed policy is malformed/);
+});
+
+test('a managed policy entry that is malformed fails closed too', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), { deniedMcpServers: [null] });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  assert.deepEqual(names(await load(fx)), []);
+});
+
+test('a disabledMcpjsonServers that is not a list is reported, not ignored', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { keep: stdio('k') } });
+  write(join(fx.project, '.claude', 'settings.local.json'), { disabledMcpjsonServers: 'keep' });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['keep']);
+  assert.match(result.warns.join('\n'), /disabledMcpjsonServers must be a list/);
+});
+
+test('a mcpServers that is not an object in .claude.json is reported, not ignored', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { mcpServers: ['mine'] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /\.claude\.json mcpServers must be an object/);
+});
+
+test('a managed-mcp.json that takes exclusive control says so, and what it turns off', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-mcp.json'), { mcpServers: { corp: stdio('c') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['corp']);
+  assert.match(result.warns.join('\n'), /takes exclusive control/);
+});
+
+test('a headersHelper that is not a string skips the server, instead of mounting it unauthenticated', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', headersHelper: 123 } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /headersHelper must be a non-empty string/);
+});
+
+test('a plugin deny rule matches the name the user wrote, not the sanitized one', () => {
+  const warns = [];
+  const policy = { allowed: undefined, denied: [{ serverName: 'corp.tool' }] };
+  const kept = applyPolicy([{ serverName: 'corp_tool', url: 'https://p.example/mcp' }], policy, warns, { corp_tool: 'corp.tool' });
+  assert.deepEqual(kept, []);
+  assert.match(warns.join('\n'), /corp\.tool: denied by policy, skipped/);
+});
+
+test('an unset variable in a policy entry is reported, and the entry keeps the literal text', () => {
+  const policy = buildPolicy({ userSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_NOPE_X}/*' }] } } }, {});
+  assert.match(policy.warns.join('\n'), /\$\{DCC_NOPE_X\} is not set/);
+  assert.deepEqual(policy.denied, [{ serverUrl: 'https://${DCC_NOPE_X}/*' }]);
+});
+
+test('a host written with non-ASCII letters matches its ASCII form, as URL() writes it', () => {
+  assert.equal(urlMatches('https://bücher.example/*', 'https://xn--bcher-kva.example/x'), true);
+});
+
+test('a deny pattern with no port covers the default port only, as Claude Code documents', () => {
+  assert.equal(urlMatches('https://evil.example', 'https://evil.example:8443/x'), false);
+  assert.equal(urlMatches('https://evil.example', 'https://evil.example/x'), true);
 });

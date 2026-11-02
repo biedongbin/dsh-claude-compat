@@ -72,6 +72,10 @@ function fieldProblem(name, entry) {
       return `${name}: ${field} must map names to strings, numbers or booleans, skipped`;
     }
   }
+  // A helper that is present but not a command would be dropped, and the server would mount unauthenticated.
+  if (entry.headersHelper !== undefined && (typeof entry.headersHelper !== 'string' || entry.headersHelper.length === 0)) {
+    return `${name}: headersHelper must be a non-empty string, skipped`;
+  }
   return undefined;
 }
 
@@ -159,12 +163,15 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
   let parsed;
   try { parsed = JSON.parse(rawJson); }
   catch {
-    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`] };
+    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`], labels: {} };
   }
-  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'] };
-  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'] };
+  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'], labels: {} };
+  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'], labels: {} };
   const out = [];
   const warns = [];
+  // Plugin servers are named after their sanitized name, so the policy needs the
+  // name the user wrote. Map the one to the other here.
+  const labels = {};
   for (const [name, entry] of Object.entries(parsed.mcpServers)) {
     if (!isObject(entry)) {
       warns.push(`${name}: malformed entry, skipped`);
@@ -178,8 +185,9 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
       continue;
     }
     out.push(translated.server);
+    labels[translated.server.serverName] = name;
   }
-  return { servers: out, warns };
+  return { servers: out, warns, labels };
 }
 
 // Run a headersHelper and parse its JSON object of header values. Errors are
@@ -256,6 +264,10 @@ export async function loadMcpServers(config, { cwd = process.cwd(), managedDir }
   const selected = selectEntries(docs);
   const vars = { ...process.env, CLAUDE_PROJECT_DIR: projectDir };
   const policy = buildPolicy(docs, vars);
+  if (policy.failClosed) {
+    const warns = [...selected.warns, ...policy.warns, 'Managed policy is malformed, so every MCP server is off.'];
+    return { servers: [], exclusive: true, warns, policy };
+  }
   const state = {
     options: { vars, failOnStartupError: config.mcpFailOnStartupError ?? false, projectDir },
     policy,
@@ -265,22 +277,24 @@ export async function loadMcpServers(config, { cwd = process.cwd(), managedDir }
   return { servers: state.out.servers, exclusive: selected.exclusive, warns: state.out.warns, policy };
 }
 
-// Check plugin servers against the policy. Plugin servers match by the name
-// they have after sanitizing, and by URL, command and arguments.
-export function applyPolicy(servers, policy, warns) {
+// Check plugin servers against the policy, by the name the user wrote (`labels`
+// maps each sanitized name to it), and by URL, command and arguments.
+export function applyPolicy(servers, policy, warns, labels = {}) {
   return servers.filter((server) => {
-    const view = { label: server.serverName, url: server.url, command: server.command, args: server.args };
+    const label = Object.hasOwn(labels, server.serverName) ? labels[server.serverName] : server.serverName;
+    const view = { label, url: server.url, command: server.command, args: server.args };
     const reason = policyVerdict(view, policy);
     if (reason === undefined) return true;
-    warns.push(`${server.serverName}: ${reason}, skipped`);
+    warns.push(`${label}: ${reason}, skipped`);
     return false;
   });
 }
 
 // The plugin servers that may mount next to the loaded ones. They must pass the
-// policy, and their URL must not already be in use by a loaded server.
-export function extraServers(loaded, pluginServers) {
-  const allowed = applyPolicy(pluginServers, loaded.policy, loaded.warns);
+// policy, and their URL must not already be in use by a loaded server. `plugin`
+// is the result of translateMcpServers: { servers, labels }.
+export function extraServers(loaded, plugin) {
+  const allowed = applyPolicy(plugin.servers, loaded.policy, loaded.warns, plugin.labels);
   return withoutDuplicateUrls(loaded.servers, allowed, loaded.warns);
 }
 
