@@ -43,6 +43,9 @@ export function fakeAgent(id = 'sess-1', cwd = '/work') {
   return agent;
 }
 
+// The DSH events that are waterfalls: each listener gets `next` for the listener after it.
+const WATERFALLS = new Set(['tools/pre-execute', 'tools/post-execute', 'agent/pre-step', 'approval/request', 'user-questions/request']);
+
 /**
  * Register hooks from a settings object against a fake context.
  * `dispatch(name, args, terminal)` runs every listener of `name` as a waterfall,
@@ -55,15 +58,33 @@ export function harness(hooks, options = {}) {
   const effects = [];
   const ctx = {
     on: (name, fn) => listeners.set(name, [...listeners.get(name) ?? [], fn]),
-    effect: (setup) => effects.push(setup()),
+    effect: (setup, name) => effects.push({ name, teardown: setup() }),
     ...options.ctx,
   };
-  registerHooks(ctx, { userClaudeDir: dir, projectRootMarkers: ['.git'], hooksTimeoutMs: 5000 }, { runners: options.runners });
+  const hooksApi = registerHooks(
+    ctx,
+    { userClaudeDir: dir, projectRootMarkers: ['.git'], hooksTimeoutMs: 5000 },
+    { runners: options.runners, intervalMs: options.intervalMs ?? 20 },
+  );
   return {
+    dir,
+    instructionsLoaded: hooksApi.instructionsLoaded,
+    engine: hooksApi.engine,
     has: (name) => listeners.has(name),
-    drain: () => Promise.all(effects.map((drain) => drain())),
+    // Wait for the hook runs that are still going. Other effects, such as file watches, stay on.
+    drain: () => Promise.all(effects.filter((e) => /drain hook runs/.test(e.name)).map((e) => e.teardown())),
+    // Run every teardown, as plugin unload does.
+    dispose: () => Promise.all(effects.map((e) => e.teardown())),
     dispatch(name, args, terminal) {
       const chain = listeners.get(name) ?? [];
+      if (!WATERFALLS.has(name)) {
+        // A serial or emit event: every listener runs, one after another, and none gets `next`.
+        return (async () => {
+          let last;
+          for (const listener of chain) last = await listener(...args);
+          return last ?? terminal();
+        })();
+      }
       const step = (index) => (index >= chain.length ? terminal() : chain[index](...args, () => step(index + 1)));
       return step(0);
     },

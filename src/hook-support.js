@@ -36,6 +36,9 @@ export function createSupport(ctx) {
   return {
     ctx,
 
+    // File watching for FileChanged. registerFileHooks replaces this with the real controller.
+    files: { track() {}, release() {}, setDynamic() {}, cwdChanged() {} },
+
     // The agent's current directory. The working-directory service is optional,
     // so a deployment without it falls back to the session's start directory.
     cwd(agent) {

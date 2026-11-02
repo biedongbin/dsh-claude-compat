@@ -20,6 +20,7 @@ async function onAgentCreated(engine, support, { agent, source }) {
       payload: support.payload('SessionStart', agent, { source }),
     });
     support.inject(agent, outcome);
+    if (outcome.watchPathsGiven) support.files.setDynamic(agent, outcome.watchPaths);
   } catch (error) {
     console.warn(`dsh-claude-compat: SessionStart hooks failed: ${error?.message ?? error}`);
   }

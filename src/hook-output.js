@@ -82,6 +82,7 @@ function emptyOutcome() {
     updatedInput: undefined,
     updatedToolOutput: undefined,
     watchPaths: [],
+    watchPathsGiven: false,
     retry: false,
     specific: {},
     text: '',
@@ -116,8 +117,8 @@ function applyJson(outcome, event, json, specific) {
   outcome.updatedInput = specific.updatedInput;
   outcome.updatedToolOutput = specific.updatedToolOutput;
   outcome.retry = specific.retry === true;
-  outcome.watchPaths = Array.isArray(specific.watchPaths)
-    ? specific.watchPaths.filter((p) => typeof p === 'string') : [];
+  outcome.watchPathsGiven = Array.isArray(specific.watchPaths);
+  outcome.watchPaths = outcome.watchPathsGiven ? specific.watchPaths.filter((p) => typeof p === 'string') : [];
 }
 
 /**
@@ -179,6 +180,7 @@ export function mergeOutcomes(outcomes) {
     merged.updatedInput = outcome.updatedInput ?? merged.updatedInput;
     merged.updatedToolOutput = outcome.updatedToolOutput ?? merged.updatedToolOutput;
     merged.retry ||= outcome.retry;
+    merged.watchPathsGiven ||= outcome.watchPathsGiven;
     for (const path of outcome.watchPaths) if (!merged.watchPaths.includes(path)) merged.watchPaths.push(path);
     if (Object.keys(outcome.specific).length > 0) merged.specific = { ...merged.specific, ...outcome.specific };
   }

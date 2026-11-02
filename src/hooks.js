@@ -16,6 +16,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CLAUDE_EVENTS, UNSUPPORTED_EVENTS } from './hook-events.js';
 import { createHookEngine } from './hook-engine.js';
+import { registerConfigHooks } from './hook-bridge-config.js';
+import { registerFeedHooks } from './hook-bridge-feed.js';
+import { registerFileHooks } from './hook-bridge-files.js';
+import { createInstructionsNotifier } from './hook-bridge-instructions.js';
+import { registerModelHooks } from './hook-bridge-model.js';
+import { registerTeamHooks } from './hook-bridge-team.js';
 import { registerAgentHooks } from './hook-bridge-agent.js';
 import { registerMessageHooks } from './hook-bridge-messages.js';
 import { registerNotificationHooks } from './hook-bridge-notify.js';
@@ -30,16 +36,27 @@ import { findProjectRootSync, resolveUserClaudeDir } from './lib.js';
 export { compileMatcher } from './hook-engine.js';
 export { runHookCommand } from './hook-handlers.js';
 
-// Combined hooks map. Project .claude/settings.json is applied LAST so it wins
-// same (event, matcher, handler) keys against ~/.claude/settings.json.
+/**
+ * The settings files that hooks come from, in the order they apply: user, project,
+ * then project-local. A later file wins when two entries are identical.
+ * @param {object} config plugin config
+ * @returns {{path: string, source: string}[]}
+ */
+export function settingsFiles(config) {
+  const files = [{ path: join(resolveUserClaudeDir(config.userClaudeDir), 'settings.json'), source: 'user_settings' }];
+  const root = findProjectRootSync(process.cwd(), config.projectRootMarkers);
+  if (root !== undefined) {
+    files.push({ path: join(root, '.claude', 'settings.json'), source: 'project_settings' });
+    files.push({ path: join(root, '.claude', 'settings.local.json'), source: 'local_settings' });
+  }
+  return files;
+}
+
+// Combined hooks map. A later file wins same (event, matcher, handler) keys.
 export function loadHookSettings(config) {
   const combined = {};
-  const found = findProjectRootSync(process.cwd(), config.projectRootMarkers);
-  const projectDir = found ?? process.cwd();
-  applySettingsFile(combined, join(resolveUserClaudeDir(config.userClaudeDir), 'settings.json'), projectDir);
-  if (found !== undefined) {
-    applySettingsFile(combined, join(found, '.claude', 'settings.json'), projectDir);
-  }
+  const projectDir = findProjectRootSync(process.cwd(), config.projectRootMarkers) ?? process.cwd();
+  for (const { path } of settingsFiles(config)) applySettingsFile(combined, path, projectDir);
   return combined;
 }
 
@@ -99,14 +116,28 @@ function addHandler(combined, scope, raw) {
   combined[key] = { event: scope.event, matcher: scope.matcher, ...result.handler };
 }
 
+// Each event has its DSH listener registered at startup, only when a hook uses the event.
+// A hook for a new event that appears in a reloaded settings file has no listener yet.
+function makeReload(engine, config, startEvents) {
+  return () => {
+    engine.replace(Object.values(loadHookSettings(config)));
+    const added = [...engine.events()].filter((event) => !startEvents.has(event));
+    if (added.length > 0) {
+      console.warn(`dsh-claude-compat: settings now use hook events that need a restart: ${added.join(', ')}`);
+    }
+  };
+}
+
 /**
  * Load the hook settings and register one DSH listener per event in use.
  * @param {object} ctx DSH plugin context
  * @param {object} config plugin config
- * @param {{runners?: object}} [options] runner overrides for tests
- * @returns {object} the engine, for tests
+ * @param {{runners?: object, intervalMs?: number}} [options] runner overrides and the file
+ *   poll interval, for tests
+ * @returns {{engine: object, instructionsLoaded: Function}} the engine, and the function
+ *   that the rules loader calls
  */
-export function registerHooks(ctx, config, { runners } = {}) {
+export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
   const hooks = Object.values(loadHookSettings(config));
   const engine = createHookEngine({ hooks, config, runners });
   const support = createSupport(ctx);
@@ -114,6 +145,9 @@ export function registerHooks(ctx, config, { runners } = {}) {
     // A hook that is still running when the plugin unloads finishes first.
     ctx.effect(() => () => support.drain(), 'dsh-claude-compat: drain hook runs');
   }
+  // The file watcher registers first: it installs `support.files`, which the session and
+  // feed hooks use.
+  registerFileHooks(ctx, engine, support, { intervalMs });
   registerToolHooks(ctx, engine, support);
   registerSessionHooks(ctx, engine, support);
   registerPermissionHooks(ctx, engine, support);
@@ -121,5 +155,13 @@ export function registerHooks(ctx, config, { runners } = {}) {
   const messages = registerMessageHooks(ctx, engine, support);
   registerAgentHooks(ctx, engine, support, messages);
   registerNotificationHooks(ctx, engine, support);
-  return engine;
+  registerFeedHooks(ctx, engine, support);
+  registerModelHooks(ctx, engine, support);
+  registerTeamHooks(ctx, engine, support);
+  registerConfigHooks(ctx, engine, support, {
+    files: settingsFiles(config),
+    reload: makeReload(engine, config, engine.events()),
+    intervalMs,
+  });
+  return { engine, instructionsLoaded: createInstructionsNotifier(engine, support) };
 }

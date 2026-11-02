@@ -3,67 +3,29 @@
 // from settings.json to a DSH decision runs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { registerHooks } from '../src/hooks.js';
 import { createSupport } from '../src/hook-support.js';
+import { fakeAgent, harness, say, tempDir, textOf, waitFor, withWarnings } from './hook-kit.js';
 
-const tempDir = (prefix) => mkdtempSync(join(tmpdir(), prefix));
-
-// A hook command that prints a JSON object. The JSON must not contain a single quote.
-const say = (value) => `printf '%s' '${JSON.stringify(value)}'`;
-
-async function withWarnings(fn) {
-  const warnings = [];
-  const original = console.warn;
-  console.warn = (...args) => warnings.push(args.join(' '));
-  try {
-    const value = await fn(warnings);
-    return { value, warnings };
-  } finally {
-    console.warn = original;
-  }
-}
-
-async function waitFor(predicate, ms = 3000) {
-  const deadline = Date.now() + ms;
-  while (!predicate() && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  return predicate();
-}
-
-function fakeAgent(id = 'sess-1', cwd = '/work') {
-  const agent = {
-    session: { id, header: { id, cwd } },
-    injected: [],
-    steered: [],
-    inject: (message) => agent.injected.push(message),
-    steer: (message) => agent.steered.push(message),
-  };
-  return agent;
-}
-
-// Register the hooks from a settings object and return the listeners by event name.
+// Register the hooks from a settings object. `get(name)` dispatches an event through every
+// listener: the last argument, when it is a function, ends a waterfall chain.
 function listenersFor(hooks, options = {}) {
-  const dir = tempDir('dcc-bridge-');
-  writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks }));
-  const listeners = new Map();
-  const ctx = { on: (name, fn) => listeners.set(name, fn), effect: () => {}, ...options.ctx };
-  const engine = registerHooks(
-    ctx,
-    { userClaudeDir: dir, projectRootMarkers: ['.git'], hooksTimeoutMs: 5000 },
-    { runners: options.runners },
-  );
-  listeners.engine = engine;
-  return listeners;
+  const h = harness(hooks, options);
+  return {
+    engine: h.engine,
+    has: h.has,
+    drain: h.drain,
+    get: (name) => (...args) => {
+      const terminal = typeof args.at(-1) === 'function' ? args.pop() : () => undefined;
+      return h.dispatch(name, args, terminal);
+    },
+  };
 }
 
 const allow = async () => ({ kind: 'allow' });
 const accept = async () => ({ kind: 'accept' });
 const preCall = (name, input, agent) => ({ name, arguments: input, callId: 'call-1', agent });
-const textOf = (message) => message.content[0].text;
 
 // ─── PreToolUse ──────────────────────────────────────────────────────────────
 
@@ -433,4 +395,59 @@ test('UserPromptSubmit: context that this plugin injected is not a prompt', asyn
   const mixed = [own, { content: [{ type: 'text', text: 'real prompt' }] }];
   await listeners.get('agent/pre-step')({ agent: fakeAgent(), messages: mixed }, enter);
   assert.equal(readFileSync(file, 'utf8').trim(), 'ran');
+});
+
+// ─── every Claude event has a DSH listener or a stated reason ────────────────
+
+// The DSH event that carries each supported Claude hook event.
+const DSH_EVENT = {
+  SessionStart: 'agent/created',
+  UserPromptSubmit: 'agent/pre-step',
+  UserPromptExpansion: 'session/event',
+  PreToolUse: 'tools/pre-execute',
+  PermissionRequest: 'approval/request',
+  PermissionDenied: 'approval/request',
+  PostToolUse: 'tools/post-execute',
+  PostToolUseFailure: 'tools/post-execute',
+  PostToolBatch: 'agent/pre-step',
+  Notification: 'approval/request',
+  MessageDisplay: 'agent/assistant-stream',
+  SubagentStart: 'subagent/start',
+  SubagentStop: 'subagent/end',
+  TaskCreated: 'tools/pre-execute',
+  TaskCompleted: 'tools/pre-execute',
+  Stop: 'agent/turn-stopping',
+  StopFailure: 'agent/error',
+  TeammateIdle: 'agent/status',
+  InstructionsLoaded: undefined, // called by the rules loader, not by a DSH event
+  ConfigChange: 'skills/change',
+  CwdChanged: 'session/event',
+  FileChanged: 'agent/created',
+  PreCompact: 'session/event',
+  PostCompact: 'session/event',
+  PostModelSwitch: 'agent/pre-step',
+  SessionEnd: 'agent/disposed',
+};
+
+test('each Claude hook event either has a DSH listener or a stated reason that it cannot run', async () => {
+  const { CLAUDE_EVENTS, UNSUPPORTED_EVENTS } = await import('../src/hook-events.js');
+  for (const [claudeName, event] of Object.entries(CLAUDE_EVENTS)) {
+    if (UNSUPPORTED_EVENTS.has(event)) {
+      assert.ok(UNSUPPORTED_EVENTS.get(event).length > 10, `${claudeName} needs a reason`);
+      assert.equal(claudeName in DSH_EVENT, false, `${claudeName} is both supported and unsupported`);
+      continue;
+    }
+    assert.ok(claudeName in DSH_EVENT, `${claudeName} has no DSH event in this table`);
+    const dshEvent = DSH_EVENT[claudeName];
+    if (dshEvent === undefined) continue;
+    const listeners = listenersFor({ [claudeName]: [{ matcher: '.*', hooks: [{ command: 'true' }] }] });
+    assert.ok(listeners.has(dshEvent), `${claudeName} registers no listener on ${dshEvent}`);
+  }
+});
+
+test('PreModelSwitch is warned, because DSH gives plugins no point before a model change', async () => {
+  const { warnings } = await withWarnings(async () => listenersFor({
+    PreModelSwitch: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }],
+  }));
+  assert.match(warnings[0], /"PreModelSwitch" cannot run in DSH: DSH applies a model change before any plugin sees it/);
 });

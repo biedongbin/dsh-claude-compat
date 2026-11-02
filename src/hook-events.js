@@ -61,4 +61,5 @@ export const UNSUPPORTED_EVENTS = new Map([
   ['worktree-remove', 'DSH has no worktree removal event or hook point'],
   ['elicitation', 'the DSH MCP client does not support elicitation requests'],
   ['elicitation-result', 'the DSH MCP client does not support elicitation requests'],
+  ['pre-model-switch', 'DSH applies a model change before any plugin sees it, so a hook cannot stop the change'],
 ]);
