@@ -129,14 +129,30 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `skillSource` | `project-claude` | Source tag for project catalog entries |
 | `userSkillRank` | `700` | Provider rank for `~/.claude` skills (loses to DSH-native `600`) |
 | `userSkillSource` | `user-claude` | Source tag for `~/.claude` catalog entries |
-| `userClaudeDir` | `~/.claude` | User-level `.claude` directory (`~` expands to the home dir) |
+| `userClaudeDir` | unset | User-level `.claude` directory (`~` expands to the home dir). Unset means `CLAUDE_CONFIG_DIR`, then `~/.claude` |
 | `enablePlugins` | `true` | Surface skills/commands/agents from installed Claude Code plugins (`~/.claude/plugins`) |
 | `pluginSkillRank` | `750` | Provider rank for plugin content (the long tail — everything else wins) |
 | `pluginSkillSource` | `claude-plugin` | Source tag for plugin catalog entries |
-| `pluginsRoot` | `~/.claude/plugins` | Plugin-marketplace root (`installed_plugins.json` + `cache/`) |
+| `pluginsRoot` | unset | Plugin-marketplace root (`installed_plugins.json` + `cache/`). Unset means `CLAUDE_CODE_PLUGIN_CACHE_DIR`, then `<user dir>/plugins` |
 | `enablePluginMcp` | `false` | Mount plugin-declared MCP servers (opt-in; requires `enablePlugins` and `enableMcp`) |
 | `enablePluginManager` | `true` | Register the `/cc-plugin`, `/reload-cc-plugins`, `/reload-skills` management skills |
 | `pluginManagerRank` | `40` | Rank for the built-in management skills (top of the catalog) |
+
+### Claude Code environment variables
+
+The plugin reads the same variables Claude Code uses to move its default locations.
+An explicit config key above wins over a variable.
+A variable wins over the `~/.claude` default.
+A path variable must hold an absolute path.
+A relative value stops startup with an error that names the variable.
+
+| Variable | Effect |
+| --- | --- |
+| `CLAUDE_CONFIG_DIR` | Replaces `~/.claude`: settings, rules, skills, commands, agents, and session history. `.claude.json` then lives inside it |
+| `CLAUDE_CODE_PLUGIN_CACHE_DIR` | Replaces the plugins root (`~/.claude/plugins`) |
+| `CLAUDE_CODE_PLUGIN_SEED_DIR` | Extra read-only plugins roots, separated by `:` on Unix and `;` on Windows. The primary root wins a name collision |
+| `CLAUDE_CODE_PLUGIN_DIRS` | Plugin directories loaded for the session, same separators. A missing entry is skipped with a warning |
+| `CLAUDE_CODE_PROJECT_DIR_NAME` | Folder name under `projects/` that `/cc-resume` reads, in place of the name derived from the working directory |
 
 ## Notes
 
