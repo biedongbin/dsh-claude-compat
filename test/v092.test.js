@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerManagerCommands } from '../src/commands.js';
 import { apply } from '../src/index.js';
+import { withEnv } from './env-helper.js';
 
 function fakeCommandHost() {
   const defs = new Map();
@@ -95,10 +96,9 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
   writeFileSync(join(projDir, `${sid}.jsonl`),
     `${JSON.stringify({ type: 'user', message: { content: '帮我修登录 bug' }, timestamp: '2026-10-28T02:00:00.000Z', cwd: pickCwd })}\n`);
   const prevHome = process.env.HOME;
-  const prevConfigDir = process.env.CLAUDE_CONFIG_DIR;
   process.env.HOME = home;
-  delete process.env.CLAUDE_CONFIG_DIR; // the sandbox HOME must decide the path
   try {
+    await withEnv({}, async () => {
     const { ctx, defs } = fakeCommandHost();
     registerManagerCommands(ctx, {}, () => undefined);
     const steered = [];
@@ -122,9 +122,9 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
     });
     assert.equal(listing.kind, 'success');
     assert.match(listing.text, /1 Claude sessions/);
+    });
   } finally {
     process.env.HOME = prevHome;
-    if (prevConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = prevConfigDir;
   }
 });
 

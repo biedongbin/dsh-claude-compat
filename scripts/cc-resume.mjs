@@ -29,7 +29,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { claudeProjectsDir } from '../src/lib.js';
+import { claudeProjectsDir, validateClaudeLocationEnv } from '../src/lib.js';
 import { join, basename } from 'node:path';
 import { zstdFramesSync } from './zstd-compat.mjs';
 
@@ -268,6 +268,7 @@ function clipByWidth(s, maxCols) {
 const invokedDirectly = process.argv[1]?.endsWith('cc-resume.mjs') ?? false;
 if (invokedDirectly) {
 const [cmd, ...rest] = process.argv.slice(2);
+try { validateClaudeLocationEnv(); } catch (error) { console.error(error.message); process.exit(2); }
 const flag = (name) => {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : undefined;

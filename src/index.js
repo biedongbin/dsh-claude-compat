@@ -67,6 +67,7 @@ import {
   parseFrontmatter,
   readTextSafe,
   resolveUserClaudeDir,
+  validateClaudeLocationEnv,
   stringField,
 } from './lib.js';
 
@@ -140,6 +141,14 @@ Notes:
 - \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`;
 
 export function apply(ctx, config = {}) {
+  // A bad location variable disables the plugin with one clear message, not a
+  // stack trace at the first catalog read.
+  try {
+    validateClaudeLocationEnv();
+  } catch (error) {
+    console.error(`dsh-claude-compat: not activated. ${error.message}`);
+    return;
+  }
   // One-shot "found this useful? star it" nudge, surfaced exactly where the
   // value lands: the first profile activation of this process.
   try {
@@ -186,7 +195,7 @@ export function apply(ctx, config = {}) {
 // Opt-in: translate every installed plugin's MCP config and mount alongside
 // the project .mcp.json servers (see src/mcp.js mountMcpConfigs).
 async function mountPluginMcp(ctx, config) {
-  for (const plugin of readInstalledClaudePlugins(config.pluginsRoot)) {
+  for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
     if (raw === undefined) continue;
     let manifest;
@@ -243,7 +252,7 @@ class ClaudeCompatSkillProvider {
       candidates.push(this.reloadSkillDef('reload-skills',
         'Hot-reload the skill catalog (alias of /reload-cc-plugins).'));
       candidates.push(this.managerSkillCandidate('cc-resume',
-        'List and import Claude Code sessions into DSH: browse ~/.claude/projects history and resume any conversation.',
+        'List and import Claude Code sessions into DSH: browse the projects folder of the Claude config dir (default ~/.claude/projects) and resume any conversation.',
         'User wants to resume, list, or import a Claude Code conversation/session into DSH. Usage: /cc-resume list, /cc-resume import <sessionId>.',
         (await import('./cc-resume-skill.mjs')).CC_RESUME_SKILL_BODY));
       candidates.push(this.managerSkillCandidate('cc-export',
@@ -255,7 +264,7 @@ class ClaudeCompatSkillProvider {
       const pluginCandidates = await discoverPluginContent(
         this.config.pluginsRoot, this.name, this.config.pluginSkillSource ?? 'claude-plugin',
         this.config.pluginSkillRank ?? 750,
-        { enableAgents: this.config.enableAgents, ...this.aliasOptions });
+        { enableAgents: this.config.enableAgents, userClaudeDir: this.config.userClaudeDir, ...this.aliasOptions });
       candidates.push(...pluginCandidates);
     }
     return candidates;

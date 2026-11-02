@@ -11,12 +11,12 @@
 // opted in (mounting third-party MCP servers is a bigger trust step than
 // listing skills).
 
-import { existsSync, readFileSync as rfs } from 'node:fs';
+import { existsSync, readFileSync as rfs, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import {
   pathExists,
   readTextSafe,
-  parsePathList,
+  envPathList,
   resolveClaudePluginsRoot,
   parseFrontmatter,
   stringField,
@@ -27,48 +27,62 @@ import { resolveCandidateName, warnUnmapped } from './aliases.js';
 // Installed plugins from three places, earliest wins a key collision: the
 // primary plugins root, the read-only CLAUDE_CODE_PLUGIN_SEED_DIR roots, and
 // the CLAUDE_CODE_PLUGIN_DIRS plugin directories (each loaded as one plugin).
-export function readInstalledClaudePlugins(pluginsRoot) {
-  const byKey = new Map();
-  const roots = [
-    resolveClaudePluginsRoot(pluginsRoot),
-    ...parsePathList(process.env.CLAUDE_CODE_PLUGIN_SEED_DIR),
+export function readInstalledClaudePlugins(pluginsRoot, userDir) {
+  const primary = resolveClaudePluginsRoot(pluginsRoot, userDir);
+  const installed = [
+    ...readInstalledFile(primary, { missingIsFine: true }),
+    ...envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR').flatMap((root) => readInstalledFile(root)),
   ];
-  for (const root of roots) {
-    for (const plugin of readInstalledFile(root)) {
-      if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
-    }
-  }
-  for (const dir of parsePathList(process.env.CLAUDE_CODE_PLUGIN_DIRS)) {
-    const plugin = inlinePlugin(dir);
-    if (plugin !== undefined && !byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+  const inline = envPathList('CLAUDE_CODE_PLUGIN_DIRS').map(inlinePlugin).filter(Boolean);
+  const byKey = new Map();
+  for (const plugin of [...installed, ...inline]) {
+    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
   }
   return [...byKey.values()];
+}
+
+// Environment-supplied paths are read on every catalog read; warn once each.
+const warned = new Set();
+function warnOnce(message) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.warn(`dsh-claude-compat: ${message}`);
 }
 
 // One plugin directory loaded the way `--plugin-dir` loads it. The name comes
 // from the manifest, else the directory name.
 function inlinePlugin(dir) {
-  const installPath = resolve(dir);
-  if (!existsSync(installPath)) {
-    console.warn(`dsh-claude-compat: CLAUDE_CODE_PLUGIN_DIRS entry not found, skipped: ${dir}`);
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not a directory, skipped: ${dir}`);
     return undefined;
   }
-  let name = basename(installPath);
-  try {
-    const manifest = JSON.parse(claReadSync(join(installPath, '.claude-plugin', 'plugin.json')));
-    if (typeof manifest?.name === 'string' && manifest.name !== '') name = manifest.name;
-  } catch { /* manifest-less plugin: keep the directory name */ }
-  return { key: `${name}@inline`, name, marketplace: 'inline', installPath, version: 'inline' };
+  let name = basename(dir);
+  const manifestPath = join(dir, '.claude-plugin', 'plugin.json');
+  if (existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(claReadSync(manifestPath));
+      if (typeof manifest?.name === 'string' && manifest.name !== '') name = manifest.name;
+    } catch (error) {
+      warnOnce(`cannot read plugin manifest ${manifestPath}: ${error.message}. Using "${name}".`);
+    }
+  }
+  return { key: `${name}@inline`, name, marketplace: 'inline', installPath: dir, version: 'inline' };
 }
 
 // Parse <root>/installed_plugins.json → plugin records for scope==='user'
 // entries. Dedupe per key, keeping the last entry (Claude Code appends
-// reinstall records; last is freshest).
-function readInstalledFile(root) {
+// reinstall records; last is freshest). A missing file is normal for the
+// primary root only; any other failure is reported once.
+function readInstalledFile(root, { missingIsFine = false } = {}) {
   const manifestPath = join(root, 'installed_plugins.json');
   let parsed;
   try { parsed = JSON.parse(claReadSync(manifestPath)); }
-  catch { return []; }
+  catch (error) {
+    if (!(missingIsFine && error?.code === 'ENOENT')) {
+      warnOnce(`cannot read ${manifestPath}: ${error.message}`);
+    }
+    return [];
+  }
   if (typeof parsed !== 'object' || parsed === null) return [];
   const plugins = parsed.plugins;
   if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) return [];
@@ -98,9 +112,9 @@ function claReadSync(p) { return rfs(p, 'utf8'); }
 // Claude Code's discoverCommands drops commands whose only description is the
 // empty string; plugin marketplaces ship many such stubs, so this wrapper
 // re-surfaces them with the filename stem as the description.
-export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal } = {}) {
+export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal, userClaudeDir } = {}) {
   const out = [];
-  const plugins = readInstalledClaudePlugins(pluginsRoot);
+  const plugins = readInstalledClaudePlugins(pluginsRoot, userClaudeDir);
   const { discoverSkills, discoverCommands } = await import('./index.js');
   const { discoverAgents } = await import('./agents.js');
   const aliasOptions = { aliases, tagOriginal };

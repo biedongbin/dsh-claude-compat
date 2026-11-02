@@ -150,7 +150,7 @@ export function registerManagerCommands(ctx, config, getProvider) {
             // runPluginCommand owns its timeouts (claude CLI 120s, marketplace
             // ops 300s); abort merely stops the UI from awaiting.
             try {
-              const text = await runPluginCommand(String(rawInput ?? ''));
+              const text = await runPluginCommand(String(rawInput ?? ''), { config });
               return { kind: 'success', text: clip(text) };
             } catch (error) {
               return { kind: 'error', text: clip(error?.message ?? String(error)) };

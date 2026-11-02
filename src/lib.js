@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 
@@ -19,16 +19,29 @@ export const CLAUDE_COMPAT_SOURCE_KIND = 'plugin:dsh-claude-compat';
 
 // Claude Code copies env values as written and never expands `~`, so a
 // relative value would resolve against the launch directory. Fail fast instead.
-function envAbsolutePath(name) {
-  const value = process.env[name];
-  if (value === undefined || value === '') return undefined;
+function requireAbsolute(name, value) {
   if (!isAbsolute(value)) {
     throw new Error(`${name} must be an absolute path, got "${value}". Set it to a full path.`);
   }
   return value;
 }
 
+function envAbsolutePath(name) {
+  const value = process.env[name];
+  if (!value) return undefined;
+  return requireAbsolute(name, value);
+}
+
+// A PATH-style list (`:` on Unix, `;` on Windows). Blank entries are dropped
+// and every entry must be absolute.
+export function envPathList(name) {
+  const value = process.env[name];
+  if (!value) return [];
+  return value.split(delimiter).filter(Boolean).map((entry) => requireAbsolute(name, entry));
+}
+
 // Precedence: explicit plugin config, then CLAUDE_CONFIG_DIR, then ~/.claude.
+// An explicit relative value still resolves against the launch directory.
 export function resolveUserClaudeDir(dir) {
   if (dir === undefined || dir === null || dir === '') {
     return envAbsolutePath('CLAUDE_CONFIG_DIR') ?? join(homedir(), '.claude');
@@ -39,32 +52,35 @@ export function resolveUserClaudeDir(dir) {
 }
 
 // Precedence: explicit config, then CLAUDE_CODE_PLUGIN_CACHE_DIR (the plugins
-// root, not only the cache), then <config dir>/plugins.
-export function resolveClaudePluginsRoot(dir) {
+// root, not only the cache), then <user dir>/plugins. `userDir` is the explicit
+// userClaudeDir config value, so a configured user dir also moves the plugins.
+export function resolveClaudePluginsRoot(dir, userDir) {
   if (dir === undefined || dir === null || dir === '') {
-    return envAbsolutePath('CLAUDE_CODE_PLUGIN_CACHE_DIR') ?? join(resolveUserClaudeDir(), 'plugins');
+    return envAbsolutePath('CLAUDE_CODE_PLUGIN_CACHE_DIR') ?? join(resolveUserClaudeDir(userDir), 'plugins');
   }
   return resolveUserClaudeDir(dir);
 }
 
-// Claude Code keeps .claude.json inside CLAUDE_CONFIG_DIR when it is set.
-export function claudeJsonPath() {
-  const configDir = envAbsolutePath('CLAUDE_CONFIG_DIR');
-  return configDir === undefined ? join(homedir(), '.claude.json') : join(configDir, '.claude.json');
-}
-
 // Claude Code names a project folder after the working directory, unless
-// CLAUDE_CODE_PROJECT_DIR_NAME overrides the name.
+// CLAUDE_CODE_PROJECT_DIR_NAME overrides the name. The name is one path segment.
 export function claudeProjectsDir(cwd) {
   const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
-  const folder = name !== undefined && name !== '' ? name : cwd.replaceAll('/', '-');
-  return join(resolveUserClaudeDir(), 'projects', folder);
+  if (name && (name === '.' || name === '..' || basename(name) !== name)) {
+    throw new Error(
+      `CLAUDE_CODE_PROJECT_DIR_NAME must be one folder name, got "${name}". Remove any "/" or "..".`,
+    );
+  }
+  return join(resolveUserClaudeDir(), 'projects', name || cwd.replaceAll('/', '-'));
 }
 
-// Split a PATH-style list (`:` on Unix, `;` on Windows) and drop blank entries.
-export function parsePathList(value) {
-  if (value === undefined || value === '') return [];
-  return value.split(delimiter).filter((entry) => entry !== '');
+// Read every location variable once so a bad value fails at startup with one
+// clear message, not later inside a catalog read.
+export function validateClaudeLocationEnv() {
+  resolveUserClaudeDir();
+  resolveClaudePluginsRoot();
+  claudeProjectsDir(process.cwd());
+  envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR');
+  envPathList('CLAUDE_CODE_PLUGIN_DIRS');
 }
 
 // No marker on the whole ancestor chain → fall back to cwd, matching DSH's own
