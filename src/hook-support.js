@@ -1,0 +1,79 @@
+// dsh-claude-compat: helpers shared by the hook bridges (src/hook-bridge-*.js).
+
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
+
+/** Flatten content blocks to the text a hook payload carries. */
+export function blocksToText(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('');
+}
+
+/**
+ * Support object for one plugin activation.
+ * @param {object} ctx the DSH plugin context
+ * @returns {object} helpers: payload, contextMessage, inject, track, drain
+ */
+export function createSupport(ctx) {
+  const pending = new Set();
+
+  return {
+    ctx,
+
+    // The agent's current directory. The working-directory service is optional,
+    // so a deployment without it falls back to the session's start directory.
+    cwd(agent) {
+      const current = agent?.session === undefined ? undefined : ctx.workingDirectory?.get?.(agent.session);
+      return current ?? agent?.session?.header?.cwd ?? process.cwd();
+    },
+
+    /**
+     * Claude-shaped hook input: the common fields plus the event's own.
+     * `session_id` is the DSH session id. `transcript_path` stays empty because
+     * DSH exposes no transcript file path.
+     */
+    payload(claudeName, agent, fields = {}) {
+      return {
+        session_id: agent?.session?.header?.id ?? '',
+        transcript_path: '',
+        cwd: this.cwd(agent),
+        hook_event_name: claudeName,
+        ...fields,
+      };
+    },
+
+    contextMessage(text) {
+      return createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'hook-context' },
+      });
+    },
+
+    /** Messages for the `additionalContext` of an outcome. */
+    contextMessages(outcome) {
+      return outcome.contexts.map((text) => this.contextMessage(text));
+    },
+
+    /** Add the outcome's context to a running agent, so the model sees it on its next step. */
+    inject(agent, outcome) {
+      if (agent === undefined) return;
+      for (const message of this.contextMessages(outcome)) agent.inject(message);
+    },
+
+    /** Keep a background run alive until it settles, so disposal can wait for it. */
+    track(promise) {
+      const tracked = promise.catch((error) => {
+        console.warn(`dsh-claude-compat: hook run failed: ${error?.message ?? error}`);
+      }).finally(() => pending.delete(tracked));
+      pending.add(tracked);
+      return tracked;
+    },
+
+    drain() {
+      return Promise.allSettled([...pending]);
+    },
+  };
+}

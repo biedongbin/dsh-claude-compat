@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { Context } from '@deepseek-ai/cordis';
 import { SkillRegistry } from '@deepseek-ai/dsh-skill';
 import { translateMcpServers } from '../src/mcp.js';
-import { compileMatcher, mapPreHookOutput, mapPostHookOutput } from '../src/hooks.js';
+import { compileMatcher } from '../src/hooks.js';
 import { discoverAgents, renderAgentContent } from '../src/agents.js';
 import { apply, Config } from '../src/index.js';
 
@@ -88,56 +88,6 @@ test('compileMatcher: exact, alternation, wildcard, malformed', () => {
   const none = compileMatcher('[');
   assert.equal(none('x'), false, 'unparseable regex degrades to never-match');
   assert.equal(compileMatcher(undefined)('x'), false, 'non-string degrades to never-match');
-});
-
-// ─── hook decision mapping ───────────────────────────────────────────────────
-
-test('mapPreHookOutput: exit 2 denies, hookSpecificOutput overrides, other codes allow with warn', () => {
-  let warned = '';
-  assert.deepEqual(mapPreHookOutput(0, 'ok'), { kind: 'allow' });
-  assert.deepEqual(mapPreHookOutput(2, 'no you may not'),
-    { kind: 'deny', reason: 'no you may not' });
-  assert.deepEqual(mapPreHookOutput(2, ''),
-    { kind: 'deny', reason: 'blocked by hook' });
-
-  const denyJson = mapPreHookOutput(0, JSON.stringify({
-    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'denied via json' },
-  }));
-  assert.equal(denyJson.kind, 'deny');
-  assert.equal(denyJson.reason, 'denied via json');
-
-  const askJson = mapPreHookOutput(0, JSON.stringify({
-    hookSpecificOutput: { permissionDecision: 'ask', permissionDecisionReason: 'ask me' },
-  }));
-  assert.equal(askJson.kind, 'ask');
-
-  const other = mapPreHookOutput(3, 'boom', { warn: (m) => { warned = m; } });
-  assert.equal(other.kind, 'allow');
-  assert.match(warned, /code 3/);
-});
-
-test('mapPostHookOutput: exit 2 blocks with feedback, additionalContext becomes a user message, else accept', () => {
-  let warned = '';
-  const block = mapPostHookOutput(2, 'redo it');
-  assert.equal(block.kind, 'block');
-  assert.deepEqual(block.feedback, [{ type: 'text', text: 'redo it' }]);
-
-  const withCtx = mapPostHookOutput(0, JSON.stringify({ additionalContext: 'remember this fact' }));
-  assert.equal(withCtx.kind, 'accept');
-  assert.equal(withCtx.additionalContexts.length, 1);
-  assert.equal(withCtx.additionalContexts[0].source.kind, 'plugin:dsh-claude-compat');
-  assert.equal(withCtx.additionalContexts[0].source.plugin, undefined);
-  assert.equal(withCtx.additionalContexts[0].content[0].text, 'remember this fact');
-
-  const plain = mapPostHookOutput(0, '');
-  assert.deepEqual(plain, { kind: 'accept' });
-
-  const nonJson = mapPostHookOutput(0, 'just some output');
-  assert.deepEqual(nonJson, { kind: 'accept' });
-
-  const other = mapPostHookOutput(7, 'x', { warn: (m) => { warned = m; } });
-  assert.equal(other.kind, 'accept');
-  assert.match(warned, /code 7/);
 });
 
 // ─── agents discovery + dedupe ───────────────────────────────────────────────
