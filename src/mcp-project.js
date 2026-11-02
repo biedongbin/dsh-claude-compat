@@ -157,6 +157,7 @@ export async function mountSessionMcpServers(ctx, config) {
     if (!state) return;
     states.delete(agent);
     state.closed = true;
+    state.namespaceLease?.();state.namespaceLease=undefined;
     await state.scope.dispose();
   };
   const reconcile = agent => {
@@ -190,9 +191,12 @@ export async function mountSessionMcpServers(ctx, config) {
       state.servers = servers.map(server => ({ name: server.serverName, transport: server.transport }));
       state.warnings = [...discoveryWarnings, ...state.connectionWarnings];
       if (closed || state.closed || signature === state.signature) return;
+      state.namespaceLease?.();state.namespaceLease=undefined;
       for (const fiber of state.fibers) await fiber.dispose();
       state.fibers = [];
       state.connectionWarnings = [];
+      if(closed||state.closed)return;
+      if(config.nativeRealm===true)state.namespaceLease=ctx.get('platformProjectConfig').registerProjectMcp(agent,servers.map(server=>server.serverName));
       await Promise.all(servers.map(async server => {
         if (closed || state.closed) return;
         try {
