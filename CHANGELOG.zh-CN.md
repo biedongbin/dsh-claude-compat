@@ -9,6 +9,14 @@
 ### 新增
 - **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
 - **Hook 处理器字段。** 命令型 hook 支持 `args`（不经过 shell 直接执行）、`if`（权限规则，如 `Bash(git *)`，仅用于工具事件）、`timeout`（秒）、`async`（仅工具事件；不能改变决定）以及 `onFailure: "block"`。命令与参数中的 `${CLAUDE_PROJECT_DIR}` 会被展开，并设置到 hook 环境变量中。工具 hook 的 stdin 包含 `hook_event_name` 与 `cwd`。其他处理器类型（`http`、`prompt`、`agent`、`mcp_tool`）的条目会被跳过并给出警告。尚未支持的事件与处理器见 issue #2。
+- **33 个 Claude Code hook 事件中的 26 个。** 除 PreToolUse、PostToolUse 和 UserPromptSubmit 外，插件现在还运行 SessionStart（挂在真正的启动点 `agent/created`）、SessionEnd、PostToolUseFailure、PermissionRequest、PermissionDenied、PostToolBatch、TaskCreated、TaskCompleted、Stop、StopFailure、SubagentStart、SubagentStop、Notification、MessageDisplay、UserPromptExpansion、CwdChanged、PreCompact、PostCompact、PostModelSwitch、TeammateIdle、InstructionsLoaded、FileChanged 与 ConfigChange。README 的 Hooks 一节列出了每个事件对应的 DSH 扩展点。hooks 也会从 `.claude/settings.local.json` 加载。
+- **处理器类型 `http`、`mcp_tool`、`prompt` 与 `agent`。** `http` 以 JSON 提交输入，请求头只读取 `allowedEnvVars` 中列出的变量。`mcp_tool` 通过 DSH 工具服务调用 MCP 工具。`prompt` 向会话模型提一个问题。`agent` 启动 DSH 子 agent 并读取它的结构化回答。每种类型只在 Claude Code 允许的事件上运行。后台 hook 以退出码 2 结束时，`asyncRewake` 会引导 agent 继续。
+
+### 修复
+- **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则只报告一次。
+- **SessionStart hooks 从未运行。** 插件监听的 `agent/session-start` 在 DSH 中不存在。现在改用 `agent/created`，并按启动来源（`startup`、`resume`、`clear`、`compact`）过滤。
+- **工具 hooks 把工具调用 id 当作 `session_id` 发送。** 输入现在携带 DSH 会话 id；在子 agent 内携带主会话 id，并附带 `agent_id` 与 `agent_type`。
+- **会话与回合 hooks 会对子 agent 会话运行，规则或 hook 上下文被当作用户提示。** SessionStart、SessionEnd、UserPromptSubmit、Stop 等主会话 hooks 现在会跳过子 agent 会话。本插件自己注入的消息不再触发 UserPromptSubmit hooks。
 
 ### 变更
 - `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 为相对路径时，插件不再激活，并输出一行指明变量名的错误。启动时只检查有效配置实际用到的变量，因此显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
