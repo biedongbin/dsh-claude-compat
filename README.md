@@ -144,15 +144,16 @@ The plugin reads the same variables Claude Code uses to move its default locatio
 An explicit config key above wins over a variable.
 A variable wins over the `~/.claude` default.
 A path variable must hold an absolute path.
-A relative value stops startup with an error that names the variable.
+A relative value keeps the plugin from activating, and one error line names the variable.
+A relative value in a config key still resolves against the launch directory.
 
 | Variable | Effect |
 | --- | --- |
-| `CLAUDE_CONFIG_DIR` | Replaces `~/.claude`: settings, rules, skills, commands, agents, and session history. `.claude.json` then lives inside it |
+| `CLAUDE_CONFIG_DIR` | Replaces `~/.claude`: settings, rules, skills, commands, agents, and session history |
 | `CLAUDE_CODE_PLUGIN_CACHE_DIR` | Replaces the plugins root (`~/.claude/plugins`) |
 | `CLAUDE_CODE_PLUGIN_SEED_DIR` | Extra read-only plugins roots, separated by `:` on Unix and `;` on Windows. The primary root wins a name collision |
-| `CLAUDE_CODE_PLUGIN_DIRS` | Plugin directories loaded for the session, same separators. A missing entry is skipped with a warning |
-| `CLAUDE_CODE_PROJECT_DIR_NAME` | Folder name under `projects/` that `/cc-resume` reads, in place of the name derived from the working directory |
+| `CLAUDE_CODE_PLUGIN_DIRS` | Plugin directories loaded for the session, same separators. An entry that is not a directory is skipped with a warning |
+| `CLAUDE_CODE_PROJECT_DIR_NAME` | One folder name under `projects/` that `/cc-resume` reads, in place of the name derived from the working directory |
 
 ## Notes
 
