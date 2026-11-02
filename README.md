@@ -188,8 +188,34 @@ A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of n
 | FileChanged | polling of the files that the matcher names | `watchPaths` from SessionStart, CwdChanged and FileChanged are watched too. |
 | ConfigChange | polling of the settings files, and `skills/change` | Observe only. Hooks load at startup and are never reloaded, so the plugin logs that a changed settings file needs a restart. |
 
-These events cannot run in DSH, and the plugin warns when a settings file uses one:
-`Setup` (no init flags), `DirectoryAdded` (only the `--add-dir` start flag), `WorktreeCreate` and `WorktreeRemove` (service methods with no hook point), `Elicitation` and `ElicitationResult` (the DSH MCP client has no elicitation) and `PreModelSwitch` (DSH applies a model change before a plugin can see it).
+### Gaps: what cannot run in DSH
+
+These seven events cannot run, because DSH has no extension point for them. The plugin warns, with the reason, when a settings file uses one.
+
+| Event | Why it cannot run |
+|---|---|
+| `Setup` | DSH has no init or maintenance start flags. |
+| `DirectoryAdded` | DSH reads `--add-dir` only at start, and emits no event. |
+| `WorktreeCreate`, `WorktreeRemove` | The worktree work is a service method. No hook point wraps it, so a hook cannot replace it. |
+| `Elicitation`, `ElicitationResult` | The DSH MCP client does not support elicitation. |
+| `PreModelSwitch` | DSH applies a model change before a plugin sees it, so a hook cannot block it. `PostModelSwitch` runs. |
+
+These events run, but with less power than in Claude Code:
+
+| Behavior | Difference |
+|---|---|
+| `PreCompact`, `PostCompact`, `CwdChanged`, `MessageDisplay`, `UserPromptExpansion`, `ConfigChange` | Observe only. DSH reports them after the fact, so a hook cannot block or change them. |
+| `PreToolUse` and `PermissionRequest` `updatedInput` | Ignored with a warning. DSH cannot rewrite a tool call. |
+| `MessageDisplay` `displayContent` | Ignored with a warning. DSH cannot change displayed text. |
+| `SubagentStop` | A block cannot keep the subagent running. |
+| `SubagentStart` and `SubagentStop` `agent_type` | Always `general-purpose`. DSH has no named subagent types. |
+| `StopFailure` | Model-request errors only. |
+| `Notification` | `permission_prompt`, `agent_needs_input` and `idle_prompt` only. |
+| `PostModelSwitch` `source` | Always `command`. |
+| `InstructionsLoaded` | `.claude/rules` files only, with `load_reason` `session_start`. The plugin does not load other instruction files, so it cannot report them. |
+| `transcript_path` | Always empty, because DSH has no transcript file. |
+| Settings reload | Hooks load at startup. A changed settings file is logged and needs a restart. |
+| `agent` handler | DSH cannot limit the subagent to read-only tools. No hook runs inside it. |
 
 Handler details:
 

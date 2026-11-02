@@ -186,8 +186,34 @@ matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名
 | FileChanged | 轮询 matcher 指定的文件 | SessionStart、CwdChanged 与 FileChanged 返回的 `watchPaths` 也会被监视。 |
 | ConfigChange | 轮询 settings 文件，以及 `skills/change` | 仅观察。hooks 在启动时加载且从不重新加载，所以 settings 文件变化时插件只记录日志，提示需要重启。 |
 
-以下事件无法在 DSH 中运行，settings 文件用到时插件会给出警告：
-`Setup`（没有 init 启动参数）、`DirectoryAdded`（只有 `--add-dir` 启动参数）、`WorktreeCreate` 与 `WorktreeRemove`（只有服务方法，没有 hook 点）、`Elicitation` 与 `ElicitationResult`（DSH 的 MCP 客户端不支持 elicitation）、`PreModelSwitch`（DSH 在插件看到之前就已应用模型切换）。
+### 缺口：DSH 中无法实现的部分
+
+以下 7 个事件无法运行，因为 DSH 没有对应的扩展点。settings 文件用到它们时，插件会给出警告并说明原因。
+
+| 事件 | 无法运行的原因 |
+|---|---|
+| `Setup` | DSH 没有 init 或维护类启动参数。 |
+| `DirectoryAdded` | DSH 只在启动时读取 `--add-dir`，不发出事件。 |
+| `WorktreeCreate`、`WorktreeRemove` | worktree 操作是服务方法，没有 hook 点包裹它，所以 hook 无法替换它。 |
+| `Elicitation`、`ElicitationResult` | DSH 的 MCP 客户端不支持 elicitation。 |
+| `PreModelSwitch` | DSH 在插件看到之前就已应用模型切换，hook 无法阻止。`PostModelSwitch` 可以运行。 |
+
+以下事件可以运行，但能力比 Claude Code 弱：
+
+| 行为 | 差异 |
+|---|---|
+| `PreCompact`、`PostCompact`、`CwdChanged`、`MessageDisplay`、`UserPromptExpansion`、`ConfigChange` | 仅观察。DSH 事后才通知，hook 无法阻止或修改。 |
+| `PreToolUse` 与 `PermissionRequest` 的 `updatedInput` | 被忽略并给出警告。DSH 无法改写工具调用。 |
+| `MessageDisplay` 的 `displayContent` | 被忽略并给出警告。DSH 无法修改显示的文本。 |
+| `SubagentStop` | 拦截不能让子 agent 继续运行。 |
+| `SubagentStart` 与 `SubagentStop` 的 `agent_type` | 固定为 `general-purpose`。DSH 没有命名的子 agent 类型。 |
+| `StopFailure` | 仅模型请求错误。 |
+| `Notification` | 仅 `permission_prompt`、`agent_needs_input` 和 `idle_prompt`。 |
+| `PostModelSwitch` 的 `source` | 固定为 `command`。 |
+| `InstructionsLoaded` | 仅 `.claude/rules` 文件，`load_reason` 为 `session_start`。插件不加载其他指令文件，因此无法上报。 |
+| `transcript_path` | 始终为空，因为 DSH 没有 transcript 文件。 |
+| 重新加载 settings | hooks 在启动时加载。settings 文件变化只记录日志，需要重启。 |
+| `agent` 处理器 | DSH 无法把子 agent 限制为只读工具。该子 agent 内不运行任何 hook。 |
 
 处理器细节：
 
