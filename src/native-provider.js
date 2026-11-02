@@ -6,6 +6,7 @@ import {posix,win32 as windows} from 'node:path';
 const absent=error=>['ENOENT','ENOTDIR','FS_NOT_FOUND'].includes(error?.code);
 const legal=name=>typeof name==='string'&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name);
 const tools=value=>Array.isArray(value)?value.map(String):typeof value==='string'?value.split(',').map(x=>x.trim()).filter(Boolean):[];
+const prose=value=>typeof value==='string'?value.trim()||undefined:Array.isArray(value)?value.filter(item=>typeof item==='string').map(item=>item.trim()).filter(Boolean).join('; ')||undefined:undefined;
 
 export class RealmReader {
   constructor(fs,signal){this.fs=fs;this.signal=signal;}
@@ -23,11 +24,14 @@ function definition(path,raw,fallback,kind,rank,pluginRoot){
   const{data,body}=frontmatter(raw),name=legal(data.name)?data.name:fallback;
   if(!legal(name))throw new Error(`Claude source has no native skill name: ${path}`);
   const sourceTools=tools(data['allowed-tools']??data.tools);
-  return{name,description:String(data.description??body.split(/\r?\n/).find(line=>line.trim())??name),whenToUse:data['when-to-use'],
+  const whenToUse=prose(data.whenToUse)??prose(data.when_to_use)??prose(data['when-to-use'])??prose(data.triggers);
+  const argumentHint=prose(data['argument-hint'])??prose(data.argumentHint)??prose(data.argument_hint);
+  const description=String(data.description??body.split(/\r?\n/).find(line=>line.trim())??name)+(argumentHint?` Arguments: ${argumentHint}`:'');
+  return{name,description,...(whenToUse?{whenToUse}:{}),
     invocation:{modelInvocable:data['disable-model-invocation']!==true,userInvocable:data['user-invocable']!==false},provider:'claude-native',source:rank===50?'project-claude':rank===750?'claude-plugin':'user-claude',rank,
     locator:{path,directory:api(path).dirname(path),kind,pluginRoot},resourceBase:{kind:'directory',path:api(path).dirname(path)},path,
     metadata:{claude:{kind,sourceFile:path,digest:createHash('sha256').update(raw).digest('hex'),...(pluginRoot?{pluginRoot}:{}),
-      ...Object.fromEntries(['context','agent','model','effort','permissionMode','hooks'].filter(key=>data[key]!==undefined).map(key=>[key,data[key]])),...(sourceTools.length?{tools:sourceTools}:{}),rawFrontmatter:data}},content:body};
+      ...Object.fromEntries(['context','agent','model','effort','permissionMode','hooks'].filter(key=>data[key]!==undefined).map(key=>[key,data[key]])),...(argumentHint?{argumentHint}:{}),...(Object.hasOwn(data,'allowed-tools')||Object.hasOwn(data,'tools')?{tools:sourceTools}:{}),rawFrontmatter:data}},content:body};
 }
 
 /** Registered once in the same preset layer as skill-filesystem; reads with explicit Agent scope. */

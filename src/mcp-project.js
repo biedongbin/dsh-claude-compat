@@ -160,18 +160,22 @@ export async function mountSessionMcpServers(ctx, config) {
     state.namespaceLease?.();state.namespaceLease=undefined;
     await state.scope.dispose();
   };
-  const reconcile = agent => {
+  const reconcile = async agent => {
     if (closed || !agent.session.header.cwd) return Promise.resolve();
     let state = states.get(agent);
     if (!state) {
       state = { scope: createScope(config.nativeRealm === true ? agent.ctx : ctx, agent), fibers: [], servers: [], warnings: [], connectionWarnings: [], lastCheck: undefined, signature: '', pending: undefined, closed: false };
       states.set(agent, state);
     }
-    if (state.pending) return state.pending;
-    state.pending = (async () => {
+    const realm=config.nativeRealm===true?await ctx.get('platformProjectConfig').resolve(agent,undefined,{actorMode:'execution'}):undefined;
+    const actorSignature=realm?JSON.stringify([realm.actorId,realm.executorId??'host',realm.userConfigRoot??null,realm.cwd]):'legacy';
+    if(state.pending&&state.pendingActor===actorSignature)return state.pending;
+    const previous=state.pending;
+    let pending;
+    pending=(previous??Promise.resolve()).catch(()=>{}).then(async () => {
+      if(closed||state.closed)return;
       const discoveryWarnings = [];
       const report = message => { discoveryWarnings.push(message); warn(message); };
-      const realm = config.nativeRealm === true ? await ctx.get('platformProjectConfig').resolve(agent) : undefined;
       const projectCredential = realm ? name => ctx.get('platformProjectConfig').resolveCredential(agent, name) : credential;
       const localProjectFiles=realm?await ctx.get('platformProjectConfig').localProjectFiles(agent,['.dsh/mcp.json','.mcp.json','.codex/config.toml','.agents/mcp.yaml']):undefined;
       const discovered = await discoverProjectMcp(realm?.checkoutRoot ?? agent.session.header.cwd, config, {
@@ -187,7 +191,7 @@ export async function mountSessionMcpServers(ctx, config) {
         }
         servers.push(server);
       }
-      const signature = createHash('sha256').update(JSON.stringify(servers)).digest('hex');
+      const signature = createHash('sha256').update(JSON.stringify([actorSignature,servers])).digest('hex');
       state.servers = servers.map(server => ({ name: server.serverName, transport: server.transport }));
       state.warnings = [...discoveryWarnings, ...state.connectionWarnings];
       if (closed || state.closed || signature === state.signature) return;
@@ -213,16 +217,30 @@ export async function mountSessionMcpServers(ctx, config) {
         }
       }));
       if (!state.closed) {
+        state.actorId=realm?.actorId;
         state.signature = signature;
         state.lastCheck = new Date().toISOString();
         state.warnings = [...discoveryWarnings, ...state.connectionWarnings];
       }
-    })().finally(() => { state.pending = undefined; });
-    return state.pending;
+    }).finally(() => {if(state.pending===pending){state.pending=undefined;state.pendingActor=undefined;}});
+    state.pending=pending;state.pendingActor=actorSignature;
+    return pending;
   };
   ctx.on('agent/disposed', ({ agent }) => { void dispose(agent).catch(() => warn('project MCP disposal failed')); });
+  if(config.nativeRealm===true)ctx.on('agent/pre-step',async({agent,messages},next)=>{
+    const decision=await next();if(decision.kind==='reject')return decision;
+    await ctx.get('platformProjectConfig').withExecutionActor(agent,()=>reconcile(agent),{messages});
+    return decision;
+  });
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
-    if (context.agent) await reconcile(context.agent);
+    if (context.agent) {
+      if(config.nativeRealm===true) {
+        const boundary=ctx.get('sessionProjections')?.stateOf(context.agent.session,'turnBoundary');
+        if(!boundary)throw new Error('Native project MCP requires the native turn-boundary projection');
+        if(boundary.openTurnStartSeq===null)return next();
+      }
+      await reconcile(context.agent);
+    }
     return next();
   }, { prepend: true });
   ctx.inject(['commands'], inner => {
@@ -231,7 +249,7 @@ export async function mountSessionMcpServers(ctx, config) {
       description: 'Show project MCP servers and registered tools for this chat',
       handler: async ({ agent }) => {
         if (!agent) return { kind: 'error', text: 'Open a project chat to inspect its MCP connections.' };
-        await reconcile(agent);
+        if(config.nativeRealm!==true)await reconcile(agent);
         const state = states.get(agent);
         const tools = (ctx.get('agentPresets')?.serviceFor(agent,'tools') ?? agent.ctx.get('tools'))?.schemas(agent) ?? [];
         const rows = (state?.servers ?? []).map(server => {
@@ -241,8 +259,9 @@ export async function mountSessionMcpServers(ctx, config) {
         return { kind: 'success', text: [
           `Project MCP — ${agent.session.header.cwd}`,
           `Last connection discovery: ${state?.lastCheck ?? 'not completed'}`,
+          ...(state?.pending?['The admitted execution owner configuration is being applied.']:[]),
           'Counts show registered tools; the native client does not expose continuous connection status.',
-          ...rows.length > 0 ? rows : ['No project MCP servers are available.'],
+          ...rows.length > 0 ? rows : [config.nativeRealm===true&&!state?.lastCheck?'Pending the first admitted prompt. This view does not connect or remount servers.':'No configured MCP tools are currently registered.'],
           ...state?.warnings ?? [],
         ].join('\n') };
       },
