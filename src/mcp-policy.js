@@ -45,6 +45,18 @@ function normalizeHost(host) {
   }
 }
 
+// A host with `*` is a wildcard and is not parsed. Any other host must parse, so a
+// pattern that cannot match any real host is reported, not left to match nothing.
+function hostParses(host) {
+  if (host.includes('*')) return true;
+  try {
+    new URL(`http://${host}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Split `scheme://host[:port][/path]` into its parts. The fragment is dropped,
 // because a browser never sends it to the server. Returns undefined on a bad shape.
 function parseUrlPattern(pattern) {
@@ -123,32 +135,19 @@ function entryProblem(entry) {
       ? undefined : 'serverName must be a non-empty string';
   }
   if (keys[0] === 'serverUrl') {
-    return typeof entry.serverUrl === 'string' && parseUrlPattern(entry.serverUrl) !== undefined
-      ? undefined : 'serverUrl is not a URL pattern';
+    if (typeof entry.serverUrl !== 'string') return 'serverUrl must be a string';
+    const parsed = parseUrlPattern(entry.serverUrl);
+    if (parsed === undefined) return 'serverUrl is not a URL pattern';
+    return hostParses(parsed.host) ? undefined : 'serverUrl has a host that is not valid';
   }
   const command = entry.serverCommand;
   const ok = Array.isArray(command) && command.length > 0 && command.every((part) => typeof part === 'string');
   return ok ? undefined : 'serverCommand must be a non-empty list of strings';
 }
 
-// Keep the well-formed entries of one list. Warn on each malformed one.
-function validEntries(list, where, warns) {
-  if (list === undefined) return [];
-  if (!Array.isArray(list)) {
-    warns.push(`${where} must be a list. It is treated as an empty list.`);
-    return [];
-  }
-  return list.flatMap((entry, index) => {
-    const problem = entryProblem(entry);
-    if (problem === undefined) return [entry];
-    warns.push(`${where}[${index}]: ${problem}. The entry is ignored.`);
-    return [];
-  });
-}
-
 // Expand ${VAR} in a policy entry. Policy entries expand from the process
 // environment. Claude Code pins that environment, so a settings file cannot change
-// what an entry means. An unset variable keeps its literal text, and a warning names it.
+// what an entry means. An unset variable keeps its literal text, and `onUnset` reports it.
 function expandEntry(entry, vars, onUnset) {
   if ('serverUrl' in entry) return { serverUrl: expandVars(entry.serverUrl, vars, onUnset) };
   if ('serverCommand' in entry) {
@@ -157,13 +156,30 @@ function expandEntry(entry, vars, onUnset) {
   return entry;
 }
 
+// Keep the well-formed entries of one list, expanded. Each problem is reported with
+// the list name and the position, so the reader can find the entry.
+function validEntries(list, where, warns, vars) {
+  if (list === undefined) return [];
+  if (!Array.isArray(list)) {
+    warns.push(`${where} must be a list. It is treated as an empty list.`);
+    return [];
+  }
+  const onUnset = (name) => warns.push(`${where}: \${${name}} is not set, so the entry keeps the literal text`);
+  return list.flatMap((entry, index) => {
+    const problem = entryProblem(entry);
+    if (problem === undefined) return [expandEntry(entry, vars, onUnset)];
+    warns.push(`${where}[${index}]: ${problem}. The entry is ignored.`);
+    return [];
+  });
+}
+
 // Build the merged policy from the settings documents. `allowed` is undefined when
-// no allowlist is set. `failClosed` is true when a managed policy file is malformed,
-// because then the lock and the lists are unknown and every server must stay off.
+// no allowlist is set. `failClosed` is true when a managed policy is malformed, or
+// names a variable that is not set. Then the lock and the lists are not what the
+// organization wrote, so every server must stay off.
 export function buildPolicy(docs, vars) {
   const warns = [];
   const managedWarns = [];
-  const onUnset = (name) => warns.push(`policy: \${${name}} is not set, so the entry keeps the literal text`);
   const sources = SCOPES.map(([key, label]) => ({ label, settings: docValue(docs[key]) }));
   const managed = sources[0].settings;
   const onlyValue = managed.allowManagedMcpServersOnly;
@@ -174,11 +190,11 @@ export function buildPolicy(docs, vars) {
   const sinkFor = (source) => (source === sources[0] ? managedWarns : warns);
   const allowLists = allowSources
     .filter((s) => s.settings.allowedMcpServers !== undefined)
-    .map((s) => validEntries(s.settings.allowedMcpServers, `${s.label} allowedMcpServers`, sinkFor(s)));
-  const denied = sources.flatMap((s) => validEntries(s.settings.deniedMcpServers, `${s.label} deniedMcpServers`, sinkFor(s)));
+    .map((s) => validEntries(s.settings.allowedMcpServers, `${s.label} allowedMcpServers`, sinkFor(s), vars));
+  const denied = sources.flatMap((s) => validEntries(s.settings.deniedMcpServers, `${s.label} deniedMcpServers`, sinkFor(s), vars));
   return {
-    allowed: allowLists.length > 0 ? allowLists.flat().map((e) => expandEntry(e, vars, onUnset)) : undefined,
-    denied: denied.map((e) => expandEntry(e, vars, onUnset)),
+    allowed: allowLists.length > 0 ? allowLists.flat() : undefined,
+    denied,
     warns: [...warns, ...managedWarns],
     failClosed: managedWarns.length > 0,
   };

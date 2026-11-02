@@ -45,7 +45,7 @@
 // next session.
 
 import { readFileSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
@@ -198,23 +198,26 @@ export function apply(ctx, config = {}) {
 async function mountMcp(ctx, config) {
   const loaded = await loadMcpServers(config);
   const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
-  const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : { servers: [], labels: {} };
+  const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : { servers: [], names: [] };
   const extra = extraServers(loaded, plugin);
   loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
   await mountMcpConfigs(ctx, [...loaded.servers, ...extra]);
 }
 
 // Opt-in: translate every installed plugin's MCP config (see src/mcp.js). A
-// manifest that is not valid JSON, or that exists but cannot be read, is reported.
-// Returns { servers, labels }, the labels map each sanitized name to the name written.
+// manifest that is missing is skipped. One that cannot be read, or is not valid
+// JSON, is reported with the reason. Returns { servers, names }, where names[i]
+// is the name the user wrote for servers[i].
 async function pluginMcpServers(config, warns) {
   const servers = [];
-  const labels = {};
+  const names = [];
   for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const manifestPath = join(plugin.installPath, '.claude-plugin', 'plugin.json');
-    const raw = await readTextSafe(manifestPath);
-    if (raw === undefined) {
-      if (await pathExistsSafe(manifestPath)) warns.push(`plugin ${plugin.key}: plugin.json cannot be read, its MCP servers are skipped`);
+    let raw;
+    try { raw = await readFile(manifestPath, 'utf8'); } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        warns.push(`plugin ${plugin.key}: plugin.json cannot be read (${error?.code ?? error?.message}), its MCP servers are skipped`);
+      }
       continue;
     }
     let manifest;
@@ -227,9 +230,9 @@ async function pluginMcpServers(config, warns) {
     });
     warns.push(...translated.warns.map((w) => `plugin ${plugin.key}: ${w}`));
     servers.push(...translated.servers);
-    Object.assign(labels, translated.labels ?? {});
+    names.push(...(translated.names ?? []));
   }
-  return { servers, labels };
+  return { servers, names };
 }
 
 // ─── skill provider ──────────────────────────────────────────────────────────

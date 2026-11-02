@@ -245,7 +245,7 @@ Failures fail closed where the policy is at stake:
 
 - An unreadable `managed-settings.json` keeps every MCP server off.
 - An unreadable `managed-mcp.json` keeps the user, project and local servers off. `managedMcpServers` still loads.
-- A managed policy that is malformed keeps every MCP server off. That covers a policy list that is not a list, a malformed entry in it, and an `allowManagedMcpServersOnly` that is not a boolean.
+- A managed policy that is malformed keeps every MCP server off. That covers a policy list that is not a list, a malformed entry in it (including a host that does not parse), a variable that is not set, and an `allowManagedMcpServersOnly` that is not a boolean.
 - An unreadable user, project or local file is reported with what it stops. Its entries are not read.
 
 Every warning names the file or entry, and says what stays off.
@@ -256,7 +256,7 @@ Policy comes from the settings files:
 - `allowedMcpServers` allows only the matching servers. The lists merge from every settings file, unless managed settings set `allowManagedMcpServersOnly`. Servers from `managedMcpServers` and `managed-mcp.json` skip the allowlist.
 - A malformed policy entry in a user, project or local settings file is ignored with a warning. In managed settings it keeps every MCP server off. A policy list that is not a list allows nothing (for `allowedMcpServers`) or denies nothing (for `deniedMcpServers`), with a warning.
 - A URL pattern with no port covers the default port only (443 for `https`), as Claude Code documents. A pattern with `*` in the host, or `*` as the port, covers every port. A `serverCommand` entry compares the command and its arguments. It does not compare `env` (as Claude Code documents), and it does not compare `cwd`.
-- A policy entry that names a variable which is not set keeps the literal text, and a warning names the variable.
+- A policy entry that names a variable which is not set keeps the literal text, and a warning names the variable and the entry. In managed settings, that entry makes the whole managed policy fail closed.
 - `disabledMcpjsonServers` in any settings file turns off project servers by name.
 - `disabledMcpServers` under this project in `.claude.json` turns off user and managed servers by name.
 

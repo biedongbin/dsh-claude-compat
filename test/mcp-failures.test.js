@@ -200,7 +200,7 @@ test('extraServers drops a denied plugin server and a plugin URL that a loaded s
     { serverName: 'dup', url: 'https://m.example/mcp' },
     { serverName: 'ok', url: 'https://p.example/mcp' },
   ];
-  assert.deepEqual(extraServers(loaded, { servers: plugin, labels: {} }).map((s) => s.serverName), ['ok']);
+  assert.deepEqual(extraServers(loaded, { servers: plugin, names: [] }).map((s) => s.serverName), ['ok']);
   assert.equal(loaded.warns.length, 2);
 });
 
@@ -257,7 +257,7 @@ test('a headersHelper that is not a string skips the server, instead of mounting
 test('a plugin deny rule matches the name the user wrote, not the sanitized one', () => {
   const warns = [];
   const policy = { allowed: undefined, denied: [{ serverName: 'corp.tool' }] };
-  const kept = applyPolicy([{ serverName: 'corp_tool', url: 'https://p.example/mcp' }], policy, warns, { corp_tool: 'corp.tool' });
+  const kept = applyPolicy([{ serverName: 'corp_tool', url: 'https://p.example/mcp' }], policy, warns, ['corp.tool']);
   assert.deepEqual(kept, []);
   assert.match(warns.join('\n'), /corp\.tool: denied by policy, skipped/);
 });
@@ -275,4 +275,45 @@ test('a host written with non-ASCII letters matches its ASCII form, as URL() wri
 test('a deny pattern with no port covers the default port only, as Claude Code documents', () => {
   assert.equal(urlMatches('https://evil.example', 'https://evil.example:8443/x'), false);
   assert.equal(urlMatches('https://evil.example', 'https://evil.example/x'), true);
+});
+
+test('two plugin servers that sanitize to one name: the denied one is skipped, and the other keeps its own name', () => {
+  const warns = [];
+  const policy = { allowed: undefined, denied: [{ serverName: 'a.b' }] };
+  const kept = applyPolicy(
+    [{ serverName: 'a_b', url: 'https://one.example/mcp' }, { serverName: 'a_b', url: 'https://two.example/mcp' }],
+    policy, warns, ['a.b', 'a_b'],
+  );
+  assert.deepEqual(kept.map((s) => s.url), ['https://two.example/mcp']);
+  assert.match(warns.join('\n'), /a\.b: denied by policy, skipped/);
+});
+
+test('a managed deny host that does not parse makes the managed policy fail closed', () => {
+  const docs = { managedSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://exa mple.com/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, true);
+  assert.match(policy.warns.join('\n'), /host that is not valid/);
+});
+
+test('a managed deny that names an unset variable makes the managed policy fail closed', () => {
+  const docs = { managedSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_UNSET_HOST}/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, true);
+  assert.match(policy.warns.join('\n'), /\$\{DCC_UNSET_HOST\} is not set/);
+});
+
+test('an unset variable in a user deny is reported, and does not fail the managed policy closed', () => {
+  const docs = { userSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_UNSET_HOST}/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, false);
+  assert.match(policy.warns.join('\n'), /user settings deniedMcpServers: \$\{DCC_UNSET_HOST\}/);
+});
+
+test('a disable list element that is not a server name is reported with its position', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { keep: stdio('k') } });
+  write(join(fx.project, '.claude', 'settings.local.json'), { disabledMcpjsonServers: [{ name: 'keep' }] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['keep']);
+  assert.match(result.warns.join('\n'), /disabledMcpjsonServers\[0\] must be a server name/);
 });

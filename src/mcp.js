@@ -163,15 +163,15 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
   let parsed;
   try { parsed = JSON.parse(rawJson); }
   catch {
-    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`], labels: {} };
+    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`], names: [] };
   }
-  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'], labels: {} };
-  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'], labels: {} };
+  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'], names: [] };
+  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'], names: [] };
   const out = [];
   const warns = [];
-  // Plugin servers are named after their sanitized name, so the policy needs the
-  // name the user wrote. Map the one to the other here.
-  const labels = {};
+  // `names[i]` is the name the user wrote for `servers[i]`. The sanitized name can
+  // collide, so the position is the key, not the name.
+  const names = [];
   for (const [name, entry] of Object.entries(parsed.mcpServers)) {
     if (!isObject(entry)) {
       warns.push(`${name}: malformed entry, skipped`);
@@ -185,9 +185,9 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
       continue;
     }
     out.push(translated.server);
-    labels[translated.server.serverName] = name;
+    names.push(name);
   }
-  return { servers: out, warns, labels };
+  return { servers: out, warns, names };
 }
 
 // Run a headersHelper and parse its JSON object of header values. Errors are
@@ -277,11 +277,11 @@ export async function loadMcpServers(config, { cwd = process.cwd(), managedDir }
   return { servers: state.out.servers, exclusive: selected.exclusive, warns: state.out.warns, policy };
 }
 
-// Check plugin servers against the policy, by the name the user wrote (`labels`
-// maps each sanitized name to it), and by URL, command and arguments.
-export function applyPolicy(servers, policy, warns, labels = {}) {
-  return servers.filter((server) => {
-    const label = Object.hasOwn(labels, server.serverName) ? labels[server.serverName] : server.serverName;
+// Check plugin servers against the policy, by the name the user wrote (`names[i]`
+// for `servers[i]`), and by URL, command and arguments.
+export function applyPolicy(servers, policy, warns, names = []) {
+  return servers.filter((server, index) => {
+    const label = names[index] ?? server.serverName;
     const view = { label, url: server.url, command: server.command, args: server.args };
     const reason = policyVerdict(view, policy);
     if (reason === undefined) return true;
@@ -292,9 +292,9 @@ export function applyPolicy(servers, policy, warns, labels = {}) {
 
 // The plugin servers that may mount next to the loaded ones. They must pass the
 // policy, and their URL must not already be in use by a loaded server. `plugin`
-// is the result of translateMcpServers: { servers, labels }.
+// is { servers, names }, as translateMcpServers gives it.
 export function extraServers(loaded, plugin) {
-  const allowed = applyPolicy(plugin.servers, loaded.policy, loaded.warns, plugin.labels);
+  const allowed = applyPolicy(plugin.servers, loaded.policy, loaded.warns, plugin.names);
   return withoutDuplicateUrls(loaded.servers, allowed, loaded.warns);
 }
 

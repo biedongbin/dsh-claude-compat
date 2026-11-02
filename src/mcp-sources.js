@@ -78,12 +78,19 @@ function pushScope(entries, scope, map, warns) {
   for (const [name, raw] of Object.entries(map)) entries.push({ name, scope, raw });
 }
 
-// A disable list must be a list. A value that is not one is reported, not ignored.
+// A disable list must be a list of server names. A value that is not one is
+// reported, not ignored, and so is each element that is not a name.
 function listOf(value, where, warns) {
   if (value === undefined) return [];
-  if (Array.isArray(value)) return value;
-  warns.push(`${where} must be a list. It is ignored.`);
-  return [];
+  if (!Array.isArray(value)) {
+    warns.push(`${where} must be a list. It is ignored.`);
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (typeof item === 'string') return [item];
+    warns.push(`${where}[${index}] must be a server name. It is ignored.`);
+    return [];
+  });
 }
 
 // The names a settings list turns off, read from every settings file.
