@@ -5,6 +5,7 @@
 // with its start source (startup, resume, clear, compact).
 
 import { blocksToText } from './hook-support.js';
+import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 
 // Claude Code lowers the default timeout of these events (docs, "Common handler fields").
 const PROMPT_DEFAULT_MS = 30_000;
@@ -34,10 +35,12 @@ function onAgentDisposed(engine, support, { agent }) {
 }
 
 // A step that carries user messages is a prompt. A blocking hook rejects the
-// step. The hook's context follows the user's messages.
+// step. The hook's context follows the user's messages. Context that this plugin
+// injected itself, such as hook context or a Stop hook steer, is not a prompt.
 async function onPreStep(engine, support, { agent, messages }, next) {
-  if (messages.length === 0) return next();
-  const prompt = blocksToText(messages.flatMap((message) => message.content));
+  const typed = messages.filter((message) => message.source?.kind !== CLAUDE_COMPAT_SOURCE_KIND);
+  if (typed.length === 0) return next();
+  const prompt = blocksToText(typed.flatMap((message) => message.content));
   const outcome = await engine.fire('user-prompt-submit', 'UserPromptSubmit', {
     defaultMs: PROMPT_DEFAULT_MS,
     rewake: support.rewake(agent),

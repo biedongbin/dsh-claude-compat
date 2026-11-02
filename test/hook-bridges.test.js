@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerHooks } from '../src/hooks.js';
+import { createSupport } from '../src/hook-support.js';
 
 const tempDir = (prefix) => mkdtempSync(join(tmpdir(), prefix));
 
@@ -420,4 +421,16 @@ test('a non-string matcher skips its entry, so it cannot widen to every tool', a
   }));
   assert.equal(value.has('tools/pre-execute'), false);
   assert.match(warnings[0], /matcher must be a string/);
+});
+
+test('UserPromptSubmit: context that this plugin injected is not a prompt', async () => {
+  const file = join(tempDir('dcc-prompt-'), 'ran');
+  const listeners = listenersFor({ UserPromptSubmit: [{ matcher: '.*', hooks: [{ command: `echo ran >> "${file}"` }] }] });
+  const own = createSupport({}).contextMessage('from a hook');
+  const decision = await listeners.get('agent/pre-step')({ agent: fakeAgent(), messages: [own] }, enter);
+  assert.equal(decision.kind, 'enter');
+  assert.throws(() => readFileSync(file), /ENOENT/);
+  const mixed = [own, { content: [{ type: 'text', text: 'real prompt' }] }];
+  await listeners.get('agent/pre-step')({ agent: fakeAgent(), messages: mixed }, enter);
+  assert.equal(readFileSync(file, 'utf8').trim(), 'ran');
 });
