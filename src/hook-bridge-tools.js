@@ -22,8 +22,10 @@ function preToolDecision(outcome) {
 }
 
 async function onPreTool(engine, support, exec, next) {
+  if (support.isHookCall(exec)) return next();
   const outcome = await engine.fire('pre-tool-use', 'PreToolUse', {
     subject: exec.name,
+    agent: exec.agent,
     rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload('PreToolUse', exec.agent, {
@@ -62,12 +64,14 @@ function replacement(outcome, contexts) {
 }
 
 async function onPostTool(engine, support, exec, result, next) {
+  if (support.isHookCall(exec)) return next();
   const failed = result.isError === true;
   const event = failed ? 'post-tool-use-failure' : 'post-tool-use';
   if (!engine.has(event)) return next();
   const claudeName = failed ? 'PostToolUseFailure' : 'PostToolUse';
   const outcome = await engine.fire(event, claudeName, {
     subject: exec.name,
+    agent: exec.agent,
     rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload(claudeName, exec.agent, {

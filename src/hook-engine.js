@@ -68,11 +68,11 @@ function applyOnFailure(run, hook, event) {
 
 /**
  * Build the engine for one set of configured hooks.
- * @param {{hooks: object[], config: object, runners?: object}} options
- *   `hooks` are the records from loadHookSettings. `runners` overrides the
- *   runner of a handler type (the types that need DSH, and tests).
+ * @param {{hooks: object[], config: object, runners?: object, isMuted?: (agent: object) => boolean}} options
+ *   `hooks` are the records from loadHookSettings. `runners` overrides the runner of a handler
+ *   type (the types that need DSH, and tests). No hook runs for an agent that `isMuted` names.
  */
-export function createHookEngine({ hooks: initial, config, runners }) {
+export function createHookEngine({ hooks: initial, config, runners, isMuted }) {
   let hooks = initial;
   const matchers = new Map();
 
@@ -106,7 +106,12 @@ export function createHookEngine({ hooks: initial, config, runners }) {
   }
 
   function runOne(hook, spec) {
-    return runHandler(hook, JSON.stringify(spec.payload), { timeoutMs: timeoutFor(hook, spec), runners });
+    return runHandler(hook, JSON.stringify(spec.payload), {
+      timeoutMs: timeoutFor(hook, spec),
+      runners,
+      event: hook.event,
+      agent: spec.agent,
+    });
   }
 
   // `async` hooks run in the background. They cannot change the decision, so
@@ -149,10 +154,13 @@ export function createHookEngine({ hooks: initial, config, runners }) {
      * @param {string} event internal event name
      * @param {string} claudeName Claude event name, for the logs and the output check
      * @param {{subject?: string, tool?: {name: string, input: unknown}, payload: object,
-     *   defaultMs?: number, rewake?: Function}} spec what to match and what to send
+     *   agent?: object, defaultMs?: number, rewake?: Function}} spec what to match and what to
+     *   send. `agent` is the agent that the event is about.
      * @returns {Promise<object>} merged outcome (see src/hook-output.js)
      */
     async fire(event, claudeName, spec) {
+      // No hook runs in an agent that an agent hook started, so a hook cannot start itself again.
+      if (spec.agent !== undefined && isMuted?.(spec.agent)) return mergeOutcomes([]);
       const outcomes = [];
       for (const hook of eligible(event, spec)) {
         if (hook.async) {

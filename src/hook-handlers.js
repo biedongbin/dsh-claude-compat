@@ -94,7 +94,8 @@ function httpHeaders(hook, env) {
   return headers;
 }
 
-function failedRun(reason) {
+/** A run that failed with a reason, for a runner that cannot reach a decision. */
+export function failedRun(reason) {
   return { exitCode: 1, stdout: '', failed: true, reason };
 }
 
@@ -144,15 +145,16 @@ export async function runHttpHook(hook, payload, { timeoutMs = 60_000, env = pro
  * Run one hook with the runner for its type.
  * @param {object} hook handler from loadHookSettings
  * @param {string} payload JSON text of the hook input
- * @param {{timeoutMs?: number, runners?: object}} [options] `runners` overrides a type, for tests and for the types that need DSH
+ * @param {{timeoutMs?: number, runners?: object, event?: string, agent?: object}} [options] `runners` overrides
+ *   a type, for tests and for the types that need DSH. `event` and `agent` tell a model-backed runner what asked.
  * @returns {Promise<{exitCode: number, stdout: string, failed: boolean, reason?: string}>}
  */
-export function runHandler(hook, payload, { timeoutMs, runners = {} } = {}) {
+export function runHandler(hook, payload, { timeoutMs, runners = {}, event, agent } = {}) {
   const runner = runners[hook.type] ?? DEFAULT_RUNNERS[hook.type];
   if (runner === undefined) {
     return Promise.resolve(failedRun(`handler type "${hook.type}" is not available in this session`));
   }
-  return runner(hook, payload, { timeoutMs });
+  return runner(hook, payload, { timeoutMs, event, agent });
 }
 
 const DEFAULT_RUNNERS = {

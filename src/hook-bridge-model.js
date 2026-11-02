@@ -25,6 +25,7 @@ async function onPreStep(engine, support, models, { agent, modelSelection }, nex
   const outcome = await engine.fire('post-model-switch', 'PostModelSwitch', {
     subject: model,
     defaultMs: 30_000,
+    agent,
     rewake: support.rewake(agent),
     payload: support.payload('PostModelSwitch', agent, {
       from_model: previous,

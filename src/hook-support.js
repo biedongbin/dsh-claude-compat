@@ -6,6 +6,10 @@ import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 // The agent type that DSH subagents report. DSH does not name a type for a run.
 export const SUBAGENT_TYPE = 'general-purpose';
 
+// A tool call that a hook made has an id with this prefix. The tool hooks skip it, so a hook
+// cannot start itself again.
+export const HOOK_CALL_PREFIX = 'dsh-claude-compat-hook-';
+
 /** The session id of an agent, or of an object that only holds a session. */
 export function sessionIdOf(agent) {
   return agent?.session?.header?.id ?? agent?.session?.id ?? '';
@@ -32,9 +36,16 @@ export function blocksToText(content) {
  */
 export function createSupport(ctx) {
   const pending = new Set();
+  // Session ids of the subagents that agent hooks started. No hook runs inside them.
+  const hookAgents = new Set();
 
   return {
     ctx,
+    hookAgents,
+
+    isHookAgent: (agent) => hookAgents.has(sessionIdOf(agent)),
+
+    isHookCall: (exec) => typeof exec?.callId === 'string' && exec.callId.startsWith(HOOK_CALL_PREFIX),
 
     // File watching for FileChanged. registerFileHooks replaces this with the real controller.
     files: { track() {}, release() {}, setDynamic() {}, cwdChanged() {} },

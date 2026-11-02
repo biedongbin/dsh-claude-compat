@@ -39,6 +39,7 @@ async function onApproval(engine, support, calls, req, next) {
   const fields = { tool_name: req.toolName, tool_input: call.input, permission_suggestions: [] };
   const outcome = await engine.fire('permission-request', 'PermissionRequest', {
     subject: req.toolName,
+    agent: req.agent,
     rewake: support.rewake(req.agent),
     tool: { name: req.toolName, input: call.input },
     payload: support.payload('PermissionRequest', req.agent, fields),
@@ -62,6 +63,7 @@ async function onApproval(engine, support, calls, req, next) {
 async function onDenied(engine, support, req, fields) {
   const outcome = await engine.fire('permission-denied', 'PermissionDenied', {
     subject: req.toolName,
+    agent: req.agent,
     rewake: support.rewake(req.agent),
     tool: { name: req.toolName, input: fields.tool_input },
     payload: support.payload('PermissionDenied', req.agent, {
@@ -103,6 +105,7 @@ async function onPreStep(engine, support, batches, payload, next) {
   if (toolCalls === undefined || toolCalls.length === 0) return next();
   batches.delete(sessionKey(agent));
   const outcome = await engine.fire('post-tool-batch', 'PostToolBatch', {
+    agent,
     rewake: support.rewake(agent),
     payload: support.payload('PostToolBatch', agent, { tool_calls: toolCalls }),
   });
@@ -130,7 +133,7 @@ export function registerPermissionHooks(ctx, engine, support) {
   if (wantsApproval) {
     // Record each call's input first, because an approval request carries only the call id.
     ctx.on('tools/pre-execute', (exec, next) => {
-      calls.record(exec);
+      if (!support.isHookCall(exec)) calls.record(exec);
       return next();
     });
     ctx.on('approval/request', (req, next) => onApproval(engine, support, calls, req, next));
@@ -138,7 +141,7 @@ export function registerPermissionHooks(ctx, engine, support) {
   if (wantsApproval || wantsBatch) {
     ctx.on('tools/post-execute', async (exec, result, next) => {
       calls.forget(exec.callId);
-      if (wantsBatch) recordResult(batches, exec, result);
+      if (wantsBatch && !support.isHookCall(exec)) recordResult(batches, exec, result);
       return next();
     });
   }

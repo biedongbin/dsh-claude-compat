@@ -61,6 +61,7 @@ async function onCommandRun(deps, session, data) {
   const args = data.args ?? '';
   const outcome = await engine.fire('user-prompt-expansion', 'UserPromptExpansion', {
     subject: data.name,
+    agent: asAgent(session),
     payload: support.payload('UserPromptExpansion', asAgent(session), {
       expansion_type: 'slash_command',
       command_name: data.name,

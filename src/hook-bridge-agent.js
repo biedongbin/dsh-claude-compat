@@ -53,6 +53,7 @@ async function onTurnStopping(deps, { agent }) {
   const key = sessionKey(agent);
   const count = continued.get(key) ?? 0;
   const outcome = await engine.fire('stop', 'Stop', {
+    agent,
     rewake: support.rewake(agent),
     payload: support.payload('Stop', agent, {
       stop_hook_active: count > 0,
@@ -94,9 +95,11 @@ function subagentChild(ctx, info) {
 }
 
 async function onSubagentStart({ ctx, engine, support }, info) {
+  if (support.hookAgents.has(info.id)) return;
   const child = subagentChild(ctx, info);
   const outcome = await engine.fire('subagent-start', 'SubagentStart', {
     subject: SUBAGENT_TYPE,
+    agent: child,
     rewake: support.rewake(child),
     payload: support.payload('SubagentStart', child, { agent_id: info.id, agent_type: SUBAGENT_TYPE }),
   });
@@ -104,9 +107,11 @@ async function onSubagentStart({ ctx, engine, support }, info) {
 }
 
 async function onSubagentEnd({ ctx, engine, support }, info) {
+  if (support.hookAgents.has(info.id)) return;
   const child = subagentChild(ctx, info);
   const outcome = await engine.fire('subagent-stop', 'SubagentStop', {
     subject: SUBAGENT_TYPE,
+    agent: child,
     payload: support.payload('SubagentStop', child, {
       stop_hook_active: false,
       agent_id: info.id,

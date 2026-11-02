@@ -25,6 +25,7 @@ export function registerTeamHooks(ctx, engine, support) {
 
   async function onIdle(agent, member) {
     const outcome = await engine.fire('teammate-idle', 'TeammateIdle', {
+      agent,
       rewake: support.rewake(agent),
       payload: support.payload('TeammateIdle', agent, { teammate_name: member.name, team_name: member.teamId }),
     });

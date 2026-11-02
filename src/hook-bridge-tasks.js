@@ -51,6 +51,7 @@ function taskFields({ todo, index }) {
 
 async function fireTask(engine, support, agent, event, claudeName, entry) {
   const outcome = await engine.fire(event, claudeName, {
+    agent,
     rewake: support.rewake(agent),
     payload: support.payload(claudeName, agent, taskFields(entry)),
   });

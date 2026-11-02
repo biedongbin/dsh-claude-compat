@@ -29,6 +29,7 @@ import { registerPermissionHooks } from './hook-bridge-permissions.js';
 import { registerTaskHooks } from './hook-bridge-tasks.js';
 import { registerSessionHooks } from './hook-bridge-session.js';
 import { registerToolHooks } from './hook-bridge-tools.js';
+import { createModelRunners } from './hook-runners-model.js';
 import { createSupport } from './hook-support.js';
 import { parseHookHandler } from './hook-spec.js';
 import { findProjectRootSync, resolveUserClaudeDir } from './lib.js';
@@ -139,8 +140,13 @@ function makeReload(engine, config, startEvents) {
  */
 export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
   const hooks = Object.values(loadHookSettings(config));
-  const engine = createHookEngine({ hooks, config, runners });
   const support = createSupport(ctx);
+  const engine = createHookEngine({
+    hooks,
+    config,
+    runners: { ...createModelRunners(ctx, support), ...runners },
+    isMuted: support.isHookAgent,
+  });
   if (typeof ctx.effect === 'function') {
     // A hook that is still running when the plugin unloads finishes first.
     ctx.effect(() => () => support.drain(), 'dsh-claude-compat: drain hook runs');
