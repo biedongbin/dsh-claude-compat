@@ -16,6 +16,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CLAUDE_EVENTS, UNSUPPORTED_EVENTS } from './hook-events.js';
 import { createHookEngine } from './hook-engine.js';
+import { registerAgentHooks } from './hook-bridge-agent.js';
+import { registerMessageHooks } from './hook-bridge-messages.js';
+import { registerNotificationHooks } from './hook-bridge-notify.js';
 import { registerPermissionHooks } from './hook-bridge-permissions.js';
 import { registerTaskHooks } from './hook-bridge-tasks.js';
 import { registerSessionHooks } from './hook-bridge-session.js';
@@ -115,5 +118,8 @@ export function registerHooks(ctx, config, { runners } = {}) {
   registerSessionHooks(ctx, engine, support);
   registerPermissionHooks(ctx, engine, support);
   registerTaskHooks(ctx, engine, support);
+  const messages = registerMessageHooks(ctx, engine, support);
+  registerAgentHooks(ctx, engine, support, messages);
+  registerNotificationHooks(ctx, engine, support);
   return engine;
 }

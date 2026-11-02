@@ -56,6 +56,7 @@ export function harness(hooks, options = {}) {
   const ctx = {
     on: (name, fn) => listeners.set(name, [...listeners.get(name) ?? [], fn]),
     effect: (setup) => effects.push(setup()),
+    ...options.ctx,
   };
   registerHooks(ctx, { userClaudeDir: dir, projectRootMarkers: ['.git'], hooksTimeoutMs: 5000 }, { runners: options.runners });
   return {
