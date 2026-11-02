@@ -230,3 +230,51 @@ test('a literal pattern matches exactly its own text, special characters include
     assert.equal(matchIfRule(`Bash(${text})`, 'Bash', { command: `${text}!` }), false, text);
   }
 });
+
+// ─── handler types per event ─────────────────────────────────────────────────
+
+const SAMPLE = {
+  command: { type: 'command', command: 'x' },
+  http: { type: 'http', url: 'https://example.test/h' },
+  mcp_tool: { type: 'mcp_tool', server: 's', tool: 't' },
+  prompt: { type: 'prompt', prompt: 'check $ARGUMENTS' },
+  agent: { type: 'agent', prompt: 'verify $ARGUMENTS' },
+};
+const accepts = (event) => Object.keys(SAMPLE).filter((type) => parse(SAMPLE[type], event).ok);
+
+test('prompt and agent hooks run on the twelve events that take them', () => {
+  for (const event of ['permission-denied', 'post-tool-batch', 'post-tool-use', 'post-tool-use-failure', 'pre-tool-use',
+    'stop', 'subagent-stop', 'task-completed', 'task-created', 'teammate-idle', 'user-prompt-expansion', 'user-prompt-submit']) {
+    assert.deepEqual(accepts(event), ['command', 'http', 'mcp_tool', 'prompt', 'agent'], event);
+  }
+});
+
+test('PermissionRequest takes prompt but not agent hooks', () => {
+  assert.deepEqual(accepts('permission-request'), ['command', 'http', 'mcp_tool', 'prompt']);
+});
+
+test('SessionStart takes only command and mcp_tool hooks', () => {
+  assert.deepEqual(accepts('session-start'), ['command', 'mcp_tool']);
+});
+
+test('the other events take command, http and mcp_tool hooks only', () => {
+  for (const event of ['notification', 'cwd-changed', 'file-changed', 'session-end', 'stop-failure', 'subagent-start',
+    'pre-compact', 'post-compact', 'post-model-switch', 'config-change', 'instructions-loaded', 'message-display']) {
+    assert.deepEqual(accepts(event), ['command', 'http', 'mcp_tool'], event);
+  }
+});
+
+test('a type that the event does not take is skipped with a reason that names both', () => {
+  const result = parse(SAMPLE.agent, 'notification');
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /handler type "agent" is not supported on notification/);
+});
+
+test('continueOnBlock is kept for a prompt hook, and ignored with a note elsewhere', () => {
+  assert.equal(parse({ ...SAMPLE.prompt, continueOnBlock: true }, 'stop').handler.continueOnBlock, true);
+  assert.equal(parse(SAMPLE.prompt, 'stop').handler.continueOnBlock, false);
+  const agent = parse({ ...SAMPLE.agent, continueOnBlock: true }, 'stop');
+  assert.equal(agent.handler.continueOnBlock, false);
+  assert.match(agent.notes[0], /continueOnBlock applies to prompt hooks only/);
+  assert.equal(parse({ ...SAMPLE.prompt, continueOnBlock: 'yes' }, 'stop').ok, false);
+});

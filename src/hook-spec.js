@@ -2,7 +2,7 @@
 // `if` permission-rule filter. Pure functions (no I/O) so the rules can be
 // tested without a running DSH.
 
-import { IF_EVENTS, NO_ONFAILURE_EVENTS } from './hook-events.js';
+import { IF_EVENTS, NO_ONFAILURE_EVENTS, handlerTypesFor } from './hook-events.js';
 
 const ON_FAILURE = new Set(['continue', 'block']);
 const HANDLER_TYPES = new Set(['command', 'http', 'mcp_tool', 'prompt', 'agent']);
@@ -157,6 +157,7 @@ function fieldProblem(raw, type, event) {
     booleanProblem(raw, 'async'),
     booleanProblem(raw, 'asyncRewake'),
     booleanProblem(raw, 'once'),
+    booleanProblem(raw, 'continueOnBlock'),
     ifProblem(raw, event),
   ];
   return checks.find((problem) => problem !== undefined);
@@ -172,6 +173,7 @@ function notesFor(raw, event) {
     notes.push('onFailure is ignored for async hooks');
   }
   if (raw.once === true) notes.push('once is honored only in skill frontmatter; ignored');
+  if (raw.continueOnBlock !== undefined && raw.type !== 'prompt') notes.push('continueOnBlock applies to prompt hooks only; ignored');
   return notes;
 }
 
@@ -191,6 +193,7 @@ export function parseHookHandler(raw, { event, projectDir }) {
   if (!isPlainObject(raw)) return unsupported('handler is not an object');
   const type = raw.type ?? 'command';
   if (!HANDLER_TYPES.has(type)) return unsupported(`handler type "${type}" is not supported`);
+  if (!handlerTypesFor(event).has(type)) return unsupported(`handler type "${type}" is not supported on ${event}`);
   const problem = fieldProblem(raw, type, event);
   if (problem !== undefined) return unsupported(problem);
   const execForm = type === 'command' && raw.args !== undefined;
@@ -209,6 +212,7 @@ export function parseHookHandler(raw, { event, projectDir }) {
       input: raw.input,
       prompt: raw.prompt,
       model: raw.model,
+      continueOnBlock: raw.type === 'prompt' && raw.continueOnBlock === true,
       ifRule: raw.if,
       timeoutMs: raw.timeout === undefined ? undefined : Math.round(raw.timeout * 1000),
       async: raw.async === true || raw.asyncRewake === true,

@@ -49,6 +49,36 @@ export const IF_EVENTS = new Set([
   'permission-denied',
 ]);
 
+// Handler types per event (Claude Code docs, "Prompt-based hooks"). Every event takes
+// command, http and mcp_tool, except SessionStart and Setup, which take no http hook.
+// The model-backed types prompt and agent run on these events only.
+const MODEL_EVENTS = new Set([
+  'permission-denied',
+  'post-tool-batch',
+  'post-tool-use',
+  'post-tool-use-failure',
+  'pre-tool-use',
+  'stop',
+  'subagent-stop',
+  'task-completed',
+  'task-created',
+  'teammate-idle',
+  'user-prompt-expansion',
+  'user-prompt-submit',
+]);
+
+/**
+ * The handler types that Claude Code accepts on an event.
+ * @param {string} event internal event name
+ * @returns {Set<string>}
+ */
+export function handlerTypesFor(event) {
+  if (event === 'session-start' || event === 'setup') return new Set(['command', 'mcp_tool']);
+  if (event === 'permission-request') return new Set(['command', 'http', 'mcp_tool', 'prompt']);
+  if (MODEL_EVENTS.has(event)) return new Set(['command', 'http', 'mcp_tool', 'prompt', 'agent']);
+  return new Set(['command', 'http', 'mcp_tool']);
+}
+
 // `onFailure` has no effect on these events (Claude Code docs, "Failure behavior").
 export const NO_ONFAILURE_EVENTS = new Set(['stop', 'subagent-stop', 'task-completed', 'teammate-idle']);
 
