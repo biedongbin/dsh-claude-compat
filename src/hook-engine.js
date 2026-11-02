@@ -8,22 +8,37 @@ import { runHandler } from './hook-handlers.js';
 import { interpretRun, mergeOutcomes } from './hook-output.js';
 import { matchIfRule } from './hook-spec.js';
 
-// Compile a Claude Code hook matcher ("Bash", "Bash|Edit", ".*") into a
-// predicate. Exact names match exactly; `*` / `.*` are wildcards; `|`
-// alternates.
-export function compileMatcher(matcher) {
+// A matcher with only these characters is an exact name, or a list of exact names.
+// StopFailure and FileChanged use the narrower set: no hyphen, space or comma.
+const EXACT_LIST = /^[A-Za-z0-9_\- ,|]*$/;
+const EXACT_LIST_NARROW = /^[A-Za-z0-9_|]*$/;
+const NARROW_EVENTS = new Set(['stop-failure', 'file-changed']);
+
+/**
+ * Compile a Claude Code hook matcher into a predicate on the event subject.
+ * "*", an empty string, and a blank string match everything. A matcher of letters,
+ * digits, `_`, `-`, space, `,` and `|` is a list of exact names. Any other matcher
+ * is an unanchored JavaScript regular expression. A regular expression that does not
+ * parse never matches, and its predicate has an `invalid` message. A matcher that is
+ * not a string never matches.
+ * @param {unknown} matcher
+ * @param {{narrow?: boolean}} [options] `narrow` for the events that accept only `|`
+ * @returns {((name: string) => boolean) & {invalid?: string}}
+ */
+export function compileMatcher(matcher, { narrow = false } = {}) {
   if (typeof matcher !== 'string') return () => false;
-  const trimmed = matcher.trim();
-  if (trimmed === '' || trimmed === '*' || trimmed === '.*') return () => true;
+  if (matcher.trim() === '' || matcher === '*') return () => true;
+  if ((narrow ? EXACT_LIST_NARROW : EXACT_LIST).test(matcher)) {
+    const names = matcher.split(narrow ? '|' : /[|,]/).map((name) => name.trim());
+    return (name) => names.includes(name);
+  }
   try {
-    const pattern = trimmed
-      .split('|')
-      .map((part) => part.trim().split('*').join('.*'))
-      .join('|');
-    const re = new RegExp(`^(?:${pattern})$`);
-    return (name) => re.test(name);
-  } catch {
-    return () => false;
+    const pattern = new RegExp(matcher);
+    return (name) => pattern.test(name);
+  } catch (error) {
+    const never = () => false;
+    never.invalid = error.message;
+    return never;
   }
 }
 
@@ -57,10 +72,26 @@ function applyOnFailure(run, hook, event) {
  *   `hooks` are the records from loadHookSettings. `runners` overrides the
  *   runner of a handler type (the types that need DSH, and tests).
  */
-export function createHookEngine({ hooks, config, runners }) {
+export function createHookEngine({ hooks: initial, config, runners }) {
+  let hooks = initial;
+  const matchers = new Map();
+
+  // One predicate per (event, matcher), built once. A pattern that does not parse is reported once.
+  function matcherFor(hook) {
+    const key = `${hook.event}\u0000${hook.matcher}`;
+    if (!matchers.has(key)) {
+      const predicate = compileMatcher(hook.matcher, { narrow: NARROW_EVENTS.has(hook.event) });
+      if (predicate.invalid !== undefined) {
+        console.warn(`dsh-claude-compat: ${hook.event} matcher /${hook.matcher}/ is not a valid regular expression (${predicate.invalid}); its hooks never run`);
+      }
+      matchers.set(key, predicate);
+    }
+    return matchers.get(key);
+  }
+
   function eligible(event, spec) {
     return hooks.filter((hook) => {
-      if (hook.event !== event || !compileMatcher(hook.matcher)(spec.subject ?? '')) return false;
+      if (hook.event !== event || !matcherFor(hook)(spec.subject ?? '')) return false;
       if (hook.ifRule === undefined) return true;
       return spec.tool !== undefined && matchIfRule(hook.ifRule, spec.tool.name, spec.tool.input);
     });
@@ -95,6 +126,21 @@ export function createHookEngine({ hooks, config, runners }) {
   return {
     has(event) {
       return hooks.some((hook) => hook.event === event);
+    },
+
+    /** The events that at least one hook uses. */
+    events() {
+      return new Set(hooks.map((hook) => hook.event));
+    },
+
+    /** The distinct matchers that the hooks of `event` use. */
+    matchers(event) {
+      return [...new Set(hooks.filter((hook) => hook.event === event).map((hook) => hook.matcher))];
+    },
+
+    /** Swap the configured hooks, for a settings file that changed while the session runs. */
+    replace(next) {
+      hooks = next;
     },
 
     /**
