@@ -12,6 +12,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { matchIfRule, parseHookHandler } from './hook-spec.js';
 import {
   CLAUDE_COMPAT_SOURCE_KIND,
   findProjectRootSync,
@@ -41,6 +42,8 @@ export function compileMatcher(matcher) {
 
 function preToolPayload(exec) {
   return JSON.stringify({
+    hook_event_name: 'PreToolUse',
+    cwd: process.cwd(),
     session_id: String(exec.callId),
     tool_name: exec.name,
     tool_input: exec.arguments ?? {},
@@ -49,6 +52,8 @@ function preToolPayload(exec) {
 
 function postToolPayload(exec, result) {
   return JSON.stringify({
+    hook_event_name: 'PostToolUse',
+    cwd: process.cwd(),
     tool_name: exec.name,
     tool_input: exec.arguments ?? {},
     tool_response: result,
@@ -130,35 +135,36 @@ function tryHookJson(stdout) {
 
 // ----- runner ---------------------------------------------------------------
 
-function runHookCommand(command, stdin, { timeoutMs = 60_000 } = {}) {
+// A hook counts as failed when it times out, cannot start, or exits with a code
+// other than 0 (ok) or 2 (block). `onFailure: "block"` turns a failed hook into
+// a block. Exec form (`args`) runs the program without a shell.
+export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
   return new Promise((resolve) => {
     let stdout = '';
     let settled = false;
-    const child = execFile('/bin/sh', ['-c', command], {
-      maxBuffer: 4 * 1024 * 1024,
-    });
-    const timer = setTimeout(() => {
+    const finish = (exitCode, failed) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, failed });
+    };
+    const [file, argv] = hook.args === undefined
+      ? ['/bin/sh', ['-c', hook.command]]
+      : [hook.command, hook.args];
+    const env = { ...process.env, CLAUDE_PROJECT_DIR: hook.projectDir };
+    const child = execFile(file, argv, { maxBuffer: 4 * 1024 * 1024, env });
+    const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      console.warn(`dsh-claude-compat: hook timed out after ${timeoutMs}ms, killed: ${command}`);
-      resolve({ exitCode: 1, stdout }); // treat as non-2, allow-through
+      console.warn(`dsh-claude-compat: hook timed out after ${timeoutMs}ms, killed: ${hook.command}`);
+      finish(1, true);
     }, timeoutMs);
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stdout += chunk; }); // surface stderr in feedback
     child.on('error', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      console.warn(`dsh-claude-compat: hook command failed to start: ${command}`);
-      resolve({ exitCode: 1, stdout });
+      console.warn(`dsh-claude-compat: hook command failed to start: ${hook.command}`);
+      finish(1, true);
     });
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ exitCode: code ?? 1, stdout });
-    });
+    child.on('close', (code) => finish(code ?? 1, code !== 0 && code !== 2));
     child.stdin.on('error', () => {});
     child.stdin.end(stdin);
   });
@@ -198,18 +204,19 @@ function sessionEndPayload(agent) {
 export { sessionEndPayload };
 
 // Combined hooks map. Project .claude/settings.json is applied LAST so it wins
-// same (event, matcher, command) keys against ~/.claude/settings.json.
+// same (event, matcher, handler) keys against ~/.claude/settings.json.
 export function loadHookSettings(config) {
   const combined = {};
-  applySettingsFile(combined, join(resolveUserClaudeDir(config.userClaudeDir), 'settings.json'));
-  const projectRoot = findProjectRootSync(process.cwd(), config.projectRootMarkers);
-  if (projectRoot !== undefined) {
-    applySettingsFile(combined, join(projectRoot, '.claude', 'settings.json'));
+  const found = findProjectRootSync(process.cwd(), config.projectRootMarkers);
+  const projectDir = found ?? process.cwd();
+  applySettingsFile(combined, join(resolveUserClaudeDir(config.userClaudeDir), 'settings.json'), projectDir);
+  if (found !== undefined) {
+    applySettingsFile(combined, join(found, '.claude', 'settings.json'), projectDir);
   }
   return combined;
 }
 
-function applySettingsFile(combined, path) {
+function applySettingsFile(combined, path, projectDir) {
   let raw;
   try { raw = readFileSync(path, 'utf8'); } catch { return; }
   let parsed;
@@ -222,49 +229,87 @@ function applySettingsFile(combined, path) {
   for (const [eventName, entries] of Object.entries(hooks)) {
     const event = EVENTS[eventName];
     if (event === undefined || !Array.isArray(entries)) continue;
-    for (const entry of entries) {
-      if (typeof entry !== 'object' || entry === null) continue;
-      const matcher = typeof entry.matcher === 'string' ? entry.matcher : '.*';
-      const commands = Array.isArray(entry.hooks)
-        ? entry.hooks
-            .filter((h) => typeof h === 'object' && h !== null && typeof h.command === 'string')
-            .map((h) => h.command)
-        : [];
-      for (const command of commands) {
-        combined[`${event}\u0000${matcher}\u0000${command}`] = { event, matcher, command };
-      }
+    for (const entry of entries) addEntry(combined, path, event, entry, projectDir);
+  }
+}
+
+function addEntry(combined, path, event, entry, projectDir) {
+  if (typeof entry !== 'object' || entry === null || !Array.isArray(entry.hooks)) return;
+  const matcher = typeof entry.matcher === 'string' ? entry.matcher : '.*';
+  for (const raw of entry.hooks) {
+    const result = parseHookHandler(raw, { event, projectDir });
+    if (!result.ok) {
+      console.warn(`dsh-claude-compat: hook skipped in ${path}: ${result.reason}`);
+      continue;
     }
+    const key = `${event}\u0000${matcher}\u0000${JSON.stringify(result.handler)}`;
+    combined[key] = { event, matcher, ...result.handler };
   }
 }
 
 // ----- listeners -------------------------------------------------------------
 
-export function registerHooks(ctx, config) {
-  const settings = loadHookSettings(config);
-  const matching = (hooks, name) =>
-    hooks.filter((h) => compileMatcher(h.matcher)(name));
+// One hook run, with the handler's own timeout capped by `capMs`.
+function runEntry(hook, stdin, config, capMs = Infinity) {
+  const timeoutMs = Math.min(hook.timeoutMs ?? config.hooksTimeoutMs ?? 60_000, capMs);
+  return runHookCommand(hook, stdin, { timeoutMs });
+}
 
-  const pre = Object.values(settings).filter((h) => h.event === 'pre-tool-use');
+// Hooks whose matcher and `if` rule both match this tool call.
+function eligibleFor(hooks, exec) {
+  return hooks.filter((h) => compileMatcher(h.matcher)(exec.name)
+    && (h.ifRule === undefined || matchIfRule(h.ifRule, exec.name, exec.arguments)));
+}
+
+// `async` hooks run in the background and cannot change the decision.
+function runInBackground(hook, stdin, config) {
+  runEntry(hook, stdin, config).then((run) => {
+    if (run.failed) console.warn(`dsh-claude-compat: async hook failed (exit ${run.exitCode}): ${hook.command}`);
+  });
+}
+
+// SessionStart / SessionEnd: fire-and-forget, output logged, never fed back.
+function runSessionHook(hook, stdin, config, label) {
+  runEntry(hook, stdin, config).then((run) => {
+    if (run.exitCode !== 0) {
+      console.warn(`dsh-claude-compat: ${label} hook exited ${run.exitCode}: ${hook.command}`);
+    } else if (run.stdout.trim() !== '') {
+      console.log(`dsh-claude-compat: ${label} hook output: ${run.stdout.trim()}`);
+    }
+  });
+}
+
+export function registerHooks(ctx, config) {
+  const settings = Object.values(loadHookSettings(config));
+  const byEvent = (name) => settings.filter((h) => h.event === name);
+
+  const pre = byEvent('pre-tool-use');
   if (pre.length > 0) {
     ctx.on('tools/pre-execute', async (exec) => {
-      for (const hook of matching(pre, exec.name)) {
+      for (const hook of eligibleFor(pre, exec)) {
         const payload = preToolPayload(exec);
-        const run = await runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 });
-        const decision = mapPreHookOutput(run.exitCode, run.stdout);
+        if (hook.async) { runInBackground(hook, payload, config); continue; }
+        const run = await runEntry(hook, payload, config);
+        const decision = run.failed && hook.onFailure === 'block'
+          ? { kind: 'deny', reason: `hook failed: ${hook.command}` }
+          : mapPreHookOutput(run.exitCode, run.stdout);
         if (decision.kind !== 'allow') return decision;
       }
       return { kind: 'allow' };
     });
   }
 
-  const post = Object.values(settings).filter((h) => h.event === 'post-tool-use');
+  const post = byEvent('post-tool-use');
   if (post.length > 0) {
     ctx.on('tools/post-execute', async (exec, result) => {
       let accept;
-      for (const hook of matching(post, exec.name)) {
+      for (const hook of eligibleFor(post, exec)) {
         const payload = postToolPayload(exec, result);
-        const run = await runHookCommand(hook.command, payload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 });
-        const decision = mapPostHookOutput(run.exitCode, run.stdout);
+        if (hook.async) { runInBackground(hook, payload, config); continue; }
+        const run = await runEntry(hook, payload, config);
+        const decision = run.failed && hook.onFailure === 'block'
+          ? { kind: 'block', feedback: [{ type: 'text', text: `hook failed: ${hook.command}` }] }
+          : mapPostHookOutput(run.exitCode, run.stdout);
         if (decision.kind === 'block') return decision;
         if (decision.additionalContexts !== undefined) accept = decision;
       }
@@ -272,7 +317,7 @@ export function registerHooks(ctx, config) {
     });
   }
 
-  const prompt = Object.values(settings).filter((h) => h.event === 'user-prompt-submit');
+  const prompt = byEvent('user-prompt-submit');
   if (prompt.length > 0) {
     ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
       const decision = await next();
@@ -286,55 +331,32 @@ export function registerHooks(ctx, config) {
     });
   }
 
-  // SessionStart / SessionEnd: fire-and-forget. Run hooks on session lifecycle,
-  // log stdout/stderr, never block or feed output back into the loop.
   // NB: DSH agent events dispatch (carrier, name, payload). The agent is NOT
   // in a fixed position: agent-loop's emitAgentEvent fuses it onto the payload
   // (payload.agent), while the headless path passes it on the carrier
   // (carrier.agent). Read both defensively.
-  const startHooks = Object.values(settings).filter((h) => h.event === 'session-start');
+  const startHooks = byEvent('session-start');
   if (startHooks.length > 0) {
     ctx.on('agent/session-start', (carrier, name, payload) => {
-      const agent = carrier?.agent ?? payload?.agent;
-      const hookPayload = sessionStartPayload(agent);
-      for (const hook of startHooks) {
-        runHookCommand(hook.command, hookPayload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
-          .then((run) => {
-            if (run.exitCode !== 0) {
-              console.warn(`dsh-claude-compat: SessionStart hook exited ${run.exitCode}: ${hook.command}`);
-            } else if (run.stdout.trim() !== '') {
-              console.log(`dsh-claude-compat: SessionStart hook output: ${run.stdout.trim()}`);
-            }
-          });
-      }
+      const hookPayload = sessionStartPayload(carrier?.agent ?? payload?.agent);
+      for (const hook of startHooks) runSessionHook(hook, hookPayload, config, 'SessionStart');
     });
   }
 
-  const endHooks = Object.values(settings).filter((h) => h.event === 'session-end');
+  const endHooks = byEvent('session-end');
   if (endHooks.length > 0) {
     ctx.on('agent/disposed', (carrier, name, payload) => {
-      const agent = carrier?.agent ?? payload?.agent;
-      const hookPayload = sessionEndPayload(agent);
-      for (const hook of endHooks) {
-        runHookCommand(hook.command, hookPayload, { timeoutMs: config.hooksTimeoutMs ?? 60_000 })
-          .then((run) => {
-            if (run.exitCode !== 0) {
-              console.warn(`dsh-claude-compat: SessionEnd hook exited ${run.exitCode}: ${hook.command}`);
-            } else if (run.stdout.trim() !== '') {
-              console.log(`dsh-claude-compat: SessionEnd hook output: ${run.stdout.trim()}`);
-            }
-          });
-      }
+      const hookPayload = sessionEndPayload(carrier?.agent ?? payload?.agent);
+      for (const hook of endHooks) runSessionHook(hook, hookPayload, config, 'SessionEnd');
     });
   }
 }
 
 async function runPromptHooks(hooks, agent, config) {
-  const timeoutMs = Math.min(config.hooksTimeoutMs ?? 60_000, 10_000); // never block the loop longer than 10s
   const payload = promptPayload(agent);
   const extra = [];
   for (const hook of hooks) {
-    const run = await runHookCommand(hook.command, payload, { timeoutMs });
+    const run = await runEntry(hook, payload, config, 10_000); // never block the loop longer than 10s
     if (run.exitCode !== 0) continue; // non-zero: skip, never block a prompt
     const text = run.stdout.trim();
     if (text === '') continue;
