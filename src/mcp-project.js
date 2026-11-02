@@ -3,19 +3,22 @@
 // prompt assembly so another project or a changed credential cannot reuse them.
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve, posix, win32 } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 import { findProjectRootSync } from './lib.js';
+import { RealmReader } from './native-provider.js';
 
 const REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-async function readServers(filename, source, warn) {
+async function readServers(filename, source, warn, reader) {
+  if (!filename) return {};
   let text;
-  try { text = await readFile(filename, 'utf8'); }
+  try { text = reader ? await reader.text(filename) : await readFile(filename, 'utf8'); }
   catch (error) { if (error.code !== 'ENOENT') warn(`cannot read MCP configuration ${filename}`); return {}; }
+  if (text === undefined) return {};
   try {
     const parsed = source === 'codex' ? parseToml(text) : source === 'agents' ? parseYaml(text) : JSON.parse(text);
     const servers = source === 'codex' ? parsed.mcp_servers : source === 'agents' ? parsed.servers : parsed.mcpServers;
@@ -46,7 +49,7 @@ async function stringMap(value, credential, missing) {
   return result;
 }
 
-async function normalize(name, entry, source, cwd, credential, config, warn) {
+async function normalize(name, entry, source, cwd, credential, config, warn, paths = {resolve}) {
   if (!object(entry) || entry.disabled === true || entry.enabled === false) return;
   const exclusions = (config.mcpExcludedServers ?? []).map(value => value.toLowerCase());
   if (exclusions.includes(name.toLowerCase()) || exclusions.includes(`${source}:${name}`.toLowerCase())) return;
@@ -58,7 +61,7 @@ async function normalize(name, entry, source, cwd, credential, config, warn) {
   if (typeof commandArray[0] === 'string') {
     const expanded = await Promise.all(commandArray.filter(value => typeof value === 'string').map(value => expand(value, credential, missing)));
     const env = await stringMap(entry.env, credential, missing);
-    const directory = typeof entry.cwd === 'string' ? resolve(cwd, await expand(entry.cwd, credential, missing)) : cwd;
+    const directory = typeof entry.cwd === 'string' ? paths.resolve(cwd, await expand(entry.cwd, credential, missing)) : cwd;
     for (const variable of Array.isArray(entry.env_vars) ? entry.env_vars : []) {
       if (typeof variable !== 'string') continue;
       const value = await credential(variable);
@@ -89,36 +92,47 @@ async function normalize(name, entry, source, cwd, credential, config, warn) {
 export async function discoverProjectMcp(cwd, config, options = {}) {
   const warn = options.warn ?? (message => console.warn(`dsh-claude-compat: ${message}`));
   const credential = options.credential ?? (async name => process.env[name]);
-  const home = options.home ?? homedir();
-  const root = findProjectRootSync(cwd, config.projectRootMarkers) ?? cwd;
+  const reader = options.fs ? new RealmReader(options.fs, options.signal) : undefined;
+  const home = reader ? options.home : options.home ?? homedir();
+  const paths = reader ? (/^[A-Za-z]:[\\/]|^\\\\/.test(cwd) ? win32 : posix) : {join,resolve,basename,isAbsolute};
+  if(reader&&!options.projectRoot)throw new Error('Native MCP discovery requires the configured realm project root');
+  const root = options.projectRoot ?? (findProjectRootSync(cwd, config.projectRootMarkers) ?? cwd);
   const sourceFiles = {
-    dsh: [join(home, '.dsh', 'mcp.json'), join(root, '.dsh', 'mcp.json')],
-    claude: [join(home, '.claude.json'), join(root, '.mcp.json')],
-    codex: [join(home, '.codex', 'config.toml'), join(root, '.codex', 'config.toml')],
-    agents: [join(home, '.agents', 'mcp.yaml'), join(root, '.agents', 'mcp.yaml')],
+    dsh: [home && paths.join(home, '.dsh', 'mcp.json'), paths.join(root, '.dsh', 'mcp.json')],
+    claude: [home && paths.join(home, '.claude.json'), paths.join(root, '.mcp.json')],
+    codex: [home && paths.join(home, '.codex', 'config.toml'), paths.join(root, '.codex', 'config.toml')],
+    agents: [home && paths.join(home, '.agents', 'mcp.yaml'), paths.join(root, '.agents', 'mcp.yaml')],
   };
   const sources = config.mcpSources ?? ['claude'];
+  const localNames={dsh:'.dsh/mcp.json',claude:'.mcp.json',codex:'.codex/config.toml',agents:'.agents/mcp.yaml'};
   const definitions = new Map();
   for (const level of [0, 1]) {
     for (const source of [...sources].reverse()) {
       if (!sourceFiles[source]) { warn(`unknown MCP source ${source}`); continue; }
-      for (const [name, entry] of Object.entries(await readServers(sourceFiles[source][level], source, warn))) {
+      for (const [name, entry] of Object.entries(await readServers(sourceFiles[source][level], source, warn, reader))) {
         definitions.set(name, { entry, source });
       }
     }
   }
+  // Installation-local files omitted from Git remain available to a task's
+  // checkout; versioned settings never fall back to another branch's policy.
+  for(const source of [...sources].reverse()) {
+    const filename=options.localProjectFiles?.[localNames[source]];
+    if(!filename)continue;
+    for(const[name,entry]of Object.entries(await readServers(filename,source,warn,reader)))definitions.set(name,{entry,source});
+  }
   const servers = [];
   const names = new Set();
   for (const [name, { entry, source }] of definitions) {
-    const server = await normalize(name, entry, source, cwd, credential, config, warn);
+    const server = await normalize(name, entry, source, options.executionCwd ?? cwd, credential, config, warn, paths);
     if (!server) continue;
     if (names.has(server.serverName)) { warn(`MCP ${name}: duplicate normalized server name`); continue; }
     names.add(server.serverName);
     // A container-only interpreter script must not advertise tools on a native host.
-    if (server.transport === 'stdio' && /^(?:node|node\.exe|python\d?(?:\.exe)?)$/i.test(basename(server.command))) {
+    if (server.transport === 'stdio' && /^(?:node|node\.exe|python\d?(?:\.exe)?)$/i.test(paths.basename(server.command))) {
       const script = server.args.find(argument => !argument.startsWith('-'));
-      if (script && isAbsolute(script)) {
-        try { if (!(await stat(script)).isFile()) throw new Error(); }
+      if (script && paths.isAbsolute(script)) {
+        try { if (reader ? (await reader.stat(script))?.type !== 'file' : !(await stat(script)).isFile()) throw new Error(); }
         catch { warn(`MCP ${name}: interpreter script is unavailable on this host`); continue; }
       }
     }
@@ -149,19 +163,26 @@ export async function mountSessionMcpServers(ctx, config) {
     if (closed || !agent.session.header.cwd) return Promise.resolve();
     let state = states.get(agent);
     if (!state) {
-      state = { scope: createScope(ctx, agent), fibers: [], servers: [], warnings: [], connectionWarnings: [], lastCheck: undefined, signature: '', pending: undefined, closed: false };
+      state = { scope: createScope(config.nativeRealm === true ? agent.ctx : ctx, agent), fibers: [], servers: [], warnings: [], connectionWarnings: [], lastCheck: undefined, signature: '', pending: undefined, closed: false };
       states.set(agent, state);
     }
     if (state.pending) return state.pending;
     state.pending = (async () => {
       const discoveryWarnings = [];
       const report = message => { discoveryWarnings.push(message); warn(message); };
-      const discovered = await discoverProjectMcp(agent.session.header.cwd, config, { credential, warn: report });
+      const realm = config.nativeRealm === true ? await ctx.get('platformProjectConfig').resolve(agent) : undefined;
+      const projectCredential = realm ? name => ctx.get('platformProjectConfig').resolveCredential(agent, name) : credential;
+      const localProjectFiles=realm?await ctx.get('platformProjectConfig').localProjectFiles(agent,['.dsh/mcp.json','.mcp.json','.codex/config.toml','.agents/mcp.yaml']):undefined;
+      const discovered = await discoverProjectMcp(realm?.checkoutRoot ?? agent.session.header.cwd, config, {
+        credential: projectCredential, warn: report,
+        ...(realm ? {fs: realm.fs, home: realm.userConfigRoot, projectRoot: realm.checkoutRoot, executionCwd: realm.cwd,localProjectFiles} : {}),
+      });
       const servers = [];
       for (const server of discovered) {
-        if (server.transport === 'stdio' && ctx.get('subprocess')) {
-          try { await ctx.get('subprocess').resolveExecutable(server.command, server.env); }
-          catch { report(`MCP ${server.serverName}: command is unavailable on this host`); continue; }
+        const processes = realm?.subprocess ?? ctx.get('subprocess');
+        if (server.transport === 'stdio' && processes) {
+          try { await processes.resolveExecutable(server.command, server.env); }
+          catch { report(`MCP ${server.serverName}: command is unavailable in this execution realm`); continue; }
         }
         servers.push(server);
       }
@@ -177,7 +198,8 @@ export async function mountSessionMcpServers(ctx, config) {
         try {
           const fiber = state.scope.ctx.plugin(client, server);
           state.fibers.push(fiber);
-          await fiber;
+          if (config.nativeRealm === true) await fiber.inertia;
+          else await fiber;
         } catch (error) {
           if (!closed && !state.closed) {
             const message = `MCP ${server.serverName}: native client failed (${error?.code ?? error?.name ?? 'error'})`;
@@ -207,7 +229,7 @@ export async function mountSessionMcpServers(ctx, config) {
         if (!agent) return { kind: 'error', text: 'Open a project chat to inspect its MCP connections.' };
         await reconcile(agent);
         const state = states.get(agent);
-        const tools = ctx.get('tools')?.schemas(agent) ?? [];
+        const tools = (ctx.get('agentPresets')?.serviceFor(agent,'tools') ?? agent.ctx.get('tools'))?.schemas(agent) ?? [];
         const rows = (state?.servers ?? []).map(server => {
           const count = tools.filter(tool => tool.name.startsWith(`mcp__${server.name}__`)).length;
           return `${server.name}: ${count} tools registered${count === 0 ? '; no tools discovered, check connection warnings/logs' : ''}`;
