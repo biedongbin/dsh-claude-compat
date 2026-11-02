@@ -270,17 +270,26 @@ function manifestDirs(manifest, field, installPath) {
   return [];
 }
 
-// Translate a plugin's MCP config into dsh-mcp-client server configs. Returns
-// { servers, warns } (empty when no/invalid mcpServers field). Substitutes the
-// ${CLAUDE_PLUGIN_ROOT} placeholder Claude Code defines for plugin processes.
+// Translate a plugin's MCP config into dsh-mcp-client server configs. The manifest
+// `mcpServers` field is either a path to a .mcp.json file or the server map itself.
+// Returns { servers, warns, names }. Substitutes the ${CLAUDE_PLUGIN_ROOT}
+// placeholder Claude Code defines for plugin processes.
 export function translatePluginMcp(manifest, installPath, opts = {}) {
   const ref = manifest?.mcpServers;
-  if (typeof ref !== 'string') return { servers: [], warns: [] };
-  const raw = readTextSafeSync(resolve(installPath, ref));
-  if (raw === undefined) return { servers: [], warns: [`mcpServers file not readable: ${ref}`] };
-  // A replacer function keeps $&, $$ and $' in the install path literal.
-  const substituted = raw.replaceAll('${CLAUDE_PLUGIN_ROOT}', () => installPath);
-  return translateMcpServers(substituted, opts);
+  if (ref === undefined) return { servers: [], warns: [], names: [] };
+  // The path is escaped for JSON, so a Windows path with backslashes stays valid.
+  // A replacer function keeps dollar patterns in the install path literal.
+  const root = JSON.stringify(installPath).slice(1, -1);
+  if (typeof ref === 'string') {
+    const raw = readTextSafeSync(resolve(installPath, ref));
+    if (raw === undefined) return { servers: [], warns: [`mcpServers file not readable: ${ref}`], names: [] };
+    return translateMcpServers(raw.replaceAll('${CLAUDE_PLUGIN_ROOT}', () => root), opts);
+  }
+  if (typeof ref === 'object' && ref !== null && !Array.isArray(ref)) {
+    const body = JSON.stringify({ mcpServers: ref }).replaceAll('${CLAUDE_PLUGIN_ROOT}', () => root);
+    return translateMcpServers(body, opts);
+  }
+  return { servers: [], warns: ['mcpServers must be a path or an object, ignored'], names: [] };
 }
 
 function readTextSafeSync(p) { try { return rfs(p, 'utf8'); } catch { return undefined; } }

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildPolicy, urlMatches } from '../src/mcp-policy.js';
+import { translatePluginMcp } from '../src/plugins.js';
 import { applyPolicy, extraServers, loadMcpServers, translateMcpServers, withoutDuplicateUrls } from '../src/mcp.js';
 
 function tempDir(prefix) {
@@ -316,4 +317,16 @@ test('a disable list element that is not a server name is reported with its posi
   const result = await load(fx);
   assert.deepEqual(names(result), ['keep']);
   assert.match(result.warns.join('\n'), /disabledMcpjsonServers\[0\] must be a server name/);
+});
+
+test('a plugin manifest with an inline mcpServers object mounts its servers, with the plugin root substituted', () => {
+  const result = translatePluginMcp({ mcpServers: { tool: { type: 'stdio', command: '${CLAUDE_PLUGIN_ROOT}/bin/run' } } }, '/opt/plug');
+  assert.equal(result.servers.length, 1);
+  assert.equal(result.servers[0].command, '/opt/plug/bin/run');
+});
+
+test('a plugin mcpServers that is neither a path nor an object is reported, not ignored', () => {
+  const result = translatePluginMcp({ mcpServers: 42 }, '/opt/plug');
+  assert.deepEqual(result.servers, []);
+  assert.match(result.warns.join('\n'), /must be a path or an object/);
 });
