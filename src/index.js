@@ -21,8 +21,9 @@
 //   3. Hooks (Claude Code subset PreToolUse/PostToolUse/UserPromptSubmit) from
 //      .claude/settings.json — bridged onto tools/pre-execute,
 //      tools/post-execute and agent/pre-step (see src/hooks.js).
-//   4. MCP servers from <projectRoot>/.mcp.json — mounted as dsh-mcp-client
-//      plugin instances at startup from the launch workspace (see src/mcp.js).
+//   4. MCP servers from managed-mcp.json, .claude.json and <projectRoot>/.mcp.json
+//      — mounted as dsh-mcp-client plugin instances at startup from the launch
+//      workspace (see src/mcp.js and src/mcp-sources.js).
 //
 // Skill name flattening: .claude/skills/gitnexus/gitnexus-guide/SKILL.md →
 // "gitnexus-gitnexus-guide" (DSH skill names must be kebab-case; the shipped
@@ -56,7 +57,7 @@ import {
   withOriginalName,
 } from './aliases.js';
 import { registerHooks } from './hooks.js';
-import { mountMcpServers, mountMcpConfigs } from './mcp.js';
+import { loadMcpServers, mountMcpConfigs, withoutDuplicateUrls } from './mcp.js';
 import { registerManagerCommands } from './commands.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
@@ -185,20 +186,26 @@ export function apply(ctx, config = {}) {
   }
   if (config.enableMcp !== false) {
     // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
-    mountMcpServers(ctx, config).catch((error) => {
+    mountMcp(ctx, config).catch((error) => {
       console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
     });
-    if (config.enablePlugins !== false && config.enablePluginMcp === true) {
-      mountPluginMcp(ctx, config).catch((error) => {
-        console.warn('dsh-claude-compat: plugin MCP mount failed:', error?.message ?? error);
-      });
-    }
   }
 }
 
-// Opt-in: translate every installed plugin's MCP config and mount alongside
-// the project .mcp.json servers (see src/mcp.js mountMcpConfigs).
-async function mountPluginMcp(ctx, config) {
+// Load the project, user and managed servers, then the opt-in plugin servers,
+// and mount them together. A plugin server whose URL a higher source already
+// uses is dropped, and managed-mcp.json turns plugin servers off.
+async function mountMcp(ctx, config) {
+  const loaded = await loadMcpServers(config);
+  loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
+  const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
+  const plugin = pluginOn ? await pluginMcpServers(config) : [];
+  await mountMcpConfigs(ctx, [...loaded.servers, ...withoutDuplicateUrls(loaded.servers, plugin)]);
+}
+
+// Opt-in: translate every installed plugin's MCP config (see src/mcp.js).
+async function pluginMcpServers(config) {
+  const servers = [];
   for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
     if (raw === undefined) continue;
@@ -208,12 +215,13 @@ async function mountPluginMcp(ctx, config) {
       console.warn(`dsh-claude-compat: plugin ${plugin.key}: cannot parse plugin.json: ${error.message}`);
       continue;
     }
-    const { servers, warns } = translatePluginMcp(manifest, plugin.installPath, {
+    const translated = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,
     });
-    warns.forEach((w) => console.warn(`dsh-claude-compat: plugin ${plugin.key}: ${w}`));
-    if (servers.length > 0) await mountMcpConfigs(ctx, servers);
+    translated.warns.forEach((w) => console.warn(`dsh-claude-compat: plugin ${plugin.key}: ${w}`));
+    servers.push(...translated.servers);
   }
+  return servers;
 }
 
 // ─── skill provider ──────────────────────────────────────────────────────────
