@@ -203,66 +203,28 @@ test('ConfigChange runs when the user settings file changes, with source and fil
   await h.dispose();
 });
 
-test('ConfigChange: with no block, the plugin reloads its hooks', async () => {
-  const log = join(tempDir('dcc-log-'), 'lines');
+test('ConfigChange: a change to a settings file is not applied, and the log says to restart', async () => {
   const marker = join(tempDir('dcc-marker-'), 'ran');
+  const log = join(tempDir('dcc-log-'), 'lines');
   const h = harness({
     ConfigChange: [{ hooks: [{ command: logTo(log) }] }],
     PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }],
   });
   await created(h, fakeAgent('s1', '/work'));
-  writeFileSync(join(h.dir, 'settings.json'), JSON.stringify({
-    hooks: {
-      ConfigChange: [{ hooks: [{ command: logTo(log) }] }],
-      PreToolUse: [{ matcher: '.*', hooks: [{ command: `echo reloaded >> "${marker}"; exit 2` }] }],
-    },
-  }));
-  assert.ok(await waitFor(() => readLines(log).length === 1));
-  await h.drain(); // the reload runs after the ConfigChange hook ends
-  const agent = fakeAgent('s1', '/work');
-  const decision = await h.dispatch('tools/pre-execute', [{ name: 'Read', arguments: {}, callId: 'c', agent }], async () => ({ kind: 'allow' }));
-  assert.equal(decision.kind, 'deny', 'the new PreToolUse hook is in effect');
-  assert.equal(readFileSync(marker, 'utf8').trim(), 'reloaded');
-  await h.dispose();
-});
-
-test('ConfigChange: a hook that blocks keeps the old hooks, and says so', async () => {
-  const marker = join(tempDir('dcc-marker-'), 'ran');
-  const log = join(tempDir('dcc-log-'), 'lines');
-  const h = harness({
-    ConfigChange: [{ hooks: [{ command: `${logTo(log)}; echo not now >&2; exit 2` }] }],
-    PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }],
-  });
-  await created(h, fakeAgent('s1', '/work'));
   const { warnings } = await withWarnings(async () => {
     writeFileSync(join(h.dir, 'settings.json'), JSON.stringify({
       hooks: {
-        ConfigChange: [{ hooks: [{ command: `${logTo(log)}; exit 2` }] }],
-        PreToolUse: [{ matcher: '.*', hooks: [{ command: `echo new >> "${marker}"; exit 2` }] }],
+        ConfigChange: [{ hooks: [{ command: logTo(log) }] }],
+        PreToolUse: [{ matcher: '.*', hooks: [{ command: `echo added >> "${marker}"; exit 2` }] }],
       },
     }));
     await waitFor(() => readLines(log).length === 1);
     await h.drain();
   });
-  assert.match(warnings.join('\n'), /ConfigChange hook blocked the user_settings change/);
+  assert.match(warnings.join('\n'), /changed; hooks load at startup, so restart DSH to apply the change/);
   const decision = await h.dispatch('tools/pre-execute', [{ name: 'Read', arguments: {}, callId: 'c', agent: fakeAgent() }], async () => ({ kind: 'allow' }));
-  assert.equal(decision.kind, 'allow', 'the old PreToolUse hook is still in effect');
-  await h.dispose();
-});
-
-test('ConfigChange: a reload that adds an event with no listener warns about a restart', async () => {
-  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }] });
-  const { warnings } = await withWarnings(async () => {
-    writeFileSync(join(h.dir, 'settings.json'), JSON.stringify({
-      hooks: {
-        PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }],
-        Stop: [{ hooks: [{ command: 'exit 0' }] }],
-      },
-    }));
-    await waitFor(() => h.engine.events().has('stop'));
-    await h.drain();
-  });
-  assert.match(warnings.join('\n'), /need a restart: stop/);
+  assert.equal(decision.kind, 'allow', 'a hook that appears in a settings file while DSH runs does not run');
+  assert.throws(() => readFileSync(marker), /ENOENT/);
   await h.dispose();
 });
 

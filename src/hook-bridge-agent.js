@@ -4,13 +4,9 @@
 // the bridge steers the agent with the reason, as Claude Code does. SubagentStop
 // runs after the subagent ended, so it cannot keep the subagent running.
 
-import { SUBAGENT_TYPE, blocksToText, isSubagent } from './hook-support.js';
+import { SUBAGENT_TYPE, blocksToText, isSubagent, sessionIdOf } from './hook-support.js';
 
 const DEFAULT_STOP_CAP = 8;
-
-function sessionKey(agent) {
-  return agent?.session?.header?.id ?? '';
-}
 
 /** Consecutive Stop continuations allowed (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, default 8). */
 export function stopCap(env = process.env) {
@@ -50,7 +46,7 @@ function stopFeedback(outcome) {
 async function onTurnStopping(deps, { agent }) {
   const { engine, support, messages, continued } = deps;
   if (isSubagent(agent)) return;
-  const key = sessionKey(agent);
+  const key = sessionIdOf(agent);
   const count = continued.get(key) ?? 0;
   const outcome = await engine.fire('stop', 'Stop', {
     agent,
@@ -73,7 +69,7 @@ async function onTurnStopping(deps, { agent }) {
     return;
   }
   continued.set(key, count + 1);
-  agent.steer(support.contextMessage(feedback));
+  if (typeof agent.steer === 'function') agent.steer(support.contextMessage(feedback));
 }
 
 // Only a failed model request is an API error. Other errors of the loop are not.
@@ -90,8 +86,12 @@ function onStopFailure({ engine, support }, { agent, error }) {
   }));
 }
 
+// The child agent of a run. When DSH cannot give it, the hook still runs, but it has no agent
+// to add context to.
 function subagentChild(ctx, info) {
-  return typeof ctx.get === 'function' ? ctx.get('agents')?.get?.(info.id) : undefined;
+  const child = typeof ctx.get === 'function' ? ctx.get('agents')?.get?.(info.id) : undefined;
+  if (child === undefined) console.warn(`dsh-claude-compat: subagent ${info.id} is not in the agent registry; its hook context is dropped`);
+  return child;
 }
 
 async function onSubagentStart({ ctx, engine, support }, info) {
@@ -136,11 +136,12 @@ async function onSubagentEnd({ ctx, engine, support }, info) {
  */
 export function registerAgentHooks(ctx, engine, support, messages) {
   const deps = { ctx, engine, support, messages, continued: new Map() };
+  support.onForget((id) => deps.continued.delete(id));
   if (engine.has('stop')) {
     ctx.on('agent/turn-stopping', (payload) => onTurnStopping(deps, payload));
     // The count of consecutive continuations starts again at each tool call.
     ctx.on('tools/pre-execute', (exec, next) => {
-      deps.continued.delete(sessionKey(exec.agent));
+      deps.continued.delete(sessionIdOf(exec.agent));
       return next();
     });
   }

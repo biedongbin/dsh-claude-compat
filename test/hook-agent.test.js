@@ -218,7 +218,7 @@ test('SubagentStop sends the last assistant text, and warns when it asks to keep
   });
   const payload = JSON.parse(readFileSync(file, 'utf8'));
   assert.deepEqual([payload.hook_event_name, payload.last_assistant_message, payload.agent_id], ['SubagentStop', 'found it', 'sub-1']);
-  assert.match(warnings[0], /already ended/);
+  assert.match(warnings.join('\n'), /already ended/);
 });
 
 test('SubagentStop with no last message sends an empty string', async () => {

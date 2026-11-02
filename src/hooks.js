@@ -35,7 +35,6 @@ import { parseHookHandler } from './hook-spec.js';
 import { findProjectRootSync, resolveUserClaudeDir } from './lib.js';
 
 export { compileMatcher } from './hook-engine.js';
-export { runHookCommand } from './hook-handlers.js';
 
 /**
  * The settings files that hooks come from, in the order they apply: user, project,
@@ -117,18 +116,6 @@ function addHandler(combined, scope, raw) {
   combined[key] = { event: scope.event, matcher: scope.matcher, ...result.handler };
 }
 
-// Each event has its DSH listener registered at startup, only when a hook uses the event.
-// A hook for a new event that appears in a reloaded settings file has no listener yet.
-function makeReload(engine, config, startEvents) {
-  return () => {
-    engine.replace(Object.values(loadHookSettings(config)));
-    const added = [...engine.events()].filter((event) => !startEvents.has(event));
-    if (added.length > 0) {
-      console.warn(`dsh-claude-compat: settings now use hook events that need a restart: ${added.join(', ')}`);
-    }
-  };
-}
-
 /**
  * Load the hook settings and register one DSH listener per event in use.
  * @param {object} ctx DSH plugin context
@@ -146,6 +133,7 @@ export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
     config,
     runners: { ...createModelRunners(ctx, support), ...runners },
     isMuted: support.isHookAgent,
+    track: support.track,
   });
   if (typeof ctx.effect === 'function') {
     // A hook that is still running when the plugin unloads finishes first.
@@ -153,6 +141,7 @@ export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
   }
   // The file watcher registers first: it installs `support.files`, which the session and
   // feed hooks use.
+  ctx.on('agent/disposed', ({ agent }) => support.forget(agent));
   registerFileHooks(ctx, engine, support, { intervalMs });
   registerToolHooks(ctx, engine, support);
   registerSessionHooks(ctx, engine, support);
@@ -164,10 +153,6 @@ export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
   registerFeedHooks(ctx, engine, support);
   registerModelHooks(ctx, engine, support);
   registerTeamHooks(ctx, engine, support);
-  registerConfigHooks(ctx, engine, support, {
-    files: settingsFiles(config),
-    reload: makeReload(engine, config, engine.events()),
-    intervalMs,
-  });
+  registerConfigHooks(ctx, engine, support, { files: settingsFiles(config), intervalMs });
   return { engine, instructionsLoaded: createInstructionsNotifier(engine, support) };
 }

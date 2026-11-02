@@ -61,8 +61,28 @@ test('continue:false and stopReason are read on any event', () => {
   assert.deepEqual([outcome.stopped, outcome.stopReason], [true, 'done here']);
 });
 
-test('systemMessage is kept', () => {
-  assert.equal(interpretRun('stop', 'Stop', run(0, json({ systemMessage: 'careful' }))).systemMessage, 'careful');
+test('an unknown permissionDecision is a failed outcome that names the value, and is not read as allow', () => {
+  for (const given of ['Deny', 'block', 'toString', 7]) {
+    const stdout = json({ hookSpecificOutput: { permissionDecision: given } });
+    const outcome = interpretRun('pre-tool-use', 'PreToolUse', run(0, stdout));
+    assert.deepEqual([outcome.failed, outcome.permission], [true, undefined], String(given));
+    assert.match(outcome.reason, /is not allow, deny, ask or defer/);
+  }
+});
+
+test('on exit 2 the reason is stderr, and stdout is the fallback', () => {
+  assert.equal(interpretRun('pre-tool-use', 'X', run(2, 'from stdout', { stderr: 'from stderr\n' })).reason, 'from stderr');
+  assert.equal(interpretRun('pre-tool-use', 'X', run(2, 'from stdout', { stderr: '  ' })).reason, 'from stdout');
+});
+
+test('stderr text does not spoil a JSON decision on stdout', () => {
+  const stdout = json({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'no' } });
+  const outcome = interpretRun('pre-tool-use', 'PreToolUse', run(0, stdout, { stderr: 'warning: deprecated\n' }));
+  assert.deepEqual([outcome.permission, outcome.permissionReason], ['deny', 'no']);
+});
+
+test('plain stdout context does not include stderr', () => {
+  assert.deepEqual(interpretRun('session-start', 'X', run(0, 'context', { stderr: 'noise' })).contexts, ['context']);
 });
 
 test('decision:block with a reason blocks the events that accept it', () => {

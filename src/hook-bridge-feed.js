@@ -100,6 +100,7 @@ export function registerFeedHooks(ctx, engine, support) {
   const wanted = ['cwd-changed', 'pre-compact', 'post-compact', 'user-prompt-expansion'];
   if (!wanted.some((event) => engine.has(event))) return;
   const deps = { engine, support, cwds: new Map(), commands: new Map(), summaries: new Map() };
+  support.onForget((id) => deps.cwds.delete(id));
   // Events run one after another, so a hook sees them in the order DSH committed them.
   let queue = Promise.resolve();
   ctx.on('session/event', (session, event) => {

@@ -6,13 +6,9 @@
 // `displayContent` is ignored.
 
 import { randomUUID } from 'node:crypto';
-import { isSubagent } from './hook-support.js';
+import { isSubagent, sessionIdOf } from './hook-support.js';
 
 const DISPLAY_DEFAULT_MS = 10_000;
-
-function sessionKey(agent) {
-  return agent?.session?.header?.id ?? '';
-}
 
 function freshMessage(previous, turn) {
   return {
@@ -43,6 +39,7 @@ export function registerMessageHooks(ctx, engine, support) {
   const wantsDisplay = engine.has('message-display');
   const wantsText = wantsDisplay || engine.has('stop') || engine.has('stop-failure');
   const messages = new Map();
+  support.onForget((id) => messages.delete(id));
   let warnedDisplayContent = false;
 
   // Batches run one after another, so a hook sees the lines of a message in order.
@@ -62,6 +59,10 @@ export function registerMessageHooks(ctx, engine, support) {
         console.warn('dsh-claude-compat: MessageDisplay hook returned displayContent; DSH cannot change displayed text, ignored');
       }
     });
+    // One failed batch must not stop the batches after it.
+    state.queue = state.queue.catch((error) => {
+      console.warn(`dsh-claude-compat: MessageDisplay hooks failed: ${error?.message ?? error}`);
+    });
     support.track(state.queue);
   }
 
@@ -77,7 +78,7 @@ export function registerMessageHooks(ctx, engine, support) {
   if (wantsText) {
     ctx.on('agent/assistant-stream', ({ agent, frame }) => {
       if (isSubagent(agent)) return;
-      const key = sessionKey(agent);
+      const key = sessionIdOf(agent);
       if (frame.type === 'start') {
         messages.set(key, freshMessage(messages.get(key), frame.turn));
         return;
@@ -93,5 +94,5 @@ export function registerMessageHooks(ctx, engine, support) {
     });
   }
 
-  return { lastMessage: (agent) => messages.get(sessionKey(agent))?.text ?? '' };
+  return { lastMessage: (agent) => messages.get(sessionIdOf(agent))?.text ?? '' };
 }

@@ -5,8 +5,8 @@
 // answerers still run. PostToolBatch runs at the first `agent/pre-step` after a
 // group of tool results, which is the point before the next model call.
 
-import { blocksToText } from './hook-support.js';
-import { responseOf } from './hook-bridge-tools.js';
+import { HOOK_CALL_PREFIX, sessionIdOf } from './hook-support.js';
+import { failureText, responseOf } from './hook-bridge-tools.js';
 
 // DSH has no event that groups parallel calls. The log of calls whose input an
 // approval request may need is bounded, because a call that never finishes
@@ -31,11 +31,19 @@ function permissionDecision(outcome) {
   const decision = outcome.specific.decision;
   if (outcome.stopped) return { behavior: 'deny', message: outcome.stopReason };
   if (typeof decision !== 'object' || decision === null) return undefined;
-  return decision.behavior === 'allow' || decision.behavior === 'deny' ? decision : undefined;
+  if (decision.behavior === 'allow' || decision.behavior === 'deny') return decision;
+  console.warn(`dsh-claude-compat: PermissionRequest hook gave behavior ${JSON.stringify(decision.behavior)}, not allow or deny; ignored`);
+  return undefined;
 }
 
 async function onApproval(engine, support, calls, req, next) {
-  const call = calls.get(req.callId) ?? { name: req.toolName, input: {} };
+  // The call of a hook asks nobody for permission through the hooks again.
+  if (typeof req.callId === 'string' && req.callId.startsWith(HOOK_CALL_PREFIX)) return next();
+  const recorded = calls.get(req.callId);
+  if (recorded === undefined) {
+    console.warn(`dsh-claude-compat: no input is known for the approval of ${req.toolName}; PermissionRequest hooks get an empty tool_input`);
+  }
+  const call = recorded ?? { name: req.toolName, input: {} };
   const fields = { tool_name: req.toolName, tool_input: call.input, permission_suggestions: [] };
   const outcome = await engine.fire('permission-request', 'PermissionRequest', {
     subject: req.toolName,
@@ -79,17 +87,10 @@ async function onDenied(engine, support, req, fields) {
   }
 }
 
-function sessionKey(agent) {
-  return agent?.session?.header?.id ?? '';
-}
-
-function failureText(result) {
-  return blocksToText(result.content) || String(result.error?.message ?? result.error?.code ?? 'tool failed');
-}
-
 function recordResult(batches, exec, result) {
-  const key = sessionKey(exec.agent);
+  const key = sessionIdOf(exec.agent);
   const entries = batches.get(key) ?? [];
+  if (entries.length >= MAX_TRACKED_CALLS) entries.shift();
   entries.push({
     tool_name: exec.name,
     tool_input: exec.arguments ?? {},
@@ -101,9 +102,9 @@ function recordResult(batches, exec, result) {
 
 async function onPreStep(engine, support, batches, payload, next) {
   const { agent } = payload;
-  const toolCalls = batches.get(sessionKey(agent));
+  const toolCalls = batches.get(sessionIdOf(agent));
   if (toolCalls === undefined || toolCalls.length === 0) return next();
-  batches.delete(sessionKey(agent));
+  batches.delete(sessionIdOf(agent));
   const outcome = await engine.fire('post-tool-batch', 'PostToolBatch', {
     agent,
     rewake: support.rewake(agent),
@@ -130,6 +131,7 @@ export function registerPermissionHooks(ctx, engine, support) {
   const wantsBatch = engine.has('post-tool-batch');
   const calls = createCallLog();
   const batches = new Map();
+  support.onForget((id) => batches.delete(id));
   if (wantsApproval) {
     // Record each call's input first, because an approval request carries only the call id.
     ctx.on('tools/pre-execute', (exec, next) => {

@@ -186,7 +186,7 @@ A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of n
 | TeammateIdle | `agent/status` and `team/member` | A block steers the teammate to keep working. |
 | InstructionsLoaded | the plugin's own rules loader | `.claude/rules` files only, with `load_reason` `session_start`. |
 | FileChanged | polling of the files that the matcher names | `watchPaths` from SessionStart, CwdChanged and FileChanged are watched too. |
-| ConfigChange | polling of the settings files, and `skills/change` | A block keeps the plugin from reloading its hooks. A new event in the settings needs a restart. |
+| ConfigChange | polling of the settings files, and `skills/change` | Observe only. Hooks load at startup and are never reloaded, so the plugin logs that a changed settings file needs a restart. |
 
 These events cannot run in DSH, and the plugin warns when a settings file uses one:
 `Setup` (no init flags), `DirectoryAdded` (only the `--add-dir` start flag), `WorktreeCreate` and `WorktreeRemove` (service methods with no hook point), `Elicitation` and `ElicitationResult` (the DSH MCP client has no elicitation) and `PreModelSwitch` (DSH applies a model change before a plugin can see it).
@@ -195,7 +195,7 @@ Handler details:
 
 - `mcp_tool` calls `mcp__<server>__<tool>` through the DSH tool service. `${path}` in a string of `input` is replaced from the hook input. A server that is still connecting is a failed hook.
 - `prompt` asks the session model one question, with no tools. `model` is `provider/model`, or a model of the session provider. `continueOnBlock` and `impossible` follow the Claude Code rules.
-- `agent` starts a DSH subagent through the `spawn` provider and reads its structured answer. DSH cannot limit its tools to read-only, so the prompt tells it to change no file. No hook runs inside that subagent.
+- `agent` starts a DSH subagent through the `spawn` provider and reads its structured answer. DSH cannot limit its tools to read-only, so the prompt tells it to change no file, and DSH's normal approvals still guard any write. No hook runs inside that subagent.
 
 ## Notes
 

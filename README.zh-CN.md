@@ -184,7 +184,7 @@ matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名
 | TeammateIdle | `agent/status` 与 `team/member` | 拦截会引导队友继续工作。 |
 | InstructionsLoaded | 插件自己的 rules 加载器 | 仅 `.claude/rules` 文件，`load_reason` 为 `session_start`。 |
 | FileChanged | 轮询 matcher 指定的文件 | SessionStart、CwdChanged 与 FileChanged 返回的 `watchPaths` 也会被监视。 |
-| ConfigChange | 轮询 settings 文件，以及 `skills/change` | 拦截会让插件不重新加载 hooks。settings 中新增的事件需要重启。 |
+| ConfigChange | 轮询 settings 文件，以及 `skills/change` | 仅观察。hooks 在启动时加载且从不重新加载，所以 settings 文件变化时插件只记录日志，提示需要重启。 |
 
 以下事件无法在 DSH 中运行，settings 文件用到时插件会给出警告：
 `Setup`（没有 init 启动参数）、`DirectoryAdded`（只有 `--add-dir` 启动参数）、`WorktreeCreate` 与 `WorktreeRemove`（只有服务方法，没有 hook 点）、`Elicitation` 与 `ElicitationResult`（DSH 的 MCP 客户端不支持 elicitation）、`PreModelSwitch`（DSH 在插件看到之前就已应用模型切换）。

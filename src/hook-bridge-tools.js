@@ -46,9 +46,14 @@ export function responseOf(result) {
   return result.value !== undefined ? result.value : blocksToText(result.content);
 }
 
+/** The error text of a failed tool result. */
+export function failureText(result) {
+  return blocksToText(result.content) || String(result.error?.message ?? result.error?.code ?? 'tool failed');
+}
+
 function failureFields(result) {
   return {
-    error: blocksToText(result.content) || String(result.error?.message ?? result.error?.code ?? 'tool failed'),
+    error: failureText(result),
     is_interrupt: TOOL_ABORT_CODES.has(result.error?.code),
   };
 }

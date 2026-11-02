@@ -53,8 +53,13 @@ export function verdictToRun(event, verdict, hook) {
   const reason = verdict.reason ?? '';
   // `impossible` lets the turn end on Stop and SubagentStop. Agent hooks do not have it.
   if ((event === 'stop' || event === 'subagent-stop') && hook.type === 'prompt' && verdict.impossible) return ALLOWED;
-  // These events have no decision to make: the denial or the request already happened.
-  if (event === 'permission-denied' || event === 'permission-request') return ALLOWED;
+  // The denial already happened. A PermissionRequest block becomes a deny decision.
+  if (event === 'permission-denied') return ALLOWED;
+  if (event === 'permission-request') {
+    const decision = { behavior: 'deny', message: reason };
+    const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
+    return { exitCode: 0, stdout: JSON.stringify(output), failed: false };
+  }
   // The reason goes back to the model as the tool error.
   if (event === 'post-tool-use-failure') {
     return { exitCode: 0, stdout: JSON.stringify({ additionalContext: reason }), failed: false };

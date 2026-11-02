@@ -5,11 +5,16 @@
 // becomes `completed`. A blocking hook denies the whole call, so the list stays as
 // it was. Todo items have no id, so `task_id` is `todo-<position>` in the new list.
 
+import { sessionIdOf } from './hook-support.js';
+
 const TODO_TOOL = 'todo_write';
 
 function validTodos(exec) {
   const todos = exec.arguments?.todos;
-  if (!Array.isArray(todos)) return undefined;
+  if (!Array.isArray(todos)) {
+    console.warn('dsh-claude-compat: todo_write arguments have no todos list; TaskCreated and TaskCompleted hooks skipped');
+    return undefined;
+  }
   return todos.filter((todo) => typeof todo?.content === 'string');
 }
 
@@ -20,29 +25,27 @@ function countByContent(todos) {
   return counts;
 }
 
-/** The todos that are new in `next`, each with its position in `next`. */
-export function createdTodos(previous, next) {
-  const known = countByContent(previous);
-  const created = [];
+// The entries of `next` (with their position) that `before` does not account for, one to one.
+function unmatched(before, next, keep) {
+  const known = countByContent(before);
+  const result = [];
   next.forEach((todo, index) => {
+    if (!keep(todo)) return;
     const left = known.get(todo.content) ?? 0;
     if (left > 0) known.set(todo.content, left - 1);
-    else created.push({ todo, index });
+    else result.push({ todo, index });
   });
-  return created;
+  return result;
+}
+
+/** The todos that are new in `next`, each with its position in `next`. */
+export function createdTodos(previous, next) {
+  return unmatched(previous, next, () => true);
 }
 
 /** The todos that are `completed` in `next` and were not `completed` before. */
 export function completedTodos(previous, next) {
-  const done = countByContent(previous.filter((todo) => todo.status === 'completed'));
-  const completed = [];
-  next.forEach((todo, index) => {
-    if (todo.status !== 'completed') return;
-    const left = done.get(todo.content) ?? 0;
-    if (left > 0) done.set(todo.content, left - 1);
-    else completed.push({ todo, index });
-  });
-  return completed;
+  return unmatched(previous.filter((todo) => todo.status === 'completed'), next, (todo) => todo.status === 'completed');
 }
 
 function taskFields({ todo, index }) {
@@ -64,7 +67,7 @@ async function fireTask(engine, support, agent, event, claudeName, entry) {
 async function onPreTool(engine, support, lists, exec, next) {
   const todos = exec.name === TODO_TOOL ? validTodos(exec) : undefined;
   if (todos === undefined) return next();
-  const previous = lists.get(exec.agent?.session?.header?.id ?? '') ?? [];
+  const previous = lists.get(sessionIdOf(exec.agent)) ?? [];
   const steps = [
     ['task-created', 'TaskCreated', createdTodos(previous, todos)],
     ['task-completed', 'TaskCompleted', completedTodos(previous, todos)],
@@ -82,7 +85,7 @@ async function onPreTool(engine, support, lists, exec, next) {
 // The list that DSH accepted is the baseline for the next call.
 async function onPostTool(lists, exec, result, next) {
   const todos = exec.name === TODO_TOOL && result.isError !== true ? validTodos(exec) : undefined;
-  if (todos !== undefined) lists.set(exec.agent?.session?.header?.id ?? '', todos);
+  if (todos !== undefined) lists.set(sessionIdOf(exec.agent), todos);
   return next();
 }
 
@@ -95,6 +98,7 @@ async function onPostTool(lists, exec, result, next) {
 export function registerTaskHooks(ctx, engine, support) {
   if (!engine.has('task-created') && !engine.has('task-completed')) return;
   const lists = new Map();
+  support.onForget((id) => lists.delete(id));
   ctx.on('tools/pre-execute', (exec, next) => onPreTool(engine, support, lists, exec, next));
   ctx.on('tools/post-execute', (exec, result, next) => onPostTool(lists, exec, result, next));
 }

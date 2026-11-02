@@ -38,10 +38,20 @@ export function createSupport(ctx) {
   const pending = new Set();
   // Session ids of the subagents that agent hooks started. No hook runs inside them.
   const hookAgents = new Set();
+  const forgetters = [];
 
   return {
-    ctx,
     hookAgents,
+
+    /** Register a cleanup that runs with the session id when a session's agent is disposed. */
+    onForget(fn) {
+      forgetters.push(fn);
+    },
+
+    forget(agent) {
+      const id = sessionIdOf(agent);
+      for (const fn of forgetters) fn(id);
+    },
 
     isHookAgent: (agent) => hookAgents.has(sessionIdOf(agent)),
 

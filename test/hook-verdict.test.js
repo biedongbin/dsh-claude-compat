@@ -71,11 +71,14 @@ test('ok false on PostToolUseFailure goes back to the model as context', () => {
   assert.deepEqual([outcome.blocked, outcome.contexts], [false, ['because']]);
 });
 
-test('ok false has no effect on PermissionDenied and PermissionRequest', () => {
-  for (const event of ['permission-denied', 'permission-request']) {
-    const outcome = outcomeOf(event, block(event));
-    assert.deepEqual([outcome.blocked, outcome.contexts, outcome.failed], [false, [], false], event);
-  }
+test('ok false has no effect on PermissionDenied', () => {
+  const outcome = outcomeOf('permission-denied', block('permission-denied'));
+  assert.deepEqual([outcome.blocked, outcome.contexts, outcome.failed], [false, [], false]);
+});
+
+test('ok false on PermissionRequest is a deny decision with the reason', () => {
+  const outcome = interpretRun('permission-request', 'PermissionRequest', block('permission-request'));
+  assert.deepEqual(outcome.specific.decision, { behavior: 'deny', message: 'because' });
 });
 
 test('on TeammateIdle only continueOnBlock, or an agent hook, keeps the teammate working', () => {

@@ -274,9 +274,10 @@ test('a prompt hook uses its own timeout, 30 seconds by default', async () => {
   assert.equal(llm.requests.length, 1);
 });
 
-test('a prompt hook on PermissionRequest cannot change the decision', async () => {
+test('a prompt hook that answers ok false on PermissionRequest rejects the approval', async () => {
   const h = harness({ PermissionRequest: [{ matcher: '.*', hooks: [promptHook()] }] }, { ctx: { llm: fakeLlm('{"ok": false, "reason": "no"}') } });
-  assert.equal(await h.dispatch('approval/request', [{ agent: modelAgent(), toolName: 'Bash', callId: 'c1' }], async () => 'allowed-once'), 'allowed-once');
+  const { value } = await withWarnings(() => h.dispatch('approval/request', [{ agent: modelAgent(), toolName: 'Bash', callId: 'c1' }], async () => 'allowed-once'));
+  assert.equal(value, 'rejected');
 });
 
 // ─── agent runner ────────────────────────────────────────────────────────────

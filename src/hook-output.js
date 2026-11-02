@@ -75,7 +75,6 @@ function emptyOutcome() {
     blocked: false,
     stopped: false,
     stopReason: undefined,
-    systemMessage: undefined,
     contexts: [],
     permission: undefined,
     permissionReason: undefined,
@@ -104,13 +103,18 @@ function applyJson(outcome, event, json, specific) {
   if (json === undefined) return;
   outcome.stopped = json.continue === false;
   outcome.stopReason = typeof json.stopReason === 'string' ? json.stopReason : undefined;
-  outcome.systemMessage = typeof json.systemMessage === 'string' ? json.systemMessage : undefined;
   if (DECISION_BLOCKS.has(event) && json.decision === 'block') {
     outcome.blocked = true;
     outcome.reason = typeof json.reason === 'string' ? json.reason : outcome.reason;
   }
   if (event === 'pre-tool-use') {
-    outcome.permission = specific.permissionDecision ?? legacyPermission(json);
+    const given = specific.permissionDecision ?? legacyPermission(json);
+    if (given !== undefined && !Object.hasOwn(PERMISSION_RANK, given)) {
+      outcome.failed = true;
+      outcome.reason = `permissionDecision "${given}" is not allow, deny, ask or defer`;
+      return;
+    }
+    outcome.permission = given;
     outcome.permissionReason = specific.permissionDecisionReason
       ?? (typeof json.reason === 'string' ? json.reason : undefined);
   }
@@ -144,7 +148,9 @@ export function interpretRun(event, claudeName, run) {
   outcome.contexts = contextsOf(json, specific);
   applyJson(outcome, event, json, specific);
   if (run.exitCode === 2 && EXIT2_BLOCKS.has(event)) {
-    const text = outcome.text === '' ? undefined : outcome.text;
+    // Claude Code reads stderr on exit 2. A run with no stderr falls back to stdout.
+    const errText = (run.stderr ?? '').trim();
+    const text = errText !== '' ? errText : (outcome.text === '' ? undefined : outcome.text);
     outcome.blocked = true;
     outcome.reason = json === undefined ? text : (outcome.reason ?? text);
   }
@@ -173,7 +179,6 @@ export function mergeOutcomes(outcomes) {
     merged.reason ??= outcome.blocked ? outcome.reason : undefined;
     merged.stopped ||= outcome.stopped;
     merged.stopReason ??= outcome.stopReason;
-    merged.systemMessage = [merged.systemMessage, outcome.systemMessage].filter(Boolean).join('\n') || undefined;
     merged.contexts.push(...outcome.contexts);
     merged.permission = strongerPermission(merged.permission, outcome.permission);
     merged.permissionReason ??= outcome.permission === merged.permission ? outcome.permissionReason : undefined;

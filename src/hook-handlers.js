@@ -4,6 +4,13 @@
 
 import { spawn } from 'node:child_process';
 
+// A hook's output goes back to the model, so each stream keeps at most this many characters.
+const OUTPUT_LIMIT = 1_048_576;
+
+function appendCapped(text, chunk) {
+  return (text + chunk).slice(0, OUTPUT_LIMIT);
+}
+
 // ----- command ----------------------------------------------------------------
 
 function hookEnv(hook) {
@@ -34,21 +41,22 @@ function closeReason(code, signal) {
  * @param {object} hook handler from loadHookSettings
  * @param {string} stdin JSON payload
  * @param {{timeoutMs?: number}} [options]
- * @returns {Promise<{exitCode: number, stdout: string, failed: boolean, reason?: string}>}
+ * @returns {Promise<{exitCode: number, stdout: string, stderr: string, failed: boolean, reason?: string}>}
  */
 export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
   return new Promise((resolve) => {
     let stdout = '';
+    let stderr = '';
     let settled = false;
     let timer;
     const finish = (exitCode, failed, reason) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ exitCode, stdout, failed, reason });
+      resolve({ exitCode, stdout, stderr, failed, reason });
     };
     const [file, argv] = hook.args === undefined
-      ? ['/bin/sh', ['-c', hook.command]]
+      ? [hook.shell === 'bash' ? '/bin/bash' : '/bin/sh', ['-c', hook.command]]
       : [hook.command, hook.args];
     let child;
     try {
@@ -62,8 +70,8 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
       killHook(child);
       finish(1, true, `timed out after ${timeoutMs}ms`);
     }, timeoutMs);
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stdout += chunk; }); // stderr joins the feedback
+    child.stdout.on('data', (chunk) => { stdout = appendCapped(stdout, chunk); });
+    child.stderr.on('data', (chunk) => { stderr = appendCapped(stderr, chunk); });
     child.on('error', (error) => finish(1, true, `failed to start: ${error.code ?? error.message}`));
     child.on('close', (code, signal) => finish(code ?? 1, code !== 0 && code !== 2, closeReason(code, signal)));
     child.stdin.on('error', (error) => {
@@ -96,10 +104,11 @@ function httpHeaders(hook, env) {
 
 /** A run that failed with a reason, for a runner that cannot reach a decision. */
 export function failedRun(reason) {
-  return { exitCode: 1, stdout: '', failed: true, reason };
+  return { exitCode: 1, stdout: '', stderr: '', failed: true, reason };
 }
 
 function httpFailureReason(error, timeoutMs) {
+  if (error instanceof RangeError) return error.message;
   if (error?.name === 'TimeoutError') return `timed out after ${timeoutMs}ms`;
   return `http request failed: ${error?.cause?.code ?? error?.message ?? String(error)}`;
 }
@@ -109,13 +118,21 @@ function httpFailureReason(error, timeoutMs) {
 function interpretHttpResponse(status, body) {
   if (status < 200 || status >= 300) return failedRun(`http ${status}`);
   const text = body.trim();
-  if (text === '') return { exitCode: 0, stdout: '', failed: false };
+  if (text === '') return { exitCode: 0, stdout: '', stderr: '', failed: false };
   let parsed;
   try { parsed = JSON.parse(text); } catch { parsed = undefined; }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return failedRun('http response body is not a JSON object');
   }
   return { exitCode: 0, stdout: text, failed: false };
+}
+
+// The body of a response, at most OUTPUT_LIMIT characters. A longer body is an error, so a
+// server cannot fill memory or flood the model.
+async function readBody(response) {
+  const text = await response.text();
+  if (text.length > OUTPUT_LIMIT) throw new RangeError('response body is too large');
+  return text;
 }
 
 /**
@@ -131,9 +148,10 @@ export async function runHttpHook(hook, payload, { timeoutMs = 60_000, env = pro
       method: 'POST',
       headers: httpHeaders(hook, env),
       body: payload,
+      redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return interpretHttpResponse(response.status, await response.text());
+    return interpretHttpResponse(response.status, await readBody(response));
   } catch (error) {
     return failedRun(httpFailureReason(error, timeoutMs));
   }

@@ -27,7 +27,7 @@ test('PermissionRequest: a deny decision rejects and logs its message', async ()
   const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: decide({ behavior: 'deny', message: 'no way' }) }] }] });
   const { value, warnings } = await withWarnings(() => h.dispatch('approval/request', [approval(fakeAgent())], async () => 'allowed-once'));
   assert.equal(value, 'rejected');
-  assert.match(warnings[0], /denied Bash: no way/);
+  assert.match(warnings.join('\n'), /denied Bash: no way/);
 });
 
 test('PermissionRequest: exit 2 is not honored, so the request goes on to next()', async () => {
@@ -88,7 +88,7 @@ test('PermissionRequest: updatedInput is warned, because DSH tool input cannot c
   const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: decide({ behavior: 'allow', updatedInput: { command: 'x' } }) }] }] });
   const { value, warnings } = await withWarnings(() => h.dispatch('approval/request', [approval(fakeAgent())], async () => 'rejected'));
   assert.equal(value, 'allowed-once');
-  assert.match(warnings[0], /cannot be changed/);
+  assert.match(warnings.join('\n'), /cannot be changed/);
 });
 
 // ─── PermissionDenied ────────────────────────────────────────────────────────

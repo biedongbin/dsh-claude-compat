@@ -1,10 +1,11 @@
 // dsh-claude-compat: ConfigChange.
 //
-// The plugin polls its settings files (user, project and local `settings.json`)
-// and listens to DSH's `skills/change`. After a change, the ConfigChange hooks
-// run. A hook that blocks keeps the plugin from applying the new settings. With no
-// block, the plugin reloads its hook list, whether or not a ConfigChange hook
-// exists. DSH has no event for the policy settings, so `policy_settings` never fires.
+// The plugin polls its settings files (user, project and local `settings.json`) and
+// listens to DSH's `skills/change`. After a change, the ConfigChange hooks run. Hooks load
+// once at startup and the plugin never reloads them: a file that an agent could write
+// must not add a hook that runs without review. A change to a settings file only logs
+// that DSH needs a restart. DSH has no event for the policy settings, so `policy_settings`
+// never fires.
 
 import { createWatcher } from './hook-watch.js';
 
@@ -13,27 +14,24 @@ import { createWatcher } from './hook-watch.js';
  * @param {object} ctx DSH plugin context
  * @param {object} engine hook engine
  * @param {object} support shared helpers
- * @param {{files: {path: string, source: string}[], reload: () => void,
- *   intervalMs?: number}} options settings files to watch, and the hook reload
+ * @param {{files: {path: string, source: string}[], intervalMs?: number}} options settings files to watch
  */
-export function registerConfigHooks(ctx, engine, support, { files, reload, intervalMs }) {
+export function registerConfigHooks(ctx, engine, support, { files, intervalMs }) {
   if (engine.events().size === 0) return;
   const sources = new Map(files.map((file) => [file.path, file.source]));
   let current;
 
   async function changed(source, filePath) {
-    const outcome = await engine.fire('config-change', 'ConfigChange', {
+    await engine.fire('config-change', 'ConfigChange', {
       subject: source,
       payload: support.payload('ConfigChange', current, {
         source,
         ...filePath === undefined ? {} : { file_path: filePath },
       }),
     });
-    if (outcome.blocked || outcome.stopped) {
-      console.warn(`dsh-claude-compat: ConfigChange hook blocked the ${source} change; it is not applied: ${outcome.reason ?? outcome.stopReason ?? 'blocked'}`);
-      return;
+    if (filePath !== undefined) {
+      console.warn(`dsh-claude-compat: ${filePath} changed; hooks load at startup, so restart DSH to apply the change`);
     }
-    if (filePath !== undefined) reload();
   }
 
   const watcher = createWatcher({
@@ -44,6 +42,9 @@ export function registerConfigHooks(ctx, engine, support, { files, reload, inter
   ctx.effect?.(() => () => watcher.close(), 'dsh-claude-compat: stop settings watch');
   ctx.on('agent/created', ({ agent }) => {
     if (agent?.session?.header?.origin !== 'subagent') current = agent;
+  });
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (agent === current) current = undefined;
   });
   // DSH also reports skills while it starts up. Only a change after the first agent counts.
   ctx.on('skills/change', () => {

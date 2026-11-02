@@ -47,7 +47,7 @@ const TYPE_TIMEOUT_MS = { prompt: 30_000, agent: 60_000 };
 
 // Log text for a failed run: the reason, the hook, and the end of its output.
 function failureText(run, hook) {
-  const tail = run.stdout.trim();
+  const tail = (run.stderr ?? '').trim() || run.stdout.trim();
   const label = hook.command ?? hook.url ?? hook.tool ?? hook.prompt?.slice(0, 40) ?? hook.type;
   return `${run.reason}: ${label}${tail === '' ? '' : ` (output: ${tail.slice(-500)})`}`;
 }
@@ -72,8 +72,8 @@ function applyOnFailure(run, hook, event) {
  *   `hooks` are the records from loadHookSettings. `runners` overrides the runner of a handler
  *   type (the types that need DSH, and tests). No hook runs for an agent that `isMuted` names.
  */
-export function createHookEngine({ hooks: initial, config, runners, isMuted }) {
-  let hooks = initial;
+export function createHookEngine({ hooks: initial, config, runners, isMuted, track = (promise) => promise }) {
+  const hooks = initial;
   const matchers = new Map();
 
   // One predicate per (event, matcher), built once. A pattern that does not parse is reported once.
@@ -105,27 +105,34 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted }) {
     return spec.defaultMs ?? config.hooksTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  function runOne(hook, spec) {
-    return runHandler(hook, JSON.stringify(spec.payload), {
-      timeoutMs: timeoutFor(hook, spec),
-      runners,
-      event: hook.event,
-      agent: spec.agent,
-    });
+  // A runner never rejects, but a bug in one must not take the DSH event down with it.
+  async function runOne(hook, spec) {
+    try {
+      return await runHandler(hook, JSON.stringify(spec.payload), {
+        timeoutMs: timeoutFor(hook, spec),
+        runners,
+        event: hook.event,
+        agent: spec.agent,
+      });
+    } catch (error) {
+      return { exitCode: 1, stdout: '', stderr: '', failed: true, reason: `hook runner error: ${error?.message ?? error}` };
+    }
   }
 
   // `async` hooks run in the background. They cannot change the decision, so
   // their failures are logged here. `asyncRewake` also reports exit 2.
   function runInBackground(hook, spec, claudeName) {
-    runOne(hook, spec).then((run) => {
+    track(runOne(hook, spec).then((run) => {
       if (run.failed) {
         console.warn(`dsh-claude-compat: async ${claudeName} hook failed, ${failureText(run, hook)}`);
       } else if (run.exitCode === 2 && hook.asyncRewake && spec.rewake !== undefined) {
-        spec.rewake(run.stdout.trim());
+        spec.rewake((run.stderr ?? '').trim() || run.stdout.trim());
       } else if (run.exitCode === 2) {
         console.warn(`dsh-claude-compat: async ${claudeName} hook exit 2 cannot block, ignored`);
       }
-    });
+    }).catch((error) => {
+      console.warn(`dsh-claude-compat: async ${claudeName} hook failed: ${error?.message ?? error}`);
+    }));
   }
 
   return {
@@ -141,11 +148,6 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted }) {
     /** The distinct matchers that the hooks of `event` use. */
     matchers(event) {
       return [...new Set(hooks.filter((hook) => hook.event === event).map((hook) => hook.matcher))];
-    },
-
-    /** Swap the configured hooks, for a settings file that changed while the session runs. */
-    replace(next) {
-      hooks = next;
     },
 
     /**
@@ -169,7 +171,11 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted }) {
         }
         const run = await runOne(hook, spec);
         if (run.failed) console.warn(`dsh-claude-compat: ${claudeName} hook failed, ${failureText(run, hook)}`);
-        outcomes.push(interpretRun(event, claudeName, applyOnFailure(run, hook, event)));
+        const outcome = interpretRun(event, claudeName, applyOnFailure(run, hook, event));
+        if (outcome.failed && !run.failed) {
+          console.warn(`dsh-claude-compat: ${claudeName} hook output ignored: ${outcome.reason}`);
+        }
+        outcomes.push(outcome);
       }
       return mergeOutcomes(outcomes);
     },

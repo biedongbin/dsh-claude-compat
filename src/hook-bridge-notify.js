@@ -5,11 +5,7 @@
 // A Notification hook cannot change anything, so the bridge never delays the
 // DSH event that triggers it.
 
-import { isSubagent } from './hook-support.js';
-
-function sessionKey(agent) {
-  return agent?.session?.header?.id ?? '';
-}
+import { isSubagent, sessionIdOf } from './hook-support.js';
 
 function notify(engine, support, agent, type, title, message) {
   support.track(engine.fire('notification', 'Notification', {
@@ -27,6 +23,7 @@ function notify(engine, support, agent, type, title, message) {
 export function registerNotificationHooks(ctx, engine, support) {
   if (!engine.has('notification')) return;
   const running = new Set();
+  support.onForget((id) => running.delete(id));
   ctx.on('approval/request', (req, next) => {
     notify(engine, support, req.agent, 'permission_prompt', 'Permission needed', `Permission needed to use ${req.toolName}`);
     return next();
@@ -39,7 +36,7 @@ export function registerNotificationHooks(ctx, engine, support) {
   // first `idle` of a new agent is not a finished run.
   ctx.on('agent/status', ({ agent, status }) => {
     if (isSubagent(agent)) return;
-    const key = sessionKey(agent);
+    const key = sessionIdOf(agent);
     if (status === 'running') {
       running.add(key);
     } else if (running.delete(key)) {

@@ -49,5 +49,6 @@ async function onPreStep(engine, support, models, { agent, modelSelection }, nex
 export function registerModelHooks(ctx, engine, support) {
   if (!engine.has('post-model-switch')) return;
   const models = new Map();
+  support.onForget((id) => models.delete(id));
   ctx.on('agent/pre-step', (payload, next) => onPreStep(engine, support, models, payload, next));
 }

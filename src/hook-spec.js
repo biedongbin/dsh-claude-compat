@@ -72,7 +72,7 @@ function commandProblem(raw) {
   if (!nonEmptyString(raw.command)) return 'command is missing';
   if (raw.args !== undefined && !isStringArray(raw.args)) return 'args must be an array of strings';
   if (raw.shell !== undefined && raw.shell !== 'bash') {
-    return `shell "${raw.shell}" is not supported; hooks run in /bin/sh`;
+    return `shell "${raw.shell}" is not supported; use "bash" or leave shell out`;
   }
   return undefined;
 }
@@ -203,6 +203,7 @@ export function parseHookHandler(raw, { event, projectDir }) {
     handler: {
       type,
       command: execForm ? expand(raw.command) : raw.command,
+      shell: raw.shell,
       args: execForm ? raw.args.map(expand) : undefined,
       url: raw.url,
       headers: raw.headers,

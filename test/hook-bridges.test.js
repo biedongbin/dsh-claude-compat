@@ -295,9 +295,9 @@ test('SessionEnd runs on agent/disposed and the run is tracked until it ends', a
   const drained = [];
   const listeners = listenersFor(
     { SessionEnd: [{ matcher: '.*', hooks: [{ command: `cat > "${file}"` }] }] },
-    { ctx: { effect: (setup) => drained.push(setup()) } },
+    { ctx: { effect: (setup, name) => { if (/drain hook runs/.test(name)) drained.push(setup()); } } },
   );
-  listeners.get('agent/disposed')({ agent: fakeAgent('s3') });
+  await listeners.get('agent/disposed')({ agent: fakeAgent('s3') });
   await drained[0]();
   const payload = JSON.parse(readFileSync(file, 'utf8'));
   assert.deepEqual([payload.hook_event_name, payload.reason, payload.session_id], ['SessionEnd', 'other', 's3']);
