@@ -237,13 +237,13 @@ The plugin reads MCP servers from these sources, highest precedence first. A nam
 | Local | `.claude.json`, under `projects["<launch folder>"].mcpServers`. |
 | Project | `<projectRoot>/.mcp.json`. |
 | User | `.claude.json`, top-level `mcpServers`. The file is in `CLAUDE_CONFIG_DIR` when it is set, and in the home folder otherwise. |
-| Plugin | Plugin `.mcp.json` files, only with `enablePluginMcp`. |
+| Plugin | The plugin's own `.mcp.json`, then each `mcpServers` shape in its `plugin.json` (a path, or an inline object). A later name replaces an earlier one. Only with `enablePluginMcp`. |
 
 The system Claude folder is `/Library/Application Support/ClaudeCode` on macOS, `/etc/claude-code` on Linux, and `C:\Program Files\ClaudeCode` on Windows.
 
 Failures fail closed where the policy is at stake:
 
-- An unreadable `managed-settings.json` keeps every MCP server off.
+- An unreadable `managed-settings.json` keeps every MCP server off. A symbolic link to a missing file counts as unreadable.
 - An unreadable `managed-mcp.json` keeps the user, project and local servers off. `managedMcpServers` still loads.
 - A managed policy that is malformed keeps every MCP server off. That covers a policy list that is not a list, a malformed entry in it (including a host that does not parse), a variable that is not set, and an `allowManagedMcpServersOnly` that is not a boolean.
 - An unreadable user, project or local file is reported with what it stops. Its entries are not read.
@@ -255,7 +255,7 @@ Policy comes from the settings files:
 - `deniedMcpServers` blocks a server by URL, command or name. The denylist always wins. Plugin servers obey it too.
 - `allowedMcpServers` allows only the matching servers. The lists merge from every settings file, unless managed settings set `allowManagedMcpServersOnly`. Servers from `managedMcpServers` and `managed-mcp.json` skip the allowlist.
 - A malformed policy entry in a user, project or local settings file is ignored with a warning. In managed settings it keeps every MCP server off. A policy list that is not a list allows nothing (for `allowedMcpServers`) or denies nothing (for `deniedMcpServers`), with a warning.
-- A URL pattern with no port covers the default port only (443 for `https`), as Claude Code documents. A pattern with `*` in the host, or `*` as the port, covers every port. A `serverCommand` entry compares the command and its arguments. It does not compare `env` (as Claude Code documents), and it does not compare `cwd`.
+- A URL pattern with no port covers the default port only (443 for `https`), as Claude Code documents. A pattern with `*` in the host, or `*` as the port, covers every port. A pattern path of `/` matches only the root path. Write `/*` to match every path. A `serverCommand` entry compares the command and its arguments. It does not compare `env` (as Claude Code documents), and it does not compare `cwd`.
 - A policy entry that names a variable which is not set keeps the literal text, and a warning names the variable and the entry. In managed settings, that entry makes the whole managed policy fail closed.
 - `disabledMcpjsonServers` in any settings file turns off project servers by name.
 - `disabledMcpServers` under this project in `.claude.json` turns off user and managed servers by name.
@@ -267,6 +267,7 @@ Entry handling:
 - `headersHelper` runs at mount, with a 10-second limit. Its JSON output overrides the static `headers`. A helper that fails skips its server. Under an `allowedMcpServers` list, only organization servers may use a helper, because the list cannot see the helper command.
 - `type: stdio` and `type: http` (or `streamable-http`) run. An entry with a `url` and no `type` is skipped, as Claude Code skips it.
 - A field of the wrong type, such as a non-string `args` item, skips the entry. The warning names the field.
+- A field that the transport never reads, such as `url` on a stdio entry, is reported as ignored.
 - Stdio servers get `CLAUDE_PROJECT_DIR` in their environment.
 
 ### Gaps: what cannot run in DSH
@@ -283,6 +284,7 @@ These Claude Code features do not run here. The plugin warns when a file uses on
 | Server-managed settings, MDM profiles and registry policy | Only the files on disk are read. |
 | `--mcp-config` and `--strict-mcp-config` | DSH has no launch flag for them. |
 | claude.ai connectors | They need a claude.ai account fetch. |
+| MCP bundles (`.mcpb`, `.dxt`) and URLs in a plugin's `mcpServers` | Not supported. The entry is skipped, with a warning. |
 | `enableAllProjectMcpServers` and `enabledMcpjsonServers` | Ignored. Project servers always load, as `claude -p` loads them. DSH has no approval prompt. |
 | `enabledMcpServers` | Opt-in list for built-in servers. DSH has no built-in MCP servers. |
 | Subagent `mcpServers` in `agents/*.md` | Not read by this plugin. Upstream PR #5 (MCP in agent realms) is the related work. |

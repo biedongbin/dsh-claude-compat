@@ -7,7 +7,7 @@
 // A broken managed file fails closed: managed-mcp.json keeps the other sources
 // off, and managed-settings.json keeps every server off.
 
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { claudeJsonPath, docValue, isObject, managedClaudeDir, resolveUserClaudeDir } from './lib.js';
 
@@ -15,7 +15,7 @@ import { claudeJsonPath, docValue, isObject, managedClaudeDir, resolveUserClaude
 async function readDoc(path) {
   let raw;
   try { raw = await readFile(path, 'utf8'); } catch (error) {
-    if (error?.code === 'ENOENT') return undefined;
+    if (error?.code === 'ENOENT') return (await isDanglingLink(path)) ? { error: `${path}: symbolic link to a missing file` } : undefined;
     return { error: `${path}: ${error?.message ?? error}` };
   }
   let value;
@@ -24,6 +24,17 @@ async function readDoc(path) {
   }
   if (!isObject(value)) return { error: `${path}: root must be an object` };
   return { value };
+}
+
+// A symlink whose target is missing reads as ENOENT, like an absent file. That
+// would drop a managed file without a word, so it is reported as its own problem.
+async function isDanglingLink(path) {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Gather every document this loader can read. The project files need a
@@ -104,17 +115,34 @@ function projectOffNames(docs, warns) {
 
 // The `.claude.json` list for this project. Claude Code's `disabledMcpServers`
 // covers user and managed servers only.
-function optOutNames(docs, warns) {
-  const value = docValue(docs.claudeJson).projects?.[docs.cwd]?.disabledMcpServers;
-  return new Set(listOf(value, 'disabledMcpServers in .claude.json', warns));
+function optOutNames(project, warns) {
+  return new Set(listOf(project?.disabledMcpServers, 'disabledMcpServers in .claude.json', warns));
+}
+
+// This project's entry in `.claude.json`. A `projects` value or project entry that
+// is not an object is reported, and its local servers and disabled list are ignored.
+function projectEntry(docs, warns) {
+  const projects = docValue(docs.claudeJson).projects;
+  if (projects === undefined) return undefined;
+  if (!isObject(projects)) {
+    warns.push('.claude.json projects must be an object. Local servers and disabled servers are ignored.');
+    return undefined;
+  }
+  const entry = projects[docs.cwd];
+  if (entry === undefined) return undefined;
+  if (!isObject(entry)) {
+    warns.push(`.claude.json projects[${docs.cwd}] must be an object. Its local servers and disabled servers are ignored.`);
+    return undefined;
+  }
+  return entry;
 }
 
 const OPT_OUT_SCOPES = new Set(['user', 'managed-file', 'managed-settings']);
 
 // Drop the disabled entries, then keep the first entry for each name.
-function applyDisables(entries, docs, warns) {
+function applyDisables(entries, docs, project, warns) {
   const projectOff = projectOffNames(docs, warns);
-  const optOut = optOutNames(docs, warns);
+  const optOut = optOutNames(project, warns);
   const seen = new Set();
   const kept = [];
   for (const entry of entries) {
@@ -146,15 +174,16 @@ function misplacedKeyWarnings(docs) {
 // managedMcpServers load. An unreadable managed-settings.json turns every server off.
 export function selectEntries(docs) {
   const warns = readErrorWarnings(docs);
+  const managedProblem = managedFileProblem(docs.managedMcp);
+  if (managedProblem !== undefined) {
+    warns.push(`${managedProblem}. Servers from user, project and local sources are off.`);
+  }
   if (docs.managedSettings?.error !== undefined) {
     warns.push(`${docs.managedSettings.error}. Every MCP server is off.`);
     return { entries: [], exclusive: true, warns };
   }
-  const managedProblem = managedFileProblem(docs.managedMcp);
   const exclusive = docs.managedMcp !== undefined;
-  if (managedProblem !== undefined) {
-    warns.push(`${managedProblem}. Servers from user, project and local sources are off.`);
-  }
+  const project = projectEntry(docs, warns);
   const entries = [];
   if (exclusive && managedProblem === undefined) {
     pushScope(entries, 'managed-file', docs.managedMcp.value.mcpServers, warns);
@@ -162,10 +191,10 @@ export function selectEntries(docs) {
   }
   pushScope(entries, 'managed-settings', docValue(docs.managedSettings).managedMcpServers, warns);
   if (!exclusive) {
-    pushScope(entries, 'local', docValue(docs.claudeJson).projects?.[docs.cwd]?.mcpServers, warns);
+    pushScope(entries, 'local', project?.mcpServers, warns);
     pushScope(entries, 'project', docValue(docs.projectMcp).mcpServers, warns);
     pushScope(entries, 'user', docValue(docs.claudeJson).mcpServers, warns);
   }
   warns.push(...misplacedKeyWarnings(docs));
-  return { entries: applyDisables(entries, docs, warns), exclusive, warns };
+  return { entries: applyDisables(entries, docs, project, warns), exclusive, warns };
 }

@@ -23,11 +23,20 @@ function globToRegExp(glob) {
   return new RegExp(`^${escaped}$`);
 }
 
+// A percent escape of an unreserved character names the same character, so `%6D`
+// is `m`. A server resolves both forms to one path, so the policy must too.
+function decodeUnreserved(text) {
+  return text.replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => {
+    const char = String.fromCharCode(parseInt(hex, 16));
+    return /^[A-Za-z0-9._~-]$/.test(char) ? char : match;
+  });
+}
+
 // Resolve dot segments and escapes the way a URL does, so the pattern compares
 // with the same text as the server URL. `/./a` and `/a` are one path.
 function normalizePath(path) {
   try {
-    const url = new URL(`http://pattern.invalid${path}`);
+    const url = new URL(`http://pattern.invalid${decodeUnreserved(path)}`);
     return path.includes('?') ? `${url.pathname}${url.search}` : url.pathname;
   } catch {
     return path;
@@ -96,7 +105,7 @@ export function urlMatches(pattern, url) {
   const effectivePort = actual.port !== '' ? actual.port : (DEFAULT_PORT.get(scheme) ?? '');
   if (!portAllowed(parsed, effectivePort, scheme)) return false;
   if (parsed.path === undefined || parsed.path === '') return true;
-  const target = parsed.path.includes('?') ? `${actual.pathname}${actual.search}` : actual.pathname;
+  const target = decodeUnreserved(parsed.path.includes('?') ? `${actual.pathname}${actual.search}` : actual.pathname);
   return globToRegExp(parsed.path).test(target);
 }
 

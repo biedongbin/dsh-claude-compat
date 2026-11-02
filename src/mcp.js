@@ -147,6 +147,11 @@ function translateEntry(name, entry, opts = {}) {
     failOnStartupError: opts.failOnStartupError ?? false,
   };
   noteUnsupported(name, entry, warns);
+  // A field the chosen transport never reads would be dropped without a word.
+  const unread = transport === 'stdio' ? ['url', 'headers', 'headersHelper'] : ['command', 'args', 'env', 'cwd'];
+  for (const field of unread) {
+    if (entry[field] !== undefined) warns.push(`${name}: ${field} is ignored for this transport`);
+  }
   const built = transport === 'stdio'
     ? stdioConfig(name, entry, base, expand, opts.projectDir)
     : httpConfig(name, entry, base, expand);
@@ -322,7 +327,7 @@ export async function mountMcpConfigs(ctx, servers) {
   const mounted = new Set();
   for (const server of servers) {
     if (mounted.has(server.serverName)) {
-      console.warn(`dsh-claude-compat: duplicate serverName "${server.serverName}" skipped`);
+      console.warn(`dsh-claude-compat: MCP server "${server.serverName}" has the same name as an earlier server after sanitizing, so it is skipped`);
       continue;
     }
     mounted.add(server.serverName);

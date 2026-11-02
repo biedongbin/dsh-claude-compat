@@ -2,7 +2,7 @@
 // policy entry is reported and skipped, and plugin servers obey the same policy.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildPolicy, urlMatches } from '../src/mcp-policy.js';
 import { translatePluginMcp } from '../src/plugins.js';
@@ -329,4 +329,57 @@ test('a plugin mcpServers that is neither a path nor an object is reported, not 
   const result = translatePluginMcp({ mcpServers: 42 }, '/opt/plug');
   assert.deepEqual(result.servers, []);
   assert.match(result.warns.join('\n'), /must be a path or an object/);
+});
+
+test('a managed-mcp.json that is a symlink to a missing file fails closed, and says so', async () => {
+  const fx = fixture();
+  symlinkSync(join(fx.managedDir, 'no-such-file.json'), join(fx.managedDir, 'managed-mcp.json'));
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /symbolic link to a missing file/);
+});
+
+test('a percent escape of an unreserved character matches the plain character, both ways', () => {
+  assert.equal(urlMatches('https://evil.example/mcp', 'https://evil.example/%6Dcp'), true);
+  assert.equal(urlMatches('https://evil.example/%6Dcp', 'https://evil.example/mcp'), true);
+  assert.equal(urlMatches('https://evil.example/mcp', 'https://evil.example/mcp2'), false);
+});
+
+test('a projects value or project entry that is not an object is reported', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { projects: { [fx.project]: 'oops' }, mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['mine']);
+  assert.match(result.warns.join('\n'), /projects\[.*\] must be an object/);
+});
+
+test('a field that the transport never reads is reported as ignored', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', args: ['x'] } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['api']);
+  assert.match(result.warns.join('\n'), /api: args is ignored for this transport/);
+});
+
+test('a plugin root .mcp.json loads, and a later declared server with the same name replaces it', () => {
+  const plugin = join(tempDir('dcc-plug-'), 'plug');
+  mkdirSync(plugin, { recursive: true });
+  writeFileSync(join(plugin, '.mcp.json'), JSON.stringify({ mcpServers: { a: { command: 'root-a' }, b: { command: 'root-b' } } }));
+  const result = translatePluginMcp({ mcpServers: { b: { command: 'declared-b' } } }, plugin);
+  const byName = Object.fromEntries(result.servers.map((s) => [s.serverName, s.command]));
+  assert.deepEqual(byName, { a: 'root-a', b: 'declared-b' });
+});
+
+test('a plugin mcpServers bundle or URL is reported as not supported', () => {
+  const result = translatePluginMcp({ mcpServers: ['./x.mcpb', 'https://e.example/s.dxt'] }, '/opt/plug');
+  assert.deepEqual(result.servers, []);
+  assert.match(result.warns.join('\n'), /bundles and URLs are not supported/);
+});
+
+test('a plugin path with $\' in it is substituted literally, not as a replacement pattern', () => {
+  const plugin = join(tempDir('dcc-plug-'), "p$'x");
+  mkdirSync(plugin, { recursive: true });
+  const result = translatePluginMcp({ mcpServers: { tool: { command: '${CLAUDE_PLUGIN_ROOT}/bin/run' } } }, plugin);
+  assert.equal(result.servers[0].command, `${plugin}/bin/run`);
 });
