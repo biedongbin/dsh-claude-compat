@@ -57,7 +57,7 @@ import {
   withOriginalName,
 } from './aliases.js';
 import { registerHooks } from './hooks.js';
-import { loadMcpServers, mountMcpConfigs, withoutDuplicateUrls } from './mcp.js';
+import { extraServers, loadMcpServers, mountMcpConfigs } from './mcp.js';
 import { registerManagerCommands } from './commands.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
@@ -187,7 +187,7 @@ export function apply(ctx, config = {}) {
   if (config.enableMcp !== false) {
     // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
     mountMcp(ctx, config).catch((error) => {
-      console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
+      console.warn('dsh-claude-compat: MCP setup failed, so no MCP server from this step is mounted:', error?.message ?? error);
     });
   }
 }
@@ -197,28 +197,29 @@ export function apply(ctx, config = {}) {
 // uses is dropped, and managed-mcp.json turns plugin servers off.
 async function mountMcp(ctx, config) {
   const loaded = await loadMcpServers(config);
-  loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
   const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
-  const plugin = pluginOn ? await pluginMcpServers(config) : [];
-  await mountMcpConfigs(ctx, [...loaded.servers, ...withoutDuplicateUrls(loaded.servers, plugin)]);
+  const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : [];
+  const extra = extraServers(loaded, plugin);
+  loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
+  await mountMcpConfigs(ctx, [...loaded.servers, ...extra]);
 }
 
-// Opt-in: translate every installed plugin's MCP config (see src/mcp.js).
-async function pluginMcpServers(config) {
+// Opt-in: translate every installed plugin's MCP config (see src/mcp.js). A
+// plugin with a manifest that is not valid JSON is reported, not skipped quietly.
+async function pluginMcpServers(config, warns) {
   const servers = [];
   for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
     if (raw === undefined) continue;
     let manifest;
-    try { manifest = JSON.parse(raw); }
-    catch (error) {
-      console.warn(`dsh-claude-compat: plugin ${plugin.key}: cannot parse plugin.json: ${error.message}`);
+    try { manifest = JSON.parse(raw); } catch (error) {
+      warns.push(`plugin ${plugin.key}: plugin.json is not valid JSON, its MCP servers are skipped (${error?.message ?? error})`);
       continue;
     }
     const translated = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,
     });
-    translated.warns.forEach((w) => console.warn(`dsh-claude-compat: plugin ${plugin.key}: ${w}`));
+    warns.push(...translated.warns.map((w) => `plugin ${plugin.key}: ${w}`));
     servers.push(...translated.servers);
   }
   return servers;

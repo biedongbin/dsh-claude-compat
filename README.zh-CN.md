@@ -237,12 +237,21 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 | User | `.claude.json` 顶层的 `mcpServers`。设置了 `CLAUDE_CONFIG_DIR` 时位于该目录，否则位于主目录。 |
 | Plugin | 插件的 `.mcp.json`，仅在开启 `enablePluginMcp` 时加载。 |
 
-系统 Claude 目录在 macOS 为 `/Library/Application Support/ClaudeCode`，Linux 为 `/etc/claude-code`，Windows 为 `C:\Program Files\ClaudeCode`。无法读取的 `managed-mcp.json` 会关闭其余所有服务器，并给出指明该文件的告警。
+系统 Claude 目录在 macOS 为 `/Library/Application Support/ClaudeCode`，Linux 为 `/etc/claude-code`，Windows 为 `C:\Program Files\ClaudeCode`。
+
+涉及策略时，失败会关闭：
+
+- 无法读取的 `managed-settings.json` 会关闭所有 MCP 服务器。
+- 无法读取的 `managed-mcp.json` 会关闭用户、项目与本地服务器。`managedMcpServers` 仍会加载。
+- 无法读取的用户、项目或本地文件会给出告警，并说明会停止什么。其中的条目不会被读取。
+
+每条告警都会指明文件或条目，并说明哪些内容被关闭。
 
 策略来自 settings 文件：
 
-- `deniedMcpServers` 按 URL、命令或名称阻止服务器。拒绝列表始终优先。
+- `deniedMcpServers` 按 URL、命令或名称阻止服务器。拒绝列表始终优先。插件服务器同样遵守。
 - `allowedMcpServers` 仅允许匹配的服务器。各 settings 文件的列表会合并，除非 managed settings 设置了 `allowManagedMcpServersOnly`。`managedMcpServers` 与 `managed-mcp.json` 中的服务器不受允许列表约束。
+- 格式错误的策略条目会被忽略并给出告警。不是列表的策略项：`allowedMcpServers` 视为允许零个服务器，`deniedMcpServers` 视为不拒绝任何服务器，并给出告警。
 - 任一 settings 文件中的 `disabledMcpjsonServers` 按名称关闭项目服务器。
 - `.claude.json` 中本项目下的 `disabledMcpServers` 按名称关闭用户与 managed 服务器。
 
@@ -250,8 +259,9 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 
 - `command`、`args`、`env`、`url` 与 `headers` 中的 `${VAR}` 和 `${VAR:-default}` 会展开。未设置且无默认值的变量保留原文，并在告警中给出变量名。
 - `timeout` 设置每次调用的时限（毫秒）。小于 1000 的值被忽略。
-- `headersHelper` 在挂载时运行，时限 10 秒。其 JSON 输出覆盖静态 `headers`。运行失败的 helper 会跳过其服务器。
+- `headersHelper` 在挂载时运行，时限 10 秒。其 JSON 输出覆盖静态 `headers`。运行失败的 helper 会跳过其服务器。在 `allowedMcpServers` 允许列表下，只有组织服务器可以使用 helper，因为列表无法看到 helper 的命令。
 - `type: stdio` 与 `type: http`（或 `streamable-http`）会运行。有 `url` 但无 `type` 的条目会被跳过，与 Claude Code 一致。
+- 字段类型错误（例如 `args` 中有非字符串项）会跳过该条目，告警中给出字段名。
 - stdio 服务器的环境中包含 `CLAUDE_PROJECT_DIR`。
 
 ### 缺口：DSH 中无法运行的部分
@@ -264,7 +274,7 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 | `oauth` | DSH 的 MCP 客户端没有 OAuth 流程。服务器在无 OAuth 的情况下加载，可能连接失败。 |
 | `alwaysLoad` | DSH 在启动时加载全部工具，没有延迟加载工具的机制。该字段被忽略。 |
 | 重连时的 `headersHelper` | DSH 只在挂载时设置一次 headers。重连或遇到 401 时 helper 不会再次运行。 |
-| 插件服务器的 `headersHelper` | 不运行。插件服务器在没有 helper headers 的情况下加载。 |
+| 插件服务器的 `headersHelper` | 不运行。带 helper 的插件服务器会被跳过并给出告警，因为它无法完成认证。 |
 | 服务器下发的 managed settings、MDM 配置文件与注册表策略 | 只读取磁盘上的文件。 |
 | `--mcp-config` 与 `--strict-mcp-config` | DSH 没有对应的启动参数。 |
 | claude.ai 连接器 | 需要获取 claude.ai 账户数据。 |

@@ -111,7 +111,7 @@ test('an unreadable managed-mcp.json fails closed: the others stay off and a war
   write(join(fx.userDir, '.claude.json'), { mcpServers: { mem: stdio('mem') } });
   const result = await load(fx);
   assert.deepEqual(names(result), []);
-  assert.match(result.warns.join('\n'), /managed-mcp\.json unreadable/);
+  assert.match(result.warns.join('\n'), /managed-mcp\.json: invalid JSON/);
 });
 
 test('managedMcpServers beats a project entry of the same name', async () => {
@@ -265,5 +265,5 @@ test('allowManagedMcpServersOnly ignores a user allowlist', async () => {
 test('withoutDuplicateUrls drops a plugin server whose URL a higher source already uses', () => {
   const higher = [{ serverName: 'a', url: 'https://x.example/mcp' }];
   const plugin = [{ serverName: 'b', url: 'https://x.example/mcp' }, { serverName: 'c', url: 'https://y.example/mcp' }, { serverName: 'd' }];
-  assert.deepEqual(withoutDuplicateUrls(higher, plugin).map((s) => s.serverName), ['c', 'd']);
+  assert.deepEqual(withoutDuplicateUrls(higher, plugin, []).map((s) => s.serverName), ['c', 'd']);
 });
