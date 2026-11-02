@@ -12,7 +12,6 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ### Changed
 - A relative location variable stops activation with one error line that names the variable.
 - `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.
-- `yaml` is pinned to an exact version.
 - `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
 
 ## [1.0.1] — 2026-11-04

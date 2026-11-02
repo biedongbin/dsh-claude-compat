@@ -4,6 +4,16 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [Unreleased]
+
+### 新增
+- **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
+
+### 变更
+- 路径类环境变量为相对路径时，插件不再激活，并输出一行指明变量名的错误。
+- `/cc-plugin` 与插件目录现在遵循配置项 `userClaudeDir` 和 `pluginsRoot`。
+- `userClaudeDir` 与 `pluginsRoot` 不再有默认值。未设置时依次使用对应环境变量、`~/.claude`。显式配置值优先。
+
 ## [1.0.1] — 2026-11-04
 
 ### 修复

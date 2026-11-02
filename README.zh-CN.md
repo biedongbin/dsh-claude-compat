@@ -138,6 +138,21 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `enablePluginManager` | `true` | 注册 `/cc-plugin`、`/reload-cc-plugins`、`/reload-skills` 管理 skill |
 | `pluginManagerRank` | `40` | 内置管理 skill 的 rank（catalog 顶部） |
 
+### Claude Code 环境变量
+
+插件读取 Claude Code 用来改变默认位置的同一组环境变量。
+显式配置项优先于环境变量，环境变量优先于 `~/.claude` 默认值。
+路径类变量必须是绝对路径。相对路径会使插件不激活，并输出一行指明变量名的错误。
+`userClaudeDir` 与 `pluginsRoot` 未设置时使用下表的变量。
+
+| 变量 | 作用 |
+| --- | --- |
+| `CLAUDE_CONFIG_DIR` | 替代 `~/.claude`：settings、rules、skills、commands、agents 与会话历史 |
+| `CLAUDE_CODE_PLUGIN_CACHE_DIR` | 替代插件根目录（`~/.claude/plugins`） |
+| `CLAUDE_CODE_PLUGIN_SEED_DIR` | 额外的只读插件根目录，Unix 用 `:` 分隔，Windows 用 `;`。同名时主根目录优先 |
+| `CLAUDE_CODE_PLUGIN_DIRS` | 本次会话加载的插件目录，分隔符相同。不是目录的条目会被跳过并给出警告 |
+| `CLAUDE_CODE_PROJECT_DIR_NAME` | `/cc-resume` 读取的 `projects/` 下的单个文件夹名，替代由工作目录推导的名称 |
+
 ## 说明
 
 - **Skill 命名**：DSH 要求 kebab-case。嵌套 skill 目录扁平化（`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`）；frontmatter 名字非法时回退目录名。
