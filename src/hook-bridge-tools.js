@@ -24,6 +24,7 @@ function preToolDecision(outcome) {
 async function onPreTool(engine, support, exec, next) {
   const outcome = await engine.fire('pre-tool-use', 'PreToolUse', {
     subject: exec.name,
+    rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload('PreToolUse', exec.agent, {
       tool_name: exec.name,
@@ -39,7 +40,7 @@ async function onPreTool(engine, support, exec, next) {
 }
 
 // The tool's value when it has one, else its text.
-function responseOf(result) {
+export function responseOf(result) {
   return result.value !== undefined ? result.value : blocksToText(result.content);
 }
 
@@ -67,6 +68,7 @@ async function onPostTool(engine, support, exec, result, next) {
   const claudeName = failed ? 'PostToolUseFailure' : 'PostToolUse';
   const outcome = await engine.fire(event, claudeName, {
     subject: exec.name,
+    rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload(claudeName, exec.agent, {
       tool_name: exec.name,

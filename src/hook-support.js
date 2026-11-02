@@ -63,6 +63,15 @@ export function createSupport(ctx) {
       for (const message of this.contextMessages(outcome)) agent.inject(message);
     },
 
+    /**
+     * Callback for `asyncRewake` hooks: an exit 2 steers the agent with the hook
+     * output as a system reminder. Undefined when there is no agent to wake.
+     */
+    rewake(agent) {
+      if (typeof agent?.steer !== 'function') return undefined;
+      return (text) => agent.steer(this.contextMessage(`<system-reminder>\n${text}\n</system-reminder>`));
+    },
+
     /** Keep a background run alive until it settles, so disposal can wait for it. */
     track(promise) {
       const tracked = promise.catch((error) => {

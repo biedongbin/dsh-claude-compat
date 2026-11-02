@@ -37,11 +37,18 @@ function failureText(run, hook) {
   return `${run.reason}: ${label}${tail === '' ? '' : ` (output: ${tail.slice(-500)})`}`;
 }
 
-// `onFailure: "block"` makes a failed hook behave like exit code 2.
+// `onFailure: "block"` makes a failed hook block the event. Exit code 2 does that on
+// most events. PermissionRequest ignores exit code 2, so it gets a deny decision.
 function applyOnFailure(run, hook, event) {
   if (!run.failed || hook.onFailure !== 'block' || NO_ONFAILURE_EVENTS.has(event)) return run;
   const label = hook.command ?? hook.url ?? hook.tool ?? hook.type;
-  return { exitCode: 2, stdout: `hook failed (${run.reason}): ${label}`, failed: false };
+  const message = `hook failed (${run.reason}): ${label}`;
+  if (event === 'permission-request') {
+    const decision = { behavior: 'deny', message };
+    const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
+    return { exitCode: 0, stdout: JSON.stringify(output), failed: false };
+  }
+  return { exitCode: 2, stdout: message, failed: false };
 }
 
 /**

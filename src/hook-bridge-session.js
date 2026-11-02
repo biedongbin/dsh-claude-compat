@@ -14,6 +14,7 @@ async function onAgentCreated(engine, support, { agent, source }) {
   try {
     const outcome = await engine.fire('session-start', 'SessionStart', {
       subject: source,
+      rewake: support.rewake(agent),
       payload: support.payload('SessionStart', agent, { source }),
     });
     support.inject(agent, outcome);
@@ -39,6 +40,7 @@ async function onPreStep(engine, support, { agent, messages }, next) {
   const prompt = blocksToText(messages.flatMap((message) => message.content));
   const outcome = await engine.fire('user-prompt-submit', 'UserPromptSubmit', {
     defaultMs: PROMPT_DEFAULT_MS,
+    rewake: support.rewake(agent),
     payload: support.payload('UserPromptSubmit', agent, { prompt }),
   });
   if (outcome.blocked || outcome.stopped) {
