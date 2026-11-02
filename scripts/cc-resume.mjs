@@ -29,6 +29,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { claudeProjectsDir } from '../src/lib.js';
 import { join, basename } from 'node:path';
 import { zstdFramesSync } from './zstd-compat.mjs';
 
@@ -36,10 +37,6 @@ import { zstdFramesSync } from './zstd-compat.mjs';
 
 function munge(dir) {
   return dir.replaceAll('/', '-');
-}
-
-function claudeProjectDir(cwd) {
-  return join(homedir(), '.claude', 'projects', munge(cwd));
 }
 
 function dshSessionsDir(cwd) {
@@ -207,7 +204,7 @@ export function writeDshSession(sessionDir, id, cwd, events) {
 
 /** List Claude sessions for a cwd. */
 export function listClaudeSessions(cwd, limit = 30) {
-  const dir = claudeProjectDir(cwd);
+  const dir = claudeProjectsDir(cwd);
   if (!existsSync(dir)) return [];
   const out = readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
@@ -281,14 +278,14 @@ if (cmd === 'list') {
   const limit = Number(flag('limit') ?? 12);
   const sessions = listClaudeSessions(cwd, limit);
   if (sessions.length === 0) {
-    console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectDir(cwd)})`);
+    console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectsDir(cwd)})`);
     console.log('Tip: list another project with --cwd <dir>, e.g. /cc-resume list --cwd ~/workspace/<project>');
     process.exit(0);
   }
   // The command card takes the FIRST line as its title — lead with a summary
   // so no data row is eaten. Totals come from a cheap dir count (the list is
   // already sliced to the limit).
-  const total = readdirSync(claudeProjectDir(cwd)).filter((f) => f.endsWith('.jsonl')).length;
+  const total = readdirSync(claudeProjectsDir(cwd)).filter((f) => f.endsWith('.jsonl')).length;
   const imported = sessions.filter((s) => s.imported).length;
   console.log(`${total} Claude sessions · ${basename(cwd)} · newest first${imported > 0 ? ` · ${imported} imported` : ''}${total > sessions.length ? ` · showing ${sessions.length}` : ''}`);
   // Local time (ISO strings are UTC — off by the user's offset) and compact
@@ -305,7 +302,7 @@ if (cmd === 'list') {
 } else if (cmd === 'import') {
   let sessionId = rest.find((a) => !a.startsWith('--'));
   if (!sessionId) { console.error('usage: import <sessionId> [--cwd dir] [--limit-turns N]'); process.exit(2); }
-  const projectDir = claudeProjectDir(cwd);
+  const projectDir = claudeProjectsDir(cwd);
   let src = join(projectDir, `${sessionId}.jsonl`);
   if (!existsSync(src) && /^[0-9a-f]{4,}$/i.test(sessionId)) {
     // Short-prefix resolution: the list shows 8-char ids; accept any unique

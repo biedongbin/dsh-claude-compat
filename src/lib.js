@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 
@@ -17,11 +17,54 @@ import { parse } from 'yaml';
 // carry the identical kind. Emission and dedup must both use this constant.
 export const CLAUDE_COMPAT_SOURCE_KIND = 'plugin:dsh-claude-compat';
 
+// Claude Code copies env values as written and never expands `~`, so a
+// relative value would resolve against the launch directory. Fail fast instead.
+function envAbsolutePath(name) {
+  const value = process.env[name];
+  if (value === undefined || value === '') return undefined;
+  if (!isAbsolute(value)) {
+    throw new Error(`${name} must be an absolute path, got "${value}". Set it to a full path.`);
+  }
+  return value;
+}
+
+// Precedence: explicit plugin config, then CLAUDE_CONFIG_DIR, then ~/.claude.
 export function resolveUserClaudeDir(dir) {
-  if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
+  if (dir === undefined || dir === null || dir === '') {
+    return envAbsolutePath('CLAUDE_CONFIG_DIR') ?? join(homedir(), '.claude');
+  }
   if (dir === '~') return homedir();
   if (dir.startsWith('~/')) return join(homedir(), dir.slice(2));
   return resolve(dir);
+}
+
+// Precedence: explicit config, then CLAUDE_CODE_PLUGIN_CACHE_DIR (the plugins
+// root, not only the cache), then <config dir>/plugins.
+export function resolveClaudePluginsRoot(dir) {
+  if (dir === undefined || dir === null || dir === '') {
+    return envAbsolutePath('CLAUDE_CODE_PLUGIN_CACHE_DIR') ?? join(resolveUserClaudeDir(), 'plugins');
+  }
+  return resolveUserClaudeDir(dir);
+}
+
+// Claude Code keeps .claude.json inside CLAUDE_CONFIG_DIR when it is set.
+export function claudeJsonPath() {
+  const configDir = envAbsolutePath('CLAUDE_CONFIG_DIR');
+  return configDir === undefined ? join(homedir(), '.claude.json') : join(configDir, '.claude.json');
+}
+
+// Claude Code names a project folder after the working directory, unless
+// CLAUDE_CODE_PROJECT_DIR_NAME overrides the name.
+export function claudeProjectsDir(cwd) {
+  const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
+  const folder = name !== undefined && name !== '' ? name : cwd.replaceAll('/', '-');
+  return join(resolveUserClaudeDir(), 'projects', folder);
+}
+
+// Split a PATH-style list (`:` on Unix, `;` on Windows) and drop blank entries.
+export function parsePathList(value) {
+  if (value === undefined || value === '') return [];
+  return value.split(delimiter).filter((entry) => entry !== '');
 }
 
 // No marker on the whole ancestor chain → fall back to cwd, matching DSH's own

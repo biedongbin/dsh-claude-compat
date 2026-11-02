@@ -29,7 +29,7 @@ When a /cc-resume steering message hands you a numbered candidate list:
 4. On success tell the user: refresh the DSH session list, then open the
    session titled \`cc: <preview>\`.
 5. On "换其他项目目录": ask for the path (offer likely candidates from
-   ~/.claude/projects), then run \`list --cwd <dir>\` and go back to step 1.
+   the projects folder under CLAUDE_CONFIG_DIR, or ~/.claude/projects), then run \`list --cwd <dir>\` and go back to step 1.
 
 ## Commands (direct, no agent round-trip)
 Run from the session's working directory (or pass \`--cwd <dir>\`):

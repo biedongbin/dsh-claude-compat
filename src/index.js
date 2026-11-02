@@ -83,7 +83,8 @@ export const Config = z.object({
   skillSource: z.string().default('project-claude'),
   userSkillRank: z.number().default(700),
   userSkillSource: z.string().default('user-claude'),
-  userClaudeDir: z.string().default('~/.claude'),
+  // Unset by default so CLAUDE_CONFIG_DIR can apply (see resolveUserClaudeDir).
+  userClaudeDir: z.string(),
   rulesMaxBytes: z.number().default(65536),
   userRulesMaxBytes: z.number().default(65536),
   enableRules: z.boolean().default(true),
@@ -109,7 +110,8 @@ export const Config = z.object({
   enablePlugins: z.boolean().default(true),
   pluginSkillRank: z.number().default(750),
   pluginSkillSource: z.string().default('claude-plugin'),
-  pluginsRoot: z.string().default('~/.claude/plugins'),
+  // Unset by default so CLAUDE_CODE_PLUGIN_CACHE_DIR can apply.
+  pluginsRoot: z.string(),
   enablePluginMcp: z.boolean().default(false),
   // Print a one-shot "star it" nudge on the first activation (default true).
   enableStarNudge: z.boolean().default(true),

@@ -95,7 +95,9 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
   writeFileSync(join(projDir, `${sid}.jsonl`),
     `${JSON.stringify({ type: 'user', message: { content: '帮我修登录 bug' }, timestamp: '2026-10-28T02:00:00.000Z', cwd: pickCwd })}\n`);
   const prevHome = process.env.HOME;
+  const prevConfigDir = process.env.CLAUDE_CONFIG_DIR;
   process.env.HOME = home;
+  delete process.env.CLAUDE_CONFIG_DIR; // the sandbox HOME must decide the path
   try {
     const { ctx, defs } = fakeCommandHost();
     registerManagerCommands(ctx, {}, () => undefined);
@@ -122,6 +124,7 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
     assert.match(listing.text, /1 Claude sessions/);
   } finally {
     process.env.HOME = prevHome;
+    if (prevConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = prevConfigDir;
   }
 });
 

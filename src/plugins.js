@@ -11,23 +11,60 @@
 // opted in (mounting third-party MCP servers is a bigger trust step than
 // listing skills).
 
-import { readFileSync as rfs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync as rfs } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import {
   pathExists,
   readTextSafe,
-  resolveUserClaudeDir,
+  parsePathList,
+  resolveClaudePluginsRoot,
   parseFrontmatter,
   stringField,
 } from './lib.js';
 import { translateMcpServers } from './mcp.js';
 import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
-// Parse installed_plugins.json → [{ key, name, marketplace, installPath,
-// version }] for scope==='user' entries. Dedupe per key, keeping the last
-// entry (Claude Code appends reinstall records; last is freshest).
+// Installed plugins from three places, earliest wins a key collision: the
+// primary plugins root, the read-only CLAUDE_CODE_PLUGIN_SEED_DIR roots, and
+// the CLAUDE_CODE_PLUGIN_DIRS plugin directories (each loaded as one plugin).
 export function readInstalledClaudePlugins(pluginsRoot) {
-  const root = resolveUserClaudeDir(pluginsRoot === undefined ? '~/.claude/plugins' : pluginsRoot);
+  const byKey = new Map();
+  const roots = [
+    resolveClaudePluginsRoot(pluginsRoot),
+    ...parsePathList(process.env.CLAUDE_CODE_PLUGIN_SEED_DIR),
+  ];
+  for (const root of roots) {
+    for (const plugin of readInstalledFile(root)) {
+      if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+    }
+  }
+  for (const dir of parsePathList(process.env.CLAUDE_CODE_PLUGIN_DIRS)) {
+    const plugin = inlinePlugin(dir);
+    if (plugin !== undefined && !byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+  }
+  return [...byKey.values()];
+}
+
+// One plugin directory loaded the way `--plugin-dir` loads it. The name comes
+// from the manifest, else the directory name.
+function inlinePlugin(dir) {
+  const installPath = resolve(dir);
+  if (!existsSync(installPath)) {
+    console.warn(`dsh-claude-compat: CLAUDE_CODE_PLUGIN_DIRS entry not found, skipped: ${dir}`);
+    return undefined;
+  }
+  let name = basename(installPath);
+  try {
+    const manifest = JSON.parse(claReadSync(join(installPath, '.claude-plugin', 'plugin.json')));
+    if (typeof manifest?.name === 'string' && manifest.name !== '') name = manifest.name;
+  } catch { /* manifest-less plugin: keep the directory name */ }
+  return { key: `${name}@inline`, name, marketplace: 'inline', installPath, version: 'inline' };
+}
+
+// Parse <root>/installed_plugins.json → plugin records for scope==='user'
+// entries. Dedupe per key, keeping the last entry (Claude Code appends
+// reinstall records; last is freshest).
+function readInstalledFile(root) {
   const manifestPath = join(root, 'installed_plugins.json');
   let parsed;
   try { parsed = JSON.parse(claReadSync(manifestPath)); }

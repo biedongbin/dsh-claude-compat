@@ -25,8 +25,8 @@
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync, cpSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { promisify } from 'node:util';
+import { resolveClaudePluginsRoot, resolveUserClaudeDir } from './lib.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,7 +64,11 @@ async function claudePlugin(args, timeoutMs = 120_000) {
 }
 
 function pluginsRoot() {
-  return join(homedir(), '.claude', 'plugins');
+  return resolveClaudePluginsRoot();
+}
+
+function userSettingsPath() {
+  return join(resolveUserClaudeDir(), 'settings.json');
 }
 
 function backupFile(path) {
@@ -104,7 +108,7 @@ export function parsePluginList(output) {
 }
 
 /** Pure: list plugin entries from installed_plugins.json + enabledPlugins map. */
-export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { version: 2, plugins: {} });
   const settings = readJson(settingsPath, {});
   const enabledMap = settings.enabledPlugins ?? {};
@@ -159,7 +163,7 @@ export function searchMarketplaces(term, pluginsDir = pluginsRoot()) {
  * already present under marketplaces/<name>; copy plugin source into cache and
  * register in installed_plugins.json + enabledPlugins.
  */
-export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
   const [pluginName, marketName] = String(installId).split('@');
   if (!marketName) return { ok: false, error: 'fallback install needs name@marketplace (marketplace repo must already be cloned)' };
   const marketJson = join(pluginsDir, 'marketplaces', marketName, '.claude-plugin', 'marketplace.json');
@@ -195,7 +199,7 @@ export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), set
 }
 
 /** Fallback enable/disable: flip enabledPlugins in settings.json (backed up). */
-export function fallbackToggle(pluginRef, enable, pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export function fallbackToggle(pluginRef, enable, pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { plugins: {} });
   const keys = Object.keys(installed.plugins ?? {});
   const key = keys.find((k) => k === pluginRef || k.startsWith(`${pluginRef}@`));
