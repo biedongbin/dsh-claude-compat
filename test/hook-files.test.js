@@ -173,6 +173,29 @@ test('CwdChanged points the matcher files at the new directory, and its watchPat
   await h.dispose();
 });
 
+test('FileChanged alone follows a directory change: the old directory is dropped and the new one watched', async () => {
+  const first = tempDir('dcc-fc-');
+  const second = tempDir('dcc-fc2-');
+  const log = join(tempDir('dcc-log-'), 'lines');
+  // DSH's working-directory service already reports the new directory when the feed event arrives.
+  let current = first;
+  const h = harness(
+    { FileChanged: [{ matcher: '.envrc', hooks: [{ command: logTo(log) }] }] },
+    { ctx: { workingDirectory: { get: () => current } } },
+  );
+  const agent = fakeAgent('s1', first);
+  await created(h, agent);
+  current = second;
+  await h.dispatch('session/event', [agent.session, { type: 'working-directory/change', seq: 1, time: 0, data: { cwd: second } }], () => {});
+  await h.drain();
+  writeFileSync(join(first, '.envrc'), 'old dir');
+  writeFileSync(join(second, '.envrc'), 'new dir');
+  assert.ok(await waitFor(() => readLines(log).length >= 1));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(readLines(log).map((call) => [call.file_path, call.cwd]), [[join(second, '.envrc'), second]]);
+  await h.dispose();
+});
+
 test('a disposed agent stops its watch, and a subagent does not start one', async () => {
   const cwd = tempDir('dcc-fc-');
   const log = join(tempDir('dcc-log-'), 'lines');

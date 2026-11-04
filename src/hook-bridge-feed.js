@@ -17,14 +17,18 @@ function warnObserveOnly(claudeName, what) {
 // The feed gives a session, not an agent. A payload needs only the session.
 const asAgent = (session) => ({ session });
 
+// The file watcher follows the directory of the session, so a directory change always reaches
+// it, also when no CwdChanged hook is configured. The hook runs only when it is configured.
 async function onCwdChanged(deps, session, data) {
   const { engine, support, cwds } = deps;
   const key = sessionIdOf(asAgent(session));
   const oldCwd = cwds.get(key) ?? session.header?.cwd ?? '';
   cwds.set(key, data.cwd);
-  const outcome = await engine.fire('cwd-changed', 'CwdChanged', {
-    payload: support.payload('CwdChanged', asAgent(session), { old_cwd: oldCwd, new_cwd: data.cwd }),
-  });
+  const outcome = engine.has('cwd-changed')
+    ? await engine.fire('cwd-changed', 'CwdChanged', {
+      payload: support.payload('CwdChanged', asAgent(session), { old_cwd: oldCwd, new_cwd: data.cwd }),
+    })
+    : { watchPathsGiven: false };
   support.files.cwdChanged(session, data.cwd, outcome.watchPathsGiven ? outcome.watchPaths : undefined);
 }
 
@@ -76,7 +80,9 @@ async function onCommandRun(deps, session, data) {
 function dispatchEvent(deps, session, event) {
   const { engine, commands, summaries } = deps;
   const { type, data } = event;
-  if (type === 'working-directory/change' && engine.has('cwd-changed')) return onCwdChanged(deps, session, data);
+  if (type === 'working-directory/change' && (engine.has('cwd-changed') || engine.has('file-changed'))) {
+    return onCwdChanged(deps, session, data);
+  }
   if (type === 'command/run') {
     if (data.args !== undefined) {
       if (commands.size >= MAX_REMEMBERED_COMMANDS) commands.delete(commands.keys().next().value);
@@ -97,7 +103,7 @@ function dispatchEvent(deps, session, event) {
  * @param {object} support shared helpers
  */
 export function registerFeedHooks(ctx, engine, support) {
-  const wanted = ['cwd-changed', 'pre-compact', 'post-compact', 'user-prompt-expansion'];
+  const wanted = ['cwd-changed', 'file-changed', 'pre-compact', 'post-compact', 'user-prompt-expansion'];
   if (!wanted.some((event) => engine.has(event))) return;
   const deps = { engine, support, cwds: new Map(), commands: new Map(), summaries: new Map() };
   support.onForget((id) => deps.cwds.delete(id));
