@@ -27,7 +27,6 @@ async function onPreTool(engine, support, exec, next) {
   const outcome = await engine.fire('pre-tool-use', 'PreToolUse', {
     subject: exec.name,
     agent: exec.agent,
-    rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload('PreToolUse', exec.agent, {
       tool_name: claudeToolName(exec.name),
@@ -80,7 +79,6 @@ async function onPostTool(engine, support, exec, result, next) {
   const outcome = await engine.fire(event, claudeName, {
     subject: exec.name,
     agent: exec.agent,
-    rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload(claudeName, exec.agent, {
       tool_name: claudeToolName(exec.name),

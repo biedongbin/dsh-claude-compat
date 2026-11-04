@@ -141,6 +141,7 @@ export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
     config,
     runners: { ...createModelRunners(ctx, support), ...runners },
     isMuted: support.isHookAgent,
+    rewake: (agent) => support.rewake(agent),
     track: support.track,
   });
   if (typeof ctx.effect === 'function') {

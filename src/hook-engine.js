@@ -6,6 +6,7 @@
 import { NO_ONFAILURE_EVENTS } from './hook-events.js';
 import { runHandler } from './hook-handlers.js';
 import { interpretRun, mergeOutcomes } from './hook-output.js';
+import { denyRun } from './hook-verdict.js';
 import { claudeToolName, matchIfRule } from './hook-spec.js';
 
 // A matcher with only these characters is an exact name, or a list of exact names.
@@ -58,23 +59,20 @@ function applyOnFailure(run, hook, event) {
   if (!run.failed || hook.onFailure !== 'block' || NO_ONFAILURE_EVENTS.has(event)) return run;
   const label = hook.command ?? hook.url ?? hook.tool ?? hook.type;
   const message = `hook failed (${run.reason}): ${label}`;
-  if (event === 'permission-request') {
-    const decision = { behavior: 'deny', message };
-    const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
-    return { exitCode: 0, stdout: JSON.stringify(output), failed: false };
-  }
+  if (event === 'permission-request') return denyRun(message);
   return { exitCode: 2, stdout: message, failed: false };
 }
 
 /**
  * Build the engine for one set of configured hooks.
- * @param {{hooks: object[], config: object, runners?: object, isMuted?: (agent: object) => boolean}} options
+ * @param {{hooks: object[], config: object, runners?: object, isMuted?: (agent: object) => boolean,
+ *   rewake?: (agent: object) => Function | undefined}} options
  *   `hooks` are the records from loadHookSettings. `runners` overrides the runner of a handler
  *   type (the types that need DSH, and tests). An `agent` hook does not run for an agent that
  *   `isMuted` names, so an agent hook cannot start itself again. Every other hook still runs there,
  *   so a deny guard also applies to the tools of a verifier subagent.
  */
-export function createHookEngine({ hooks: initial, config, runners, isMuted, track = (promise) => promise }) {
+export function createHookEngine({ hooks: initial, config, runners, isMuted, rewake, track = (promise) => promise }) {
   const hooks = initial;
   const matchers = new Map();
 
@@ -173,7 +171,9 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
      *   send. `agent` is the agent that the event is about.
      * @returns {Promise<object>} merged outcome (see src/hook-output.js)
      */
-    async fire(event, claudeName, spec) {
+    async fire(event, claudeName, request) {
+      // `asyncRewake` steers the agent of the event, so the engine reads it from there.
+      const spec = { ...request, rewake: request.rewake ?? rewake?.(request.agent) };
       // An agent hook does not run in an agent that an agent hook started, so it cannot start
       // itself again. The other types cannot recurse, and a deny guard must still see the tool
       // calls of that subagent: DSH cannot limit it to read-only tools.

@@ -2,42 +2,23 @@
 // Event names are from https://code.claude.com/docs/en/hooks. The DSH points
 // are from the harness source (packages/extensions/tool-cordis/src/api-catalog.ts).
 
+// The Claude Code event names. The internal name is the same name in kebab case.
+const NAMES = [
+  'SessionStart', 'Setup', 'UserPromptSubmit', 'UserPromptExpansion',
+  'PreToolUse', 'PermissionRequest', 'PermissionDenied', 'PostToolUse',
+  'PostToolUseFailure', 'PostToolBatch', 'Notification', 'MessageDisplay',
+  'SubagentStart', 'SubagentStop', 'TaskCreated', 'TaskCompleted',
+  'Stop', 'StopFailure', 'TeammateIdle', 'InstructionsLoaded',
+  'ConfigChange', 'CwdChanged', 'DirectoryAdded', 'FileChanged',
+  'WorktreeCreate', 'WorktreeRemove', 'PreCompact', 'PostCompact',
+  'PreModelSwitch', 'PostModelSwitch', 'Elicitation', 'ElicitationResult',
+  'SessionEnd',
+];
+
+const kebab = (name) => name.replace(/[A-Z]/g, (letter, index) => (index === 0 ? '' : '-') + letter.toLowerCase());
+
 // Claude event name -> internal kebab name.
-export const CLAUDE_EVENTS = {
-  SessionStart: 'session-start',
-  Setup: 'setup',
-  UserPromptSubmit: 'user-prompt-submit',
-  UserPromptExpansion: 'user-prompt-expansion',
-  PreToolUse: 'pre-tool-use',
-  PermissionRequest: 'permission-request',
-  PermissionDenied: 'permission-denied',
-  PostToolUse: 'post-tool-use',
-  PostToolUseFailure: 'post-tool-use-failure',
-  PostToolBatch: 'post-tool-batch',
-  Notification: 'notification',
-  MessageDisplay: 'message-display',
-  SubagentStart: 'subagent-start',
-  SubagentStop: 'subagent-stop',
-  TaskCreated: 'task-created',
-  TaskCompleted: 'task-completed',
-  Stop: 'stop',
-  StopFailure: 'stop-failure',
-  TeammateIdle: 'teammate-idle',
-  InstructionsLoaded: 'instructions-loaded',
-  ConfigChange: 'config-change',
-  CwdChanged: 'cwd-changed',
-  DirectoryAdded: 'directory-added',
-  FileChanged: 'file-changed',
-  WorktreeCreate: 'worktree-create',
-  WorktreeRemove: 'worktree-remove',
-  PreCompact: 'pre-compact',
-  PostCompact: 'post-compact',
-  PreModelSwitch: 'pre-model-switch',
-  PostModelSwitch: 'post-model-switch',
-  Elicitation: 'elicitation',
-  ElicitationResult: 'elicitation-result',
-  SessionEnd: 'session-end',
-};
+export const CLAUDE_EVENTS = Object.fromEntries(NAMES.map((name) => [name, kebab(name)]));
 
 // Events where Claude Code evaluates a hook's `if` rule. On any other event a
 // hook with `if` never runs.

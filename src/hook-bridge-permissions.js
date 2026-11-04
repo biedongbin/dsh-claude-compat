@@ -6,7 +6,7 @@
 // group of tool results, which is the point before the next model call.
 
 import { claudeToolName } from './hook-spec.js';
-import { sessionIdOf } from './hook-support.js';
+import { sessionIdOf, withMessages } from './hook-support.js';
 import { failureText, responseOf } from './hook-bridge-tools.js';
 
 // DSH has no event that groups parallel calls. The log of calls whose input an
@@ -56,7 +56,6 @@ async function onApproval(engine, support, calls, req, next) {
   const outcome = await engine.fire('permission-request', 'PermissionRequest', {
     subject: req.toolName,
     agent: req.agent,
-    rewake: support.rewake(req.agent),
     tool: { name: req.toolName, input: call.input },
     payload: support.payload('PermissionRequest', req.agent, fields),
   });
@@ -80,7 +79,6 @@ async function onDenied(engine, support, req, fields) {
   const outcome = await engine.fire('permission-denied', 'PermissionDenied', {
     subject: req.toolName,
     agent: req.agent,
-    rewake: support.rewake(req.agent),
     tool: { name: req.toolName, input: fields.tool_input },
     payload: support.payload('PermissionDenied', req.agent, {
       tool_name: claudeToolName(req.toolName),
@@ -115,7 +113,6 @@ async function onPreStep(engine, support, batches, payload, next) {
   batches.delete(sessionIdOf(agent));
   const outcome = await engine.fire('post-tool-batch', 'PostToolBatch', {
     agent,
-    rewake: support.rewake(agent),
     payload: support.payload('PostToolBatch', agent, { tool_calls: toolCalls }),
   });
   if (outcome.blocked || outcome.stopped) {
@@ -124,8 +121,7 @@ async function onPreStep(engine, support, batches, payload, next) {
   }
   const downstream = await next();
   const extra = support.contextMessages(outcome);
-  if (extra.length === 0 || downstream.kind !== 'enter') return downstream;
-  return { ...downstream, messages: [...downstream.messages, ...extra] };
+  return withMessages(downstream, extra);
 }
 
 /**

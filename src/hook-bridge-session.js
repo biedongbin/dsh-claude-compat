@@ -4,7 +4,7 @@
 // SessionStart runs on `agent/created`, the DSH point that announces a new agent
 // with its start source (startup, resume, clear, compact).
 
-import { blocksToText, isSubagent } from './hook-support.js';
+import { blocksToText, isSubagent, withMessages } from './hook-support.js';
 import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 
 // Claude Code lowers the default timeout of these events (docs, "Common handler fields").
@@ -17,7 +17,6 @@ async function onAgentCreated(engine, support, { agent, source }) {
     const outcome = await engine.fire('session-start', 'SessionStart', {
       subject: source,
       agent,
-      rewake: support.rewake(agent),
       payload: support.payload('SessionStart', agent, { source }),
     });
     support.inject(agent, outcome);
@@ -49,7 +48,6 @@ async function onPreStep(engine, support, { agent, messages }, next) {
   const outcome = await engine.fire('user-prompt-submit', 'UserPromptSubmit', {
     defaultMs: PROMPT_DEFAULT_MS,
     agent,
-    rewake: support.rewake(agent),
     payload: support.payload('UserPromptSubmit', agent, { prompt }),
   });
   if (outcome.blocked || outcome.stopped) {
@@ -58,8 +56,7 @@ async function onPreStep(engine, support, { agent, messages }, next) {
   }
   const downstream = await next();
   const extra = support.contextMessages(outcome);
-  if (extra.length === 0 || downstream.kind !== 'enter') return downstream;
-  return { ...downstream, messages: [...downstream.messages, ...extra] };
+  return withMessages(downstream, extra);
 }
 
 /**

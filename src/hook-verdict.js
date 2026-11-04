@@ -40,6 +40,16 @@ export function parseVerdict(text) {
 
 const ALLOWED = { exitCode: 0, stdout: '', failed: false };
 
+/**
+ * The run that a PermissionRequest hook gives to deny a request: a deny decision in JSON.
+ * @param {string} message why the request is denied
+ * @returns {{exitCode: number, stdout: string, failed: boolean}}
+ */
+export function denyRun(message) {
+  const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message } } };
+  return { exitCode: 0, stdout: JSON.stringify(output), failed: false };
+}
+
 // A block verdict that has no effect on this event. It is logged, so the author sees it.
 function ignored(event, why) {
   console.warn(`dsh-claude-compat: a ${event} hook answered "not ok", which has no effect: ${why}`);
@@ -61,11 +71,7 @@ export function verdictToRun(event, verdict, hook) {
   if ((event === 'stop' || event === 'subagent-stop') && hook.type === 'prompt' && verdict.impossible) return ALLOWED;
   // The denial already happened. A PermissionRequest block becomes a deny decision.
   if (event === 'permission-denied') return ignored(event, 'the denial already happened');
-  if (event === 'permission-request') {
-    const decision = { behavior: 'deny', message: reason };
-    const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
-    return { exitCode: 0, stdout: JSON.stringify(output), failed: false };
-  }
+  if (event === 'permission-request') return denyRun(reason);
   // The reason goes back to the model as the tool error.
   if (event === 'post-tool-use-failure') {
     return { exitCode: 0, stdout: JSON.stringify({ additionalContext: reason }), failed: false };

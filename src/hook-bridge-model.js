@@ -7,7 +7,7 @@
 // messages of the current step are already built. PreModelSwitch has no DSH point, because
 // DSH applies the model before any plugin can see it.
 
-import { isSubagent, sessionIdOf } from './hook-support.js';
+import { isSubagent, sessionIdOf, withMessages } from './hook-support.js';
 
 // DSH does not say who asked for a model change. A user command is the usual source.
 const SWITCH_SOURCE = 'command';
@@ -31,7 +31,6 @@ async function onRequest(engine, support, state, { agent }, next) {
     subject: route.model,
     defaultMs: 30_000,
     agent,
-    rewake: support.rewake(agent),
     payload: support.payload('PostModelSwitch', agent, {
       from_model: previous.model,
       to_model: route.model,
@@ -52,7 +51,7 @@ async function onPreStep(state, support, { agent }, next) {
   const extra = state.pending.get(key);
   if (extra === undefined || downstream.kind !== 'enter') return downstream;
   state.pending.delete(key);
-  return { ...downstream, messages: [...downstream.messages, ...extra] };
+  return withMessages(downstream, extra);
 }
 
 /**

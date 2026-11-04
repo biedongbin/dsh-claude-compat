@@ -34,6 +34,18 @@ export function blocksToText(content) {
  * @param {object} ctx the DSH plugin context
  * @returns {object} helpers: payload, contextMessage, inject, track, drain
  */
+/**
+ * Add context messages to the messages that enter the next step. A decision that is not `enter`
+ * (a rejection) stays as it is.
+ * @param {{kind: string, messages?: object[]}} downstream decision of the next listener
+ * @param {object[]} extra context messages
+ * @returns {{kind: string, messages?: object[]}}
+ */
+export function withMessages(downstream, extra) {
+  if (extra.length === 0 || downstream.kind !== 'enter') return downstream;
+  return { ...downstream, messages: [...downstream.messages, ...extra] };
+}
+
 export function createSupport(ctx) {
   const pending = new Set();
   // Session ids of the subagents that agent hooks started. No hook runs inside them.

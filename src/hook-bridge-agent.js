@@ -60,7 +60,6 @@ async function onTurnStopping(deps, { agent }) {
   const count = continued.get(key) ?? 0;
   const outcome = await engine.fire('stop', 'Stop', {
     agent,
-    rewake: support.rewake(agent),
     payload: support.payload('Stop', agent, {
       stop_hook_active: count > 0,
       last_assistant_message: messages.lastMessage(agent),
@@ -115,7 +114,6 @@ async function onSubagentStart({ ctx, engine, support }, info) {
   const outcome = await engine.fire('subagent-start', 'SubagentStart', {
     subject: SUBAGENT_TYPE,
     agent: child,
-    rewake: support.rewake(child),
     payload: support.payload('SubagentStart', child, { agent_id: info.id, agent_type: SUBAGENT_TYPE }),
   });
   support.inject(child, outcome);
