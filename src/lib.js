@@ -74,8 +74,25 @@ function projectDirNameOverride() {
   return name;
 }
 
+// Claude Code turns every character that is not a letter or digit into `-`. A name
+// over this length is cut and gets a hash of the full path, so two long paths differ.
+const MAX_PROJECT_FOLDER = 200;
+
+// 31-multiplier string hash over UTF-16 units, as Claude Code computes it.
+function pathHash(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = (hash << 5) - hash + text.charCodeAt(i) | 0;
+  return hash;
+}
+
+export function claudeProjectFolder(cwd) {
+  const name = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (name.length <= MAX_PROJECT_FOLDER) return name;
+  return `${name.slice(0, MAX_PROJECT_FOLDER)}-${Math.abs(pathHash(cwd)).toString(36)}`;
+}
+
 export function claudeProjectsDir(cwd) {
-  const folder = projectDirNameOverride() ?? cwd.replaceAll('/', '-');
+  const folder = projectDirNameOverride() ?? claudeProjectFolder(cwd);
   return join(resolveUserClaudeDir(), 'projects', folder);
 }
 

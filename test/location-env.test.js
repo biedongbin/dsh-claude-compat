@@ -7,6 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import {
+  claudeProjectFolder,
   claudeProjectsDir,
   envPathList,
   envPluginDirs,
@@ -99,6 +100,24 @@ test('projects dir: derived from cwd, or the CLAUDE_CODE_PROJECT_DIR_NAME overri
   await withEnv({ CLAUDE_CONFIG_DIR: '/cfg', CLAUDE_CODE_PROJECT_DIR_NAME: 'shared' }, () => {
     assert.equal(claudeProjectsDir('/a/b'), join('/cfg', 'projects', 'shared'));
   });
+});
+
+test('derived project folder: every non-alphanumeric character becomes a dash', () => {
+  assert.equal(claudeProjectFolder('/a/b'), '-a-b');
+  assert.equal(claudeProjectFolder('/Users/me/my.project'), '-Users-me-my-project');
+  assert.equal(claudeProjectFolder('/tmp/my dir_x~y'), '-tmp-my-dir-x-y');
+  assert.equal(claudeProjectFolder('/tmp/日本語'), '-tmp----');
+});
+
+test('derived project folder: a name over 200 characters is cut and gets a path hash', () => {
+  const long = `/Users/me/${'a.b_c '.repeat(40)}`;
+  const folder = claudeProjectFolder(long);
+  assert.equal(folder.length, 207);
+  assert.equal(folder.slice(0, 200), long.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 200));
+  assert.equal(folder.slice(200), '-ni313b');
+  const exact = `/${'x'.repeat(199)}`;
+  assert.equal(claudeProjectFolder(exact), `-${'x'.repeat(199)}`);
+  assert.notEqual(claudeProjectFolder(`${long}1`), claudeProjectFolder(`${long}2`));
 });
 
 test('project dir name is ignored without CLAUDE_CONFIG_DIR', () => withEnv(

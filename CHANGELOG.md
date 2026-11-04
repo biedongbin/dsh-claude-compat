@@ -18,6 +18,9 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.
 - `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
 
+### Fixed
+- `/cc-resume` now derives the Claude project folder as Claude Code does: every character that is not a letter or digit becomes `-`, and a name over 200 characters is cut and gets a hash of the path. A working directory with `.`, `_`, or a space in it no longer maps to a missing folder. Issue #11.
+
 ## [1.0.1] — 2026-11-04
 
 ### Fixed

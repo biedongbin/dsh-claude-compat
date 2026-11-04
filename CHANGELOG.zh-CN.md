@@ -18,6 +18,9 @@
 - `/cc-plugin` 与插件目录现在遵循配置项 `userClaudeDir` 和 `pluginsRoot`。
 - `userClaudeDir` 与 `pluginsRoot` 不再有默认值。未设置时依次使用对应环境变量、`~/.claude`。显式配置值优先。
 
+### 修复
+- `/cc-resume` 现在按 Claude Code 的方式推导 Claude 项目文件夹名：所有非字母、数字的字符都变为 `-`，超过 200 个字符的名称会被截断并附加路径哈希。工作目录含有 `.`、`_` 或空格时，不再对应到不存在的文件夹。Issue #11。
+
 ## [1.0.1] — 2026-11-04
 
 ### 修复
