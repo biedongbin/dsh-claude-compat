@@ -78,8 +78,13 @@ async function onTurnStopping(deps, { agent }) {
     continued.delete(key);
     return;
   }
+  if (typeof agent.steer !== 'function') {
+    console.warn('dsh-claude-compat: a Stop hook asked to continue the turn, but this agent cannot be steered; ending the turn');
+    continued.delete(key);
+    return;
+  }
   continued.set(key, count + 1);
-  if (typeof agent.steer === 'function') agent.steer(support.contextMessage(feedback));
+  agent.steer(support.contextMessage(feedback));
 }
 
 // Only a failed model request is an API error. Other errors of the loop are not.

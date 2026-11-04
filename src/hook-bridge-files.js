@@ -65,8 +65,8 @@ export function registerFileHooks(ctx, engine, support, { intervalMs } = {}) {
     release(agent) {
       const key = sessionIdOf(agent);
       states.delete(key);
-      watcher.set(`matcher:${key}`, []);
-      watcher.set(`dynamic:${key}`, []);
+      watcher.remove(`matcher:${key}`);
+      watcher.remove(`dynamic:${key}`);
     },
     setDynamic(agent, paths) {
       const state = states.get(sessionIdOf(agent));
@@ -88,5 +88,7 @@ export function registerFileHooks(ctx, engine, support, { intervalMs } = {}) {
   ctx.on('agent/created', ({ agent }) => {
     if (!isSubagent(agent)) support.files.track(agent);
   });
-  ctx.on('agent/disposed', ({ agent }) => support.files.release(agent));
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (!isSubagent(agent)) support.files.release(agent);
+  });
 }

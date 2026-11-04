@@ -7,6 +7,7 @@
 // that DSH needs a restart. DSH has no event for the policy settings, so `policy_settings`
 // never fires.
 
+import { isSubagent } from './hook-support.js';
 import { createWatcher } from './hook-watch.js';
 
 /**
@@ -22,15 +23,19 @@ export function registerConfigHooks(ctx, engine, support, { files, intervalMs })
   let current;
 
   async function changed(source, filePath) {
-    await engine.fire('config-change', 'ConfigChange', {
+    // The notice comes first, so a failing hook cannot hide it.
+    if (filePath !== undefined) {
+      console.warn(`dsh-claude-compat: ${filePath} changed; hooks load at startup, so restart DSH to apply the change`);
+    }
+    const outcome = await engine.fire('config-change', 'ConfigChange', {
       subject: source,
       payload: support.payload('ConfigChange', current, {
         source,
         ...filePath === undefined ? {} : { file_path: filePath },
       }),
     });
-    if (filePath !== undefined) {
-      console.warn(`dsh-claude-compat: ${filePath} changed; hooks load at startup, so restart DSH to apply the change`);
+    if (outcome.blocked || outcome.stopped) {
+      console.warn(`dsh-claude-compat: a ConfigChange hook asked to block the change of ${filePath ?? source}; DSH reports it after it happened, ignored`);
     }
   }
 
@@ -41,7 +46,7 @@ export function registerConfigHooks(ctx, engine, support, { files, intervalMs })
   watcher.set('settings', [...sources.keys()]);
   ctx.effect?.(() => () => watcher.close(), 'dsh-claude-compat: stop settings watch');
   ctx.on('agent/created', ({ agent }) => {
-    if (agent?.session?.header?.origin !== 'subagent') current = agent;
+    if (!isSubagent(agent)) current = agent;
   });
   ctx.on('agent/disposed', ({ agent }) => {
     if (agent === current) current = undefined;

@@ -1,7 +1,7 @@
 // File watcher for FileChanged and ConfigChange (src/hook-watch.js), on real files.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createWatcher } from '../src/hook-watch.js';
 import { tempDir, waitFor } from './hook-kit.js';
@@ -25,6 +25,40 @@ test('reports add, change and unlink for a watched file', async () => {
     assert.ok(await waitFor(() => seen.length === 3));
     assert.deepEqual(seen, [[file, 'add'], [file, 'change'], [file, 'unlink']]);
   } finally {
+    watcher.close();
+  }
+});
+
+test('remove drops a group: its files are no longer reported', async () => {
+  const file = join(tempDir('dcc-watch-'), 'gone.txt');
+  const { seen, watcher } = watched([file], 1_000_000);
+  watcher.remove('test');
+  writeFileSync(file, 'x');
+  watcher.poll();
+  watcher.close();
+  assert.deepEqual(seen, []);
+});
+
+test('an unreadable path is logged once, and reading it later is not reported as an add', async (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('needs POSIX permissions and a non-root user');
+  const dir = tempDir('dcc-watch-');
+  const file = join(dir, 'secret.txt');
+  writeFileSync(file, 'x');
+  chmodSync(dir, 0o000);
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  const { seen, watcher } = watched([file], 1_000_000);
+  try {
+    watcher.poll();
+    watcher.poll();
+    assert.equal(warnings.filter((w) => /cannot read/.test(w)).length, 1);
+    chmodSync(dir, 0o700);
+    watcher.poll();
+    assert.deepEqual(seen, []);
+  } finally {
+    console.warn = original;
+    chmodSync(dir, 0o700);
     watcher.close();
   }
 });

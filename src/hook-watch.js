@@ -27,11 +27,13 @@ function fingerprint(path) {
  * without touching the paths of another.
  * @param {{onChange: (path: string, event: 'add'|'change'|'unlink') => void,
  *   intervalMs?: number}} options `onChange` must not throw
- * @returns {{set: (group: string, paths: string[]) => void, poll: () => void, close: () => void}}
+ * @returns {{set: (group: string, paths: string[]) => void, remove: (group: string) => void,
+ *   poll: () => void, close: () => void}}
  */
 export function createWatcher({ onChange, intervalMs = DEFAULT_INTERVAL_MS }) {
   const groups = new Map();
   const known = new Map();
+  const unreadable = new Set();
   let timer;
 
   const wanted = () => new Set([...groups.values()].flatMap((paths) => [...paths]));
@@ -40,9 +42,17 @@ export function createWatcher({ onChange, intervalMs = DEFAULT_INTERVAL_MS }) {
     for (const path of wanted()) {
       const before = known.get(path);
       const now = fingerprint(path);
-      if (now === UNREADABLE) continue;
+      if (now === UNREADABLE) {
+        if (!unreadable.has(path)) {
+          unreadable.add(path);
+          console.warn(`dsh-claude-compat: cannot read ${path}; changes to it are not reported until it can be read`);
+        }
+        continue;
+      }
+      unreadable.delete(path);
       known.set(path, now);
-      if (before === now) continue;
+      // A path that could not be read before has no earlier state, so its first read is not an add.
+      if (before === now || (before === UNREADABLE && now !== undefined)) continue;
       try {
         if (before === undefined) onChange(path, 'add');
         else if (now === undefined) onChange(path, 'unlink');
@@ -55,8 +65,12 @@ export function createWatcher({ onChange, intervalMs = DEFAULT_INTERVAL_MS }) {
 
   function sync() {
     const paths = wanted();
-    for (const path of paths) if (!known.has(path)) known.set(path, fingerprint(path) === UNREADABLE ? undefined : fingerprint(path));
-    for (const path of [...known.keys()]) if (!paths.has(path)) known.delete(path);
+    for (const path of paths) if (!known.has(path)) known.set(path, fingerprint(path));
+    for (const path of [...known.keys()]) {
+      if (paths.has(path)) continue;
+      known.delete(path);
+      unreadable.delete(path);
+    }
     if (paths.size > 0 && timer === undefined) {
       timer = setInterval(poll, intervalMs);
       timer.unref();
@@ -69,6 +83,11 @@ export function createWatcher({ onChange, intervalMs = DEFAULT_INTERVAL_MS }) {
   return {
     set(group, paths) {
       groups.set(group, new Set(paths));
+      sync();
+    },
+    /** Drop a group and its paths, so a disposed session leaves nothing behind. */
+    remove(group) {
+      groups.delete(group);
       sync();
     },
     /** Check every path now. The timer calls this. A test may call it directly. */

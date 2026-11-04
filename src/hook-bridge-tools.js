@@ -69,6 +69,8 @@ function replacement(outcome, contexts) {
     : { ...base, value: output };
 }
 
+// A PostToolUse block or a replaced output is a final decision, so it does not call next(): a
+// later listener would only see the output that the hook has just replaced.
 async function onPostTool(engine, support, exec, result, next) {
   if (support.isHookCall(exec)) return next();
   const failed = result.isError === true;

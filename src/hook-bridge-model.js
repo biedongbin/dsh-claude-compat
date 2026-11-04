@@ -17,7 +17,7 @@ function routeOf(config) {
   return typeof model === 'string' && model !== '' ? { provider: String(provider ?? ''), model } : undefined;
 }
 
-const keyOf = (route) => `${route.provider}/${route.model}`;
+const keyOf = (route) => JSON.stringify([route.provider, route.model]);
 
 async function onRequest(engine, support, state, { agent }, next) {
   const config = await next();

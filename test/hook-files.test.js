@@ -226,6 +226,19 @@ test('ConfigChange runs when the user settings file changes, with source and fil
   await h.dispose();
 });
 
+test('ConfigChange: a hook that asks to block is told that DSH cannot undo the change, and the notice comes first', async () => {
+  const h = harness({ ConfigChange: [{ hooks: [{ command: 'exit 2' }] }] });
+  await created(h, fakeAgent('s1', '/work'));
+  const { warnings } = await withWarnings(async (warnings) => {
+    writeFileSync(join(h.dir, 'settings.json'), JSON.stringify({ hooks: { ConfigChange: [{ hooks: [{ command: 'exit 2' }] }] }, other: 2 }));
+    assert.ok(await waitFor(() => warnings.some((w) => /asked to block/.test(w))));
+  });
+  const restart = warnings.findIndex((w) => /restart DSH to apply/.test(w));
+  const refused = warnings.findIndex((w) => /asked to block the change/.test(w));
+  assert.ok(restart >= 0 && refused > restart, warnings.join('\n'));
+  await h.dispose();
+});
+
 test('ConfigChange: a change to a settings file is not applied, and the log says to restart', async () => {
   const marker = join(tempDir('dcc-marker-'), 'ran');
   const log = join(tempDir('dcc-log-'), 'lines');

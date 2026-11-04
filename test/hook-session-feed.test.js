@@ -2,7 +2,7 @@
 // TeammateIdle and InstructionsLoaded.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fakeAgent, fakeSubagent, harness, say, tempDir, textOf, withWarnings } from './hook-kit.js';
 
@@ -242,6 +242,66 @@ test('TeammateIdle runs when a team member goes from running to idle', async () 
   const calls = readLines(file);
   assert.equal(calls.length, 1, 'the first idle is not a finished run');
   assert.deepEqual([calls[0].hook_event_name, calls[0].teammate_name, calls[0].team_name], ['TeammateIdle', 'researcher', 'team-1']);
+});
+
+test('TeammateIdle: a block on a teammate that cannot be steered is logged', async () => {
+  const h = harness({ TeammateIdle: [{ hooks: [{ command: 'exit 2' }] }] });
+  await feed(h, session('lead'), 'team/member', member('mate-9', 'writer'));
+  const mate = fakeAgent('mate-9');
+  delete mate.steer;
+  const { warnings } = await withWarnings(async () => {
+    h.dispatch('agent/status', [{ agent: mate, status: 'running' }], () => {});
+    h.dispatch('agent/status', [{ agent: mate, status: 'idle' }], () => {});
+    await h.drain();
+  });
+  assert.match(warnings.join('\n'), /cannot be steered/);
+});
+
+test('TeammateIdle: a disposed teammate is forgotten, and a non-member never stays marked as running', async () => {
+  const file = join(tempDir('dcc-team-'), 'lines');
+  const h = harness({ TeammateIdle: [{ hooks: [{ command: logTo(file) }] }] });
+  await feed(h, session('lead'), 'team/member', member('mate-2', 'reader'));
+  const mate = fakeAgent('mate-2');
+  h.dispatch('agent/status', [{ agent: mate, status: 'running' }], () => {});
+  await h.dispatch('agent/disposed', [{ agent: mate }], () => {});
+  h.dispatch('agent/status', [{ agent: mate, status: 'running' }], () => {});
+  h.dispatch('agent/status', [{ agent: mate, status: 'idle' }], () => {});
+  await h.drain();
+  assert.equal(existsSync(file), false, 'a forgotten member is no longer a teammate');
+  const loner = fakeAgent('loner');
+  h.dispatch('agent/status', [{ agent: loner, status: 'running' }], () => {});
+  h.dispatch('agent/status', [{ agent: loner, status: 'idle' }], () => {});
+  await feed(h, session('lead'), 'team/member', member('loner', 'late'));
+  h.dispatch('agent/status', [{ agent: loner, status: 'idle' }], () => {});
+  await h.drain();
+  assert.equal(existsSync(file), false, 'an idle that came before the membership is not reported');
+});
+
+test('PostModelSwitch: two routes that join to the same text are still different routes', async () => {
+  const file = join(tempDir('dcc-model-'), 'lines');
+  const h = harness({ PostModelSwitch: [{ hooks: [{ command: logTo(file) }] }] });
+  const agent = fakeAgent('s-key');
+  const ask = (provider, model) => h.dispatch(
+    'agent/request',
+    [{ agent, turn: 1, step: 1, signal: new AbortController().signal }],
+    async () => ({ provider, model }),
+  );
+  await ask('a/b', 'c');
+  await ask('a', 'b/c');
+  assert.equal(readLines(file).length, 1);
+});
+
+test('compaction summaries are dropped at the end, also when no PostCompact hook is configured', async () => {
+  const file = join(tempDir('dcc-compact-'), 'lines');
+  const h = harness({ PreCompact: [{ hooks: [{ command: 'true' }] }], PostCompact: [{ hooks: [{ command: logTo(file) }] }] });
+  const s = session('s-compact');
+  await feed(h, s, 'compaction/summary', { compactionId: 'c1', summary: 'first summary' });
+  await feed(h, s, 'compaction/end', { compactionId: 'c1' });
+  await feed(h, s, 'compaction/end', { compactionId: 'c1' });
+  await h.drain();
+  const [first, second] = readLines(file);
+  assert.equal(first.compact_summary, 'first summary');
+  assert.equal(second.compact_summary, '', 'the summary of one compaction does not reach the next');
 });
 
 test('TeammateIdle: exit 2 steers the teammate to keep working', async () => {

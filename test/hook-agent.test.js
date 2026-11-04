@@ -95,6 +95,17 @@ test('Stop: a block with no reason still continues, with a default reason', asyn
   assert.equal(textOf(agent.steered[0]), 'blocked by Stop hook');
 });
 
+test('Stop: a block on an agent that cannot be steered is logged, ends the turn, and is not counted', async () => {
+  const h = harness({ Stop: [{ hooks: [{ command: 'exit 2' }] }] });
+  const agent = fakeAgent('no-steer');
+  delete agent.steer;
+  const { warnings } = await withWarnings(async () => {
+    for (let i = 0; i < 10; i += 1) await h.dispatch('agent/turn-stopping', [stopping(agent)], () => {});
+  });
+  assert.equal(warnings.filter((w) => /cannot be steered/.test(w)).length, 10);
+  assert.equal(warnings.filter((w) => /CLAUDE_CODE_STOP_HOOK_BLOCK_CAP/.test(w)).length, 0, 'the cap counter did not move');
+});
+
 test('Stop: a hook that fails does not continue the turn, even with onFailure block', async () => {
   const h = harness({ Stop: [{ hooks: [{ command: 'exit 5', onFailure: 'block' }] }] });
   const agent = fakeAgent();
