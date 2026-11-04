@@ -75,19 +75,24 @@ function abortReason(error, timeoutMs) {
     : (error?.message ?? String(error));
 }
 
+// ToolRuntime.get(name, scope) sees global tools, and the tools of the scope it is given.
+// A tool that an agent connected for itself is invisible without that agent.
 async function runMcpToolHook(ctx, hook, payload, { timeoutMs, agent }) {
   const name = mcpToolName(hook.server, hook.tool);
-  if (ctx.tools?.get?.(name) === undefined) {
+  const scope = agent?.session === undefined ? undefined : agent;
+  if (ctx.tools?.get?.(name, scope) === undefined) {
     return failedRun(`MCP tool ${name} is not available: the server is not configured, or still connecting`);
   }
   try {
     const input = substitute(hook.input ?? {}, JSON.parse(payload));
-    const batch = await ctx.tools.execute({
-      calls: [{ type: 'tool-call', id: `${HOOK_CALL_PREFIX}${randomUUID()}`, name, arguments: JSON.stringify(input) }],
+    // ToolRuntime.execute takes one call and returns one result.
+    const result = await ctx.tools.execute({
+      callId: `${HOOK_CALL_PREFIX}${randomUUID()}`,
+      name,
+      arguments: input,
       signal: AbortSignal.timeout(timeoutMs),
-      ...agent?.session === undefined ? {} : { agent },
+      ...scope === undefined ? {} : { agent: scope },
     });
-    const { result } = batch.results[0];
     const text = blocksToText(result.content);
     if (result.isError) return failedRun(`MCP tool ${name} failed: ${text}`);
     return { exitCode: 0, stdout: text, failed: false };

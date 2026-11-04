@@ -88,14 +88,26 @@ test('buildPrompt replaces every $ARGUMENTS, or appends the input', () => {
 
 // ─── mcp_tool runner ─────────────────────────────────────────────────────────
 
-function fakeTools(handler) {
+// A fake of the shipped ToolRuntime contract (dsh-tools 0.2.1-rc.5): `get(name, scope)` sees
+// the global tools plus the tools of the scope it is given, and `execute` takes ONE call
+// with parsed arguments and returns ONE result. Any other input shape throws, as the real
+// runtime reads `exec.callId`, `exec.name` and `exec.signal` from the input itself.
+function fakeTools(handler, { scoped = new Map() } = {}) {
   const calls = [];
+  const global = (name) => name.startsWith('mcp__srv__');
+  const visible = (name, scope) => global(name) || (scope !== undefined && scoped.get(scope)?.has(name) === true);
   return {
     calls,
-    get: (name) => (name.startsWith('mcp__srv__') ? { name } : undefined),
+    get: (name, scope) => (visible(name, scope) ? { name } : undefined),
     execute: async (input) => {
+      assert.equal(typeof input.callId, 'string', 'callId');
+      assert.equal(typeof input.name, 'string', 'name');
+      assert.equal('calls' in input, false, 'one call per execute, not a batch');
+      assert.notEqual(typeof input.arguments, 'string', 'arguments are parsed, not JSON text');
+      assert.ok(input.signal instanceof AbortSignal, 'signal');
+      assert.ok(visible(input.name, input.agent), `tool ${input.name} is visible to the calling scope`);
       calls.push(input);
-      return { results: [{ callId: input.calls[0].id, result: await handler(input) }], additionalContexts: [], concluded: false };
+      return handler(input);
     },
   };
 }
@@ -108,10 +120,29 @@ test('an mcp_tool hook calls the tool with the substituted input, and its text i
   const decision = await h.dispatch('tools/post-execute', [call('Write', modelAgent()), { isError: false, value: 'ok', content: [] }], async () => ({ kind: 'accept' }));
   assert.deepEqual(decision, { kind: 'block', feedback: [{ type: 'text', text: 'unsafe file' }] });
   const [sent] = tools.calls;
-  assert.equal(sent.calls[0].name, 'mcp__srv__scan');
-  assert.deepEqual(JSON.parse(sent.calls[0].arguments), { path: '/p/a.js' });
-  assert.ok(sent.calls[0].id.startsWith(HOOK_CALL_PREFIX));
+  assert.equal(sent.name, 'mcp__srv__scan');
+  assert.deepEqual(sent.arguments, { path: '/p/a.js' });
+  assert.ok(sent.callId.startsWith(HOOK_CALL_PREFIX));
   assert.ok(sent.signal instanceof AbortSignal);
+});
+
+test('an mcp_tool hook reaches a tool that only the calling agent has connected', async () => {
+  const agent = modelAgent('scoped');
+  const tools = fakeTools(() => toolResult('scoped ok'), { scoped: new Map([[agent, new Set(['mcp__own__scan'])]]) });
+  const h = harness({ SessionStart: [{ hooks: [mcpHook({ server: 'own', input: {} })] }] }, { ctx: { tools } });
+  await h.dispatch('agent/created', [{ agent, source: 'startup' }], () => {});
+  assert.equal(textOf(agent.injected[0]), 'scoped ok');
+  assert.equal(tools.calls[0].agent, agent, 'the call carries the agent');
+});
+
+test('an mcp_tool hook cannot reach another agent\'s scoped tool', async () => {
+  const owner = modelAgent('owner');
+  const other = modelAgent('other');
+  const tools = fakeTools(() => toolResult('x'), { scoped: new Map([[owner, new Set(['mcp__own__scan'])]]) });
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [mcpHook({ server: 'own' })] }] }, { ctx: { tools } });
+  const { warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', other)], allow));
+  assert.match(warnings[0], /MCP tool mcp__own__scan is not available/);
+  assert.equal(tools.calls.length, 0);
 });
 
 test('an mcp_tool hook with plain text output is not a decision on an event that has no stdout context', async () => {
