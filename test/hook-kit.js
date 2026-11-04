@@ -44,7 +44,7 @@ export function fakeAgent(id = 'sess-1', cwd = '/work') {
 }
 
 // The DSH events that are waterfalls: each listener gets `next` for the listener after it.
-const WATERFALLS = new Set(['tools/pre-execute', 'tools/post-execute', 'agent/pre-step', 'approval/request', 'user-questions/request']);
+const WATERFALLS = new Set(['tools/pre-execute', 'tools/post-execute', 'agent/pre-step', 'agent/request', 'approval/request', 'user-questions/request']);
 
 /**
  * Register hooks from a settings object against a fake context.

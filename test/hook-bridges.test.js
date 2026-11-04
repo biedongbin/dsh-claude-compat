@@ -425,7 +425,7 @@ const DSH_EVENT = {
   FileChanged: 'agent/created',
   PreCompact: 'session/event',
   PostCompact: 'session/event',
-  PostModelSwitch: 'agent/pre-step',
+  PostModelSwitch: 'agent/request',
   SessionEnd: 'agent/disposed',
 };
 

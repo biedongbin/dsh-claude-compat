@@ -182,7 +182,7 @@ A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of n
 | MessageDisplay | `agent/assistant-stream` | Observe only. `displayContent` is ignored with a warning. |
 | UserPromptExpansion | `command/run` on `session/event` | Observe only. Runs for every command, not only skills. |
 | CwdChanged, PreCompact, PostCompact | `session/event` | Observe only. A PreCompact hook cannot stop the compaction. |
-| PostModelSwitch | model selection on `agent/pre-step` | Context joins the next step. `source` is always `command`. |
+| PostModelSwitch | provider and model of the call configuration on `agent/request` | Context joins the next step. `source` is always `command`. A provider change with the same model name also counts. |
 | TeammateIdle | `agent/status` and `team/member` | A block steers the teammate to keep working. |
 | InstructionsLoaded | the plugin's own rules loader | `.claude/rules` files only, with `load_reason` `session_start`. |
 | FileChanged | polling of the files that the matcher names | `watchPaths` from SessionStart, CwdChanged and FileChanged are watched too. |

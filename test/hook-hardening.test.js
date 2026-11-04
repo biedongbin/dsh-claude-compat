@@ -175,15 +175,18 @@ test('a disposed session starts again: the model baseline, the Stop count and th
     TaskCreated: [{ hooks: [{ command: `echo created >> "${log}"` }] }],
   });
   const agent = fakeAgent('s-gone');
-  const step = (model) => ({ agent, messages: [], modelSelection: { provider: 'p', model } });
-  const enter = async () => ({ kind: 'enter', messages: [] });
-  await h.dispatch('agent/pre-step', [step('a')], enter);
-  await h.dispatch('agent/pre-step', [step('b')], enter);
+  const request = (model) => h.dispatch(
+    'agent/request',
+    [{ agent, turn: 1, step: 1, signal: new AbortController().signal }],
+    async () => ({ provider: 'p', model }),
+  );
+  await request('a');
+  await request('b');
   const todo = { name: 'todo_write', arguments: { todos: [{ content: 'x', status: 'pending' }] }, callId: 'c', agent };
   await h.dispatch('tools/pre-execute', [todo], allow);
   await h.dispatch('tools/post-execute', [todo, { isError: false, content: [] }], async () => ({ kind: 'accept' }));
   await h.dispatch('agent/disposed', [{ agent }], () => {});
-  await h.dispatch('agent/pre-step', [step('c')], enter);
+  await request('c');
   await h.dispatch('tools/pre-execute', [todo], allow);
   const lines = readFileSync(log, 'utf8').trim().split('\n');
   assert.deepEqual(lines, ['switch', 'created', 'created'], 'no switch for c, and x is new again');

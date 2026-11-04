@@ -180,7 +180,7 @@ matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名
 | MessageDisplay | `agent/assistant-stream` | 仅观察。`displayContent` 被忽略并给出警告。 |
 | UserPromptExpansion | `session/event` 的 `command/run` | 仅观察。对所有命令运行，不限于 skill。 |
 | CwdChanged、PreCompact、PostCompact | `session/event` | 仅观察。PreCompact hook 不能阻止压缩。 |
-| PostModelSwitch | `agent/pre-step` 的模型选择 | 上下文并入下一步。`source` 固定为 `command`。 |
+| PostModelSwitch | `agent/request` 调用配置中的提供方与模型 | 上下文并入下一步。`source` 固定为 `command`。仅提供方变化而模型名不变也算切换。 |
 | TeammateIdle | `agent/status` 与 `team/member` | 拦截会引导队友继续工作。 |
 | InstructionsLoaded | 插件自己的 rules 加载器 | 仅 `.claude/rules` 文件，`load_reason` 为 `session_start`。 |
 | FileChanged | 轮询 matcher 指定的文件 | SessionStart、CwdChanged 与 FileChanged 返回的 `watchPaths` 也会被监视。 |

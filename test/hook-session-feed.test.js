@@ -142,17 +142,21 @@ test('UserPromptExpansion: a command with no arguments has an empty args field a
 
 // ─── PostModelSwitch ─────────────────────────────────────────────────────────
 
-const stepWith = (agent, model, messages = []) => ({ agent, messages, modelSelection: { provider: 'p', model } });
+// The real producer: `agent/request` gets { agent, turn, step, signal } and `next()` resolves the
+// call configuration of that request, which names the provider and the model.
+const requestOf = (agent, step = 1) => ({ agent, turn: 1, step, signal: new AbortController().signal });
+const resolves = (provider, model) => async () => ({ provider, model, maxTokens: 1024 });
 const enter = async () => ({ kind: 'enter', messages: [{ content: [{ type: 'text', text: 'user' }] }] });
+const request = (h, agent, model, provider = 'p') => h.dispatch('agent/request', [requestOf(agent)], resolves(provider, model));
 
-test('PostModelSwitch: the first step is a baseline, and a later change runs the hook', async () => {
+test('PostModelSwitch: the first request is a baseline, and a later change runs the hook', async () => {
   const file = join(tempDir('dcc-model-'), 'lines');
   const h = harness({ PostModelSwitch: [{ hooks: [{ command: logTo(file) }] }] });
   const agent = fakeAgent('s2');
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'model-a')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'model-a')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'model-b')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'model-b')], enter);
+  await request(h, agent, 'model-a');
+  await request(h, agent, 'model-a');
+  await request(h, agent, 'model-b');
+  await request(h, agent, 'model-b');
   const calls = readLines(file);
   assert.equal(calls.length, 1);
   assert.deepEqual(
@@ -161,44 +165,64 @@ test('PostModelSwitch: the first step is a baseline, and a later change runs the
   );
 });
 
+test('PostModelSwitch: a provider change with the same model name is a switch', async () => {
+  const file = join(tempDir('dcc-model-'), 'lines');
+  const h = harness({ PostModelSwitch: [{ hooks: [{ command: logTo(file) }] }] });
+  const agent = fakeAgent('s3');
+  await request(h, agent, 'shared-name', 'one');
+  await request(h, agent, 'shared-name', 'two');
+  const [call] = readLines(file);
+  assert.deepEqual([call.from_provider, call.to_provider, call.to_model], ['one', 'two', 'shared-name']);
+});
+
+test('PostModelSwitch: the request still resolves with its own configuration', async () => {
+  const h = harness({ PostModelSwitch: [{ hooks: [{ command: 'true' }] }] });
+  const agent = fakeAgent('s4');
+  await request(h, agent, 'a');
+  assert.deepEqual(await request(h, agent, 'b'), { provider: 'p', model: 'b', maxTokens: 1024 });
+});
+
 test('PostModelSwitch: stdout becomes context on the step after the switch', async () => {
   const h = harness({ PostModelSwitch: [{ hooks: [{ command: 'printf prefer-short-answers' }] }] });
   const agent = fakeAgent();
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'a')], enter);
-  const decision = await h.dispatch('agent/pre-step', [stepWith(agent, 'b')], enter);
+  await request(h, agent, 'a');
+  await request(h, agent, 'b');
+  const decision = await h.dispatch('agent/pre-step', [{ agent, messages: [] }], enter);
   assert.equal(decision.messages.length, 2);
   assert.equal(textOf(decision.messages[1]), 'prefer-short-answers');
+  const later = await h.dispatch('agent/pre-step', [{ agent, messages: [] }], enter);
+  assert.equal(later.messages.length, 1, 'the context joins one step only');
 });
 
 test('PostModelSwitch: the matcher is the new model', async () => {
   const file = join(tempDir('dcc-model-'), 'ran');
   const h = harness({ PostModelSwitch: [{ matcher: '.*opus.*', hooks: [{ command: `echo ran >> "${file}"` }] }] });
   const agent = fakeAgent();
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'sonnet')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'haiku')], enter);
+  await request(h, agent, 'sonnet');
+  await request(h, agent, 'haiku');
   assert.throws(() => readFileSync(file), /ENOENT/);
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'opus-5')], enter);
+  await request(h, agent, 'opus-5');
   assert.equal(readFileSync(file, 'utf8').trim(), 'ran');
 });
 
 test('PostModelSwitch: each session keeps its own model', async () => {
   const file = join(tempDir('dcc-model-'), 'ran');
   const h = harness({ PostModelSwitch: [{ hooks: [{ command: `echo ran >> "${file}"` }] }] });
-  await h.dispatch('agent/pre-step', [stepWith(fakeAgent('one'), 'a')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(fakeAgent('two'), 'b')], enter);
+  await request(h, fakeAgent('one'), 'a');
+  await request(h, fakeAgent('two'), 'b');
   assert.throws(() => readFileSync(file), /ENOENT/, 'a different model in another session is not a switch');
 });
 
-test('PostModelSwitch: a step with no model selection, and a subagent step, are passed through', async () => {
+test('PostModelSwitch: a request with no model, and a subagent request, are passed through', async () => {
   const file = join(tempDir('dcc-model-'), 'ran');
   const h = harness({ PostModelSwitch: [{ hooks: [{ command: `echo ran >> "${file}"` }] }] });
   const agent = fakeAgent();
-  await h.dispatch('agent/pre-step', [stepWith(agent, 'a')], enter);
-  const decision = await h.dispatch('agent/pre-step', [{ agent, messages: [] }], enter);
-  assert.equal(decision.kind, 'enter');
+  await request(h, agent, 'a');
+  const config = await h.dispatch('agent/request', [requestOf(agent)], async () => ({ provider: 'p' }));
+  assert.deepEqual(config, { provider: 'p' });
   const child = fakeSubagent();
-  await h.dispatch('agent/pre-step', [stepWith(child, 'a')], enter);
-  await h.dispatch('agent/pre-step', [stepWith(child, 'b')], enter);
+  await request(h, child, 'a');
+  await request(h, child, 'b');
   assert.throws(() => readFileSync(file), /ENOENT/);
 });
 
