@@ -160,6 +160,15 @@ export function interpretRun(event, claudeName, run) {
   return outcome;
 }
 
+// Event-specific output of several hooks is merged key by key, and the later hook wins a key.
+// A PermissionRequest deny is the exception: once one hook denies, a later allow cannot undo
+// it, so a failed `onFailure: "block"` hook keeps its guarantee.
+function mergeSpecific(current, next) {
+  const merged = { ...current, ...next };
+  if (current.decision?.behavior === 'deny') merged.decision = current.decision;
+  return merged;
+}
+
 function strongerPermission(left, right) {
   return (PERMISSION_RANK[right] ?? 0) > (PERMISSION_RANK[left] ?? 0) ? right : left;
 }
@@ -167,7 +176,8 @@ function strongerPermission(left, right) {
 /**
  * Fold the outcomes of every hook that ran for one event into one outcome.
  * Any block wins. Permission follows deny > defer > ask > allow. Contexts and
- * watch paths are joined. The last updated input or tool output wins.
+ * watch paths are joined. The last updated input or tool output wins. A
+ * PermissionRequest deny stays when a later hook allows.
  * @param {object[]} outcomes from interpretRun
  * @returns {object}
  */
@@ -187,7 +197,7 @@ export function mergeOutcomes(outcomes) {
     merged.retry ||= outcome.retry;
     merged.watchPathsGiven ||= outcome.watchPathsGiven;
     for (const path of outcome.watchPaths) if (!merged.watchPaths.includes(path)) merged.watchPaths.push(path);
-    if (Object.keys(outcome.specific).length > 0) merged.specific = { ...merged.specific, ...outcome.specific };
+    if (Object.keys(outcome.specific).length > 0) merged.specific = mergeSpecific(merged.specific, outcome.specific);
   }
   return merged;
 }

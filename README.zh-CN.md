@@ -169,7 +169,7 @@ matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名
 | SessionStart / SessionEnd | `agent/created` / `agent/disposed` | 仅主会话。SessionEnd 默认超时 1.5 秒。 |
 | UserPromptSubmit | `agent/pre-step` | 拦截会拒绝该提示。本插件自己注入的上下文不算提示。 |
 | PreToolUse | `tools/pre-execute` | `deny`、`ask` 与拦截映射为 DSH 决策。`updatedInput` 被忽略并给出警告。 |
-| PermissionRequest / PermissionDenied | `approval/request` | `allow` 与 `deny` 直接回答请求。DSH 拒绝审批时运行 PermissionDenied。 |
+| PermissionRequest / PermissionDenied | `approval/request` | `allow` 与 `deny` 直接回答请求。多个 hook 同时回答时，`deny` 优先于 `allow`，因此失败的 `onFailure: "block"` hook 一定会拒绝。DSH 拒绝审批时运行 PermissionDenied。 |
 | PostToolUse / PostToolUseFailure | `tools/post-execute` | 生效 `updatedToolOutput`、拦截反馈与上下文。 |
 | PostToolBatch | 结果之后的第一个 `agent/pre-step` | 拦截会拒绝该步骤。 |
 | TaskCreated / TaskCompleted | `todo_write` | 新增或完成的待办即任务。拦截会拒绝整个调用。 |

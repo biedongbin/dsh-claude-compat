@@ -179,6 +179,16 @@ test('merging: permission follows deny > defer > ask > allow', () => {
   assert.equal(mergeOutcomes([decide('allow')]).permission, 'allow');
 });
 
+test('merging: a PermissionRequest deny stays when a later hook allows, and the first deny message is kept', () => {
+  const decide = (decision) => outcomeOf('permission-request', json({ hookSpecificOutput: { decision } }));
+  const deny = (message) => decide({ behavior: 'deny', message });
+  const allow = decide({ behavior: 'allow' });
+  assert.deepEqual(mergeOutcomes([deny('first'), allow]).specific.decision, { behavior: 'deny', message: 'first' });
+  assert.deepEqual(mergeOutcomes([deny('first'), deny('second')]).specific.decision, { behavior: 'deny', message: 'first' });
+  assert.deepEqual(mergeOutcomes([allow, deny('late')]).specific.decision, { behavior: 'deny', message: 'late' });
+  assert.deepEqual(mergeOutcomes([allow, allow]).specific.decision, { behavior: 'allow' });
+});
+
 test('merging: contexts and watch paths are joined without duplicates', () => {
   const a = outcomeOf('cwd-changed', json({ hookSpecificOutput: { additionalContext: 'one', watchPaths: ['/a', '/b'] } }));
   const b = outcomeOf('cwd-changed', json({ hookSpecificOutput: { additionalContext: 'two', watchPaths: ['/b', '/c'] } }));

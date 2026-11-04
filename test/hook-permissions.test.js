@@ -30,6 +30,17 @@ test('PermissionRequest: a deny decision rejects and logs its message', async ()
   assert.match(warnings.join('\n'), /denied Bash: no way/);
 });
 
+test('PermissionRequest: a failed onFailure block hook still denies when a later hook allows', async () => {
+  const h = harness({
+    PermissionRequest: [{ ...ASK, hooks: [
+      { command: 'exit 1', onFailure: 'block' },
+      { command: decide({ behavior: 'allow' }) },
+    ] }],
+  });
+  const { value } = await withWarnings(() => h.dispatch('approval/request', [approval(fakeAgent())], async () => 'allowed-once'));
+  assert.equal(value, 'rejected');
+});
+
 test('PermissionRequest: exit 2 is not honored, so the request goes on to next()', async () => {
   const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: 'exit 2' }] }] });
   assert.equal(await h.dispatch('approval/request', [approval(fakeAgent())], async () => 'allowed-once'), 'allowed-once');

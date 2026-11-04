@@ -171,7 +171,7 @@ A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of n
 | SessionStart / SessionEnd | `agent/created` / `agent/disposed` | Main sessions only. SessionEnd default timeout is 1.5 s. |
 | UserPromptSubmit | `agent/pre-step` | A block rejects the prompt. Context that this plugin injected is not a prompt. |
 | PreToolUse | `tools/pre-execute` | `deny`, `ask` and a block map to DSH decisions. `updatedInput` is ignored with a warning. |
-| PermissionRequest / PermissionDenied | `approval/request` | `allow` and `deny` answer the request. PermissionDenied runs when DSH rejects an approval. |
+| PermissionRequest / PermissionDenied | `approval/request` | `allow` and `deny` answer the request. When several hooks answer, a `deny` wins over an `allow`, so a failed `onFailure: "block"` hook always denies. PermissionDenied runs when DSH rejects an approval. |
 | PostToolUse / PostToolUseFailure | `tools/post-execute` | `updatedToolOutput`, block feedback and context are applied. |
 | PostToolBatch | first `agent/pre-step` after the results | A block rejects the step. |
 | TaskCreated / TaskCompleted | `todo_write` | A new or completed todo is a task. A block denies the whole call. |
