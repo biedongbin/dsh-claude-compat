@@ -116,6 +116,9 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `enableSkills` | `true` | 注册 `.claude/skills` + `.claude/commands` + `.claude/agents` provider（项目与 `~/.claude` 均含） |
 | `enableRules` | `true` | 注入项目 + `~/.claude` 的 `rules/*.md` 到消息流 |
 | `enableMcp` | `true` | 把 `<projectRoot>/.mcp.json` 翻译为挂载的 MCP 服务器插件 |
+| `mcpScope` | `launch` | `session` 使用每个聊天的原始项目目录，也适用于已打开的聊天；在下次提示或 `/mcp-status` 前加载连接 |
+| `mcpSources` | `[claude]` | 从高到低的来源优先级：`dsh`（`.dsh/mcp.json`）、`claude`（`.mcp.json`）、`codex`（`.codex/config.toml`）、`agents`（`.agents/mcp.yaml`）；项目覆盖用户条目，禁用条目保持禁用 |
+| `mcpExcludedServers` | `[]` | 忽略服务器名称或限定的 `source:name` 条目，不区分大小写 |
 | `mcpFailOnStartupError` | `false` | 转发给 `dsh-mcp-client`：MCP 服务器连接失败时让插件启动失败 |
 | `enableHooks` | `true` | 运行 `.claude/settings.json` hooks（Pre/PostToolUse、UserPromptSubmit） |
 | `hooksTimeoutMs` | `60000` | 单个 hook 运行超时（UserPromptSubmit 无论如何上限 10s） |
@@ -141,7 +144,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 ## 说明
 
 - **Skill 命名**：DSH 要求 kebab-case。嵌套 skill 目录扁平化（`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`）；frontmatter 名字非法时回退目录名。
-- **MCP 生命周期**：`.mcp.json` 仅在 DSH 启动时（启动工区）读取一次，每个服务器随进程生命周期挂载 —— 非按会话。修改后需重启 DSH。
+- **MCP 生命周期**：旧的 `launch` 范围在启动时读取一次 `.mcp.json`。`session` 范围在下次提示或 `/mcp-status` 前刷新配置与 `${VARIABLE}` 引用；先从继承环境解析秘密，再使用原生凭据提供方。原生客户端负责协商、工具注册与重连；Agent 和插件释放时关闭连接。`/mcp-status` 不消耗模型 token，报告已注册工具、上次发现时间与告警，不承诺持续连通。缺失凭据或不可用的本机命令会报告，容器专用的解释器路径会跳过。支持翻译 Codex 的 URL、headers、bearer 引用与 command/args/env/cwd，不导入 Codex OAuth 流程与工具允许／拒绝过滤器。
 - **Hooks 范围**：刻意只实现 Claude Code hooks 的一个小子集：PreToolUse / PostToolUse / UserPromptSubmit。matcher 支持精确名、`*` 通配与 `|` 或；命令 stdin 携带 Claude 风格 JSON。exit 2 = 拒绝（Pre）/ 阻断（Post）；其它非零退出与超时放行并告警。
 - **Rules 粒度**：每个新会话读取（按会话 cwd 缓存）。会话中改 rule，下一会话生效。
 - **Rules 内容**：rules 原文注入为模型指令。只提交你想让模型遵循的 rule —— 信任级别同 `CLAUDE.md`。

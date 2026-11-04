@@ -20,7 +20,7 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
   let parsed;
   try { parsed = JSON.parse(rawJson); }
   catch {
-    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`] };
+    return { servers: [], warns: ['invalid-json: MCP configuration could not be parsed'] };
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return { servers: [], warns: ['invalid-json: root must be an object'] };
