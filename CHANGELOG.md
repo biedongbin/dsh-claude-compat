@@ -23,6 +23,8 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
 
 ### Fixed
+- Hook matchers, `if` rules, and the hook payload now use the Claude Code names for DSH built-in tools (`bash` is `Bash`, and likewise `read`, `edit`, `write`). Before, `if: "Bash(git *)"` never matched a native call.
+- Hook stdout and stderr keep a multibyte character whole when it arrives in two chunks.
 - `/cc-resume` now derives the Claude project folder as Claude Code does: every character that is not a letter or digit becomes `-`, and a name over 200 characters is cut and gets a hash of the path. A working directory with `.`, `_`, or a space in it no longer maps to a missing folder. Issue #11.
 
 ## [1.0.1] — 2026-11-04
