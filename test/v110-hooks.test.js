@@ -248,6 +248,24 @@ test('exec form runs the program with no shell, so $HOME stays literal', async (
   assert.equal(run.exitCode, 0);
 });
 
+test('a multibyte character split across data events stays whole on stdout and stderr', async () => {
+  const script = `
+    const euro = Buffer.from('€');
+    const kana = Buffer.from('あ');
+    process.stdout.write(euro.subarray(0, 1));
+    process.stderr.write(kana.subarray(0, 2));
+    setTimeout(() => {
+      process.stdout.write(euro.subarray(1));
+      process.stderr.write(kana.subarray(2));
+    }, 80);
+  `;
+  const run = await runHookCommand({ command: process.execPath, args: ['-e', script] }, '');
+  assert.equal(run.failed, false);
+  assert.ok(run.stdout.includes('€'), JSON.stringify(run.stdout));
+  assert.ok(run.stdout.includes('あ'), JSON.stringify(run.stdout));
+  assert.ok(!run.stdout.includes('\uFFFD'), 'no replacement character');
+});
+
 test('stdin reaches the hook', async () => {
   const run = await runHookCommand(plain('cat'), '{"tool":"x"}', {});
   assert.equal(run.stdout, '{"tool":"x"}');
