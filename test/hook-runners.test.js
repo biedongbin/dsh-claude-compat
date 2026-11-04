@@ -471,16 +471,16 @@ test('a late subagent stays muted until it is disposed, and a failed disposal is
   assert.match(warnings.join('\n'), /agent hook cleanup failed: dispose broke/);
 });
 
-test('no hook runs inside the subagent of an agent hook, and the subagent is forgotten after the run', async () => {
+test('inside the subagent of an agent hook a deny guard still runs, an agent hook does not, and the child is forgotten after', async () => {
   const ran = [];
   let childId;
   const subagents = fakeSubagents((spec) => {
     childId = spec.childId;
     return (async () => {
-      // The child calls a tool while the hook is running. The configured PreToolUse hook must not run for it.
+      // The child calls tools while the hook is running.
       const child = fakeAgent(spec.childId);
-      const decision = await h.dispatch('tools/pre-execute', [call('Read', child)], allow);
-      ran.push(decision.kind);
+      ran.push(['Read', (await h.dispatch('tools/pre-execute', [call('Read', child)], allow)).kind]);
+      ran.push(['Bash', (await h.dispatch('tools/pre-execute', [call('Bash', child)], allow)).kind]);
       return completed({ ok: true });
     })();
   });
@@ -489,11 +489,13 @@ test('no hook runs inside the subagent of an agent hook, and the subagent is for
     SubagentStart: [{ hooks: [{ command: 'exit 2' }] }],
   }, { ctx: { subagents } });
   await h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow);
-  assert.deepEqual(ran, ['allow'], 'the Read hook that exits 2 did not run for the child');
+  assert.deepEqual(ran, [['Read', 'deny'], ['Bash', 'allow']], 'the guard denies Read; the agent hook did not start again');
+  assert.equal(subagents.started.length, 1, 'only the outer agent hook started a subagent');
   h.dispatch('subagent/start', [{ runId: 'r', provider: 'spawn', id: childId, local: true }], () => {});
   await h.drain();
-  const afterRun = await h.dispatch('tools/pre-execute', [call('Read', fakeAgent(childId))], allow);
-  assert.equal(afterRun.kind, 'deny', 'a later agent with that id is no longer muted');
+  const afterRun = await h.dispatch('tools/pre-execute', [call('Bash', fakeAgent(childId))], allow);
+  assert.equal(afterRun.kind, 'allow');
+  assert.equal(subagents.started.length, 2, 'a later agent with that id is no longer muted, so its agent hook starts');
 });
 
 test('the subagent start and end events of an agent hook do not run SubagentStart or SubagentStop hooks', async () => {

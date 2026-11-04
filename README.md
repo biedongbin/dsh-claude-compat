@@ -215,13 +215,13 @@ These events run, but with less power than in Claude Code:
 | `InstructionsLoaded` | `.claude/rules` files only, with `load_reason` `session_start`. The plugin does not load other instruction files, so it cannot report them. |
 | `transcript_path` | Always empty, because DSH has no transcript file. |
 | Settings reload | Hooks load at startup. A changed settings file is logged and needs a restart. |
-| `agent` handler | DSH cannot limit the subagent to read-only tools. No hook runs inside it. |
+| `agent` handler | DSH cannot limit the subagent to read-only tools. Inside it no `agent` hook runs, so it cannot start itself again. The other hooks run there, so a deny guard also covers its tool calls. |
 
 Handler details:
 
 - `mcp_tool` calls `mcp__<server>__<tool>` through the DSH tool service. `${path}` in a string of `input` is replaced from the hook input. A server that is still connecting is a failed hook.
 - `prompt` asks the session model one question, with no tools. `model` is `provider/model`, or a model of the session provider. `continueOnBlock` and `impossible` follow the Claude Code rules.
-- `agent` starts a DSH subagent through the `spawn` provider and reads its structured answer. DSH cannot limit its tools to read-only, so the prompt tells it to change no file, and DSH's normal approvals still guard any write. No hook runs inside that subagent.
+- `agent` starts a DSH subagent through the `spawn` provider and reads its structured answer. DSH cannot limit its tools to read-only, so the prompt tells it to change no file, and DSH's normal approvals still guard any write. No `agent` hook runs inside that subagent, and every other hook does, so a PreToolUse deny guard also covers its tool calls.
 
 ## Notes
 

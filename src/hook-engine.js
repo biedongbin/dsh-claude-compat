@@ -70,7 +70,9 @@ function applyOnFailure(run, hook, event) {
  * Build the engine for one set of configured hooks.
  * @param {{hooks: object[], config: object, runners?: object, isMuted?: (agent: object) => boolean}} options
  *   `hooks` are the records from loadHookSettings. `runners` overrides the runner of a handler
- *   type (the types that need DSH, and tests). No hook runs for an agent that `isMuted` names.
+ *   type (the types that need DSH, and tests). An `agent` hook does not run for an agent that
+ *   `isMuted` names, so an agent hook cannot start itself again. Every other hook still runs there,
+ *   so a deny guard also applies to the tools of a verifier subagent.
  */
 export function createHookEngine({ hooks: initial, config, runners, isMuted, track = (promise) => promise }) {
   const hooks = initial;
@@ -97,9 +99,10 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
     return matches(subject) || (spec.tool !== undefined && matches(claudeToolName(subject)));
   }
 
-  function eligible(event, spec) {
+  function eligible(event, spec, muted) {
     return hooks.filter((hook) => {
       if (hook.event !== event || !subjectMatches(hook, spec)) return false;
+      if (muted && hook.type === 'agent') return false;
       if (hook.ifRule === undefined) return true;
       return spec.tool !== undefined && matchIfRule(hook.ifRule, spec.tool.name, spec.tool.input);
     });
@@ -169,10 +172,12 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
      * @returns {Promise<object>} merged outcome (see src/hook-output.js)
      */
     async fire(event, claudeName, spec) {
-      // No hook runs in an agent that an agent hook started, so a hook cannot start itself again.
-      if (spec.agent !== undefined && isMuted?.(spec.agent)) return mergeOutcomes([]);
+      // An agent hook does not run in an agent that an agent hook started, so it cannot start
+      // itself again. The other types cannot recurse, and a deny guard must still see the tool
+      // calls of that subagent: DSH cannot limit it to read-only tools.
+      const muted = spec.agent !== undefined && isMuted?.(spec.agent) === true;
       const outcomes = [];
-      for (const hook of eligible(event, spec)) {
+      for (const hook of eligible(event, spec, muted)) {
         if (hook.async) {
           runInBackground(hook, spec, claudeName);
           continue;
