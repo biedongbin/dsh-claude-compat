@@ -74,9 +74,21 @@ test('a matcher that is not a string never matches', () => {
   for (const value of [undefined, null, 5, {}, ['Bash']]) assert.equal(compileMatcher(value)('Bash'), false);
 });
 
+test('a * that is not part of .* is the glob wildcard of earlier versions, and the glob is anchored', () => {
+  const guard = compileMatcher('mcp__*__delete');
+  assert.equal(guard('mcp__fs__delete'), true);
+  assert.equal(guard('mcp__fs__delete_all'), false, 'a glob is anchored');
+  assert.equal(compileMatcher('*delete')('mcp__fs__delete'), true, 'a leading * does not parse as a pattern');
+  assert.equal(compileMatcher('*delete|read*')('read_file'), true);
+  assert.equal(compileMatcher('Bash.*')('BashOutput'), true, '.* stays a pattern');
+  assert.equal(compileMatcher('^Edit.*$')('NotebookEdit'), false);
+  assert.equal(compileMatcher('(a|b)*c')('bbc'), true);
+  assert.equal(compileMatcher('*delete').invalid, undefined);
+});
+
 test('the engine warns once for a pattern that does not parse, and its hook never runs', async () => {
-  const h = harness({ PreToolUse: [{ matcher: '[', hooks: [{ command: 'exit 2' }] }] });
   const { value, warnings } = await withWarnings(async () => {
+    const h = harness({ PreToolUse: [{ matcher: '[', hooks: [{ command: 'exit 2' }] }] });
     const agent = fakeAgent();
     const call = { name: '[', arguments: {}, callId: 'c', agent };
     const first = await h.dispatch('tools/pre-execute', [call], async () => ({ kind: 'allow' }));
@@ -85,6 +97,13 @@ test('the engine warns once for a pattern that does not parse, and its hook neve
   });
   assert.equal(value.kind, 'allow');
   assert.equal(warnings.filter((line) => /not a valid regular expression/.test(line)).length, 1);
+});
+
+test('the engine reports a pattern that does not parse when it loads, before any event', async () => {
+  const { warnings } = await withWarnings(async () => {
+    harness({ PreToolUse: [{ matcher: 'Bash(', hooks: [{ command: 'true' }] }] });
+  });
+  assert.equal(warnings.filter((line) => /pre-tool-use matcher \/Bash\(\/ is not a valid/.test(line)).length, 1);
 });
 
 test('the engine uses the narrow rule for StopFailure, so a comma does not separate error types', async () => {

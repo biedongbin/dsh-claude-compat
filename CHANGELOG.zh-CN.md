@@ -13,7 +13,9 @@
 - **处理器类型 `http`、`mcp_tool`、`prompt` 与 `agent`。** `http` 以 JSON 提交输入，请求头只读取 `allowedEnvVars` 中列出的变量。`mcp_tool` 通过 DSH 工具服务调用 MCP 工具。`prompt` 向会话模型提一个问题。`agent` 启动 DSH 子 agent 并读取它的结构化回答。每种类型只在 Claude Code 允许的事件上运行。后台 hook 以退出码 2 结束时，`asyncRewake` 会引导 agent 继续。
 
 ### 修复
-- **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则只报告一次。
+- **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则会在 hook 加载时报告一次。
+  不属于 `.*` 的 `*` 仍像早期版本一样当作通配符，因此 `mcp__*__delete` 这类守卫继续有效。
+  Stop、UserPromptSubmit 等没有 subject 的事件和 Claude Code 一样忽略 matcher。
 - **SessionStart hooks 从未运行。** 插件监听的 `agent/session-start` 在 DSH 中不存在。现在改用 `agent/created`，并按启动来源（`startup`、`resume`、`clear`、`compact`）过滤。
 - **工具 hooks 把工具调用 id 当作 `session_id` 发送。** 输入现在携带 DSH 会话 id；在子 agent 内携带主会话 id，并附带 `agent_id` 与 `agent_type`。
 - **会话与回合 hooks 会对子 agent 会话运行，规则或 hook 上下文被当作用户提示。** SessionStart、SessionEnd、UserPromptSubmit、Stop 等主会话 hooks 现在会跳过子 agent 会话。本插件自己注入的消息不再触发 UserPromptSubmit hooks。

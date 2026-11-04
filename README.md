@@ -163,6 +163,8 @@ Each hook runs with the Claude Code JSON input on stdin, and its exit code and J
 Handler types are `command`, `http`, `mcp_tool`, `prompt` and `agent`, on the events that Claude Code allows them on.
 A hook that fails (timeout, start error, other exit code) is logged with its reason and lets the action go on, unless `onFailure` is `"block"`.
 A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of names. Any other matcher is an unanchored regular expression.
+A `*` that is not part of `.*`, as in `mcp__*__delete`, also works as the wildcard of earlier versions.
+An event with no subject, such as Stop or UserPromptSubmit, ignores the matcher, as in Claude Code.
 A hook's `if` rule is a filter that decides whether the hook runs, as in Claude Code. A Bash rule matches when any subcommand matches, so `if` does not prove that the whole command is safe: a hook that approves a request must check the command itself.
 `session_id` is the DSH session id. Inside a subagent it stays the main session id, and `agent_id` and `agent_type` name the subagent.
 `transcript_path` is empty, because DSH has no transcript file.

@@ -161,6 +161,8 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 处理器类型有 `command`、`http`、`mcp_tool`、`prompt` 和 `agent`，各事件允许的类型与 Claude Code 一致。
 hook 失败（超时、无法启动、其他退出码）会记录原因并放行，除非 `onFailure` 为 `"block"`。
 matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名列表，否则按不锚定的正则表达式处理。
+不属于 `.*` 的 `*`（如 `mcp__*__delete`）也像早期版本一样当作通配符。
+没有 subject 的事件（如 Stop、UserPromptSubmit）和 Claude Code 一样忽略 matcher。
 hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code 一致。Bash 规则在任一子命令匹配时即匹配，因此 `if` 并不能证明整条命令安全：批准请求的 hook 必须自行检查命令。
 `session_id` 是 DSH 会话 id；在子 agent 内仍是主会话 id，并用 `agent_id` 与 `agent_type` 标识子 agent。
 `transcript_path` 为空，因为 DSH 没有 transcript 文件。

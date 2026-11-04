@@ -13,7 +13,9 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - **Hook handler types `http`, `mcp_tool`, `prompt` and `agent`.** `http` posts the input as JSON, with headers that read only the variables in `allowedEnvVars`. `mcp_tool` calls an MCP tool through the DSH tool service. `prompt` asks the session model one question. `agent` starts a DSH subagent and reads its structured answer. Each type runs only on the events that Claude Code allows it on. `asyncRewake` steers the agent when a background hook exits with code 2.
 
 ### Fixed
-- **Matchers follow the Claude Code rules.** A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of names, and any other matcher is an unanchored regular expression, so `.*opus.*` and `mcp__memory__.*` now match as they do in Claude Code. A pattern that does not parse is reported once.
+- **Matchers follow the Claude Code rules.** A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of names, and any other matcher is an unanchored regular expression, so `.*opus.*` and `mcp__memory__.*` now match as they do in Claude Code. A pattern that does not parse is reported once, when the hooks load.
+  A `*` that is not part of `.*` still works as the wildcard of earlier versions, so a guard such as `mcp__*__delete` keeps matching.
+  Stop, UserPromptSubmit and the other events with no subject ignore the matcher, as in Claude Code.
 - **SessionStart hooks never ran.** The plugin listened to `agent/session-start`, which DSH does not have. It now uses `agent/created`, and filters by the start source (`startup`, `resume`, `clear`, `compact`).
 - **Tool hooks sent the tool call id as `session_id`.** The input now carries the DSH session id. Inside a subagent it carries the main session id, plus `agent_id` and `agent_type`.
 - **Session and turn hooks ran for subagent sessions, and rules or hook context counted as a prompt.** SessionStart, SessionEnd, UserPromptSubmit, Stop and the other main-session hooks now skip subagent sessions. A message that this plugin injected no longer runs UserPromptSubmit hooks.

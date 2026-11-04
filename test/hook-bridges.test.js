@@ -358,6 +358,12 @@ test('UserPromptSubmit: a step with no user messages does not run the hook', asy
   assert.throws(() => readFileSync(file), /ENOENT/);
 });
 
+test('UserPromptSubmit: a matcher is ignored, because the event has no subject', async () => {
+  const listeners = listenersFor({ UserPromptSubmit: [{ matcher: 'Bash', hooks: [{ command: 'echo no >&2; exit 2' }] }] });
+  const { value } = await withWarnings(() => listeners.get('agent/pre-step')(stepWith('hello'), enter));
+  assert.deepEqual(value, { kind: 'reject' });
+});
+
 test('UserPromptSubmit: exit 2 rejects the prompt', async () => {
   const listeners = listenersFor({ UserPromptSubmit: [{ matcher: '.*', hooks: [{ command: 'echo no >&2; exit 2' }] }] });
   const { value, warnings } = await withWarnings(() => listeners.get('agent/pre-step')(stepWith('hello'), enter));

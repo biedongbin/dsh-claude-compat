@@ -15,6 +15,22 @@ const EXACT_LIST = /^[A-Za-z0-9_\- ,|]*$/;
 const EXACT_LIST_NARROW = /^[A-Za-z0-9_|]*$/;
 const NARROW_EVENTS = new Set(['stop-failure', 'file-changed']);
 
+// A `*` that follows no regular-expression atom of its own (`.`, `]`, `)`) is the glob wildcard.
+const GLOB_STAR = /(?<![.\])])\*/;
+
+// The glob form of a matcher: `*` is any run of characters, `|` alternates, and the whole name
+// must match. Earlier versions read every matcher this way, so a guard such as `mcp__*__delete`
+// keeps matching.
+function globPredicate(matcher) {
+  try {
+    const parts = matcher.split('|').map((part) => part.trim().split('*').join('.*'));
+    const glob = new RegExp(`^(?:${parts.join('|')})$`);
+    return (name) => glob.test(name);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Compile a Claude Code hook matcher into a predicate on the event subject.
  * "*", an empty string, and a blank string match everything. A matcher of letters,
@@ -33,10 +49,12 @@ export function compileMatcher(matcher, { narrow = false } = {}) {
     const names = matcher.split(narrow ? '|' : /[|,]/).map((name) => name.trim());
     return (name) => names.includes(name);
   }
+  const glob = GLOB_STAR.test(matcher) ? globPredicate(matcher) : undefined;
   try {
     const pattern = new RegExp(matcher);
-    return (name) => pattern.test(name);
+    return glob === undefined ? (name) => pattern.test(name) : (name) => pattern.test(name) || glob(name);
   } catch (error) {
+    if (glob !== undefined) return glob;
     const never = () => false;
     never.invalid = error.message;
     return never;
@@ -97,9 +115,12 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, rew
     return matches(subject) || (spec.tool !== undefined && matches(claudeToolName(subject)));
   }
 
+  // An event with no subject (Stop, UserPromptSubmit, ...) takes no matcher. Claude Code ignores
+  // a matcher there, so the hook always runs.
   function eligible(event, spec, muted) {
     return hooks.filter((hook) => {
-      if (hook.event !== event || !subjectMatches(hook, spec)) return false;
+      if (hook.event !== event) return false;
+      if (spec.subject !== undefined && !subjectMatches(hook, spec)) return false;
       if (muted && hook.type === 'agent') return false;
       if (hook.ifRule === undefined) return true;
       return spec.tool !== undefined && matchIfRule(hook.ifRule, spec.tool.name, spec.tool.input);
@@ -146,6 +167,9 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, rew
     }));
   }
 
+  // An invalid pattern is reported now, not at the first event: until then its guard looks active.
+  for (const hook of hooks) matcherFor(hook);
+
   return {
     has(event) {
       return hooks.some((hook) => hook.event === event);
@@ -167,13 +191,13 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, rew
      * @param {string} event internal event name
      * @param {string} claudeName Claude event name, for the logs and the output check
      * @param {{subject?: string, tool?: {name: string, input: unknown}, payload: object,
-     *   agent?: object, defaultMs?: number, rewake?: Function}} spec what to match and what to
+     *   agent?: object, defaultMs?: number}} spec what to match and what to
      *   send. `agent` is the agent that the event is about.
      * @returns {Promise<object>} merged outcome (see src/hook-output.js)
      */
     async fire(event, claudeName, request) {
       // `asyncRewake` steers the agent of the event, so the engine reads it from there.
-      const spec = { ...request, rewake: request.rewake ?? rewake?.(request.agent) };
+      const spec = { ...request, rewake: rewake?.(request.agent) };
       // An agent hook does not run in an agent that an agent hook started, so it cannot start
       // itself again. The other types cannot recurse, and a deny guard must still see the tool
       // calls of that subagent: DSH cannot limit it to read-only tools.
