@@ -144,7 +144,7 @@ export function apply(ctx, config = {}) {
   // A bad location variable disables the plugin with one clear message, not a
   // stack trace at the first catalog read.
   try {
-    validateClaudeLocationEnv();
+    validateClaudeLocationEnv(config);
   } catch (error) {
     console.error(`dsh-claude-compat: not activated. ${error.message}`);
     return;

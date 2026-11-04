@@ -9,6 +9,7 @@ import { delimiter, join } from 'node:path';
 import {
   claudeProjectsDir,
   envPathList,
+  envPluginDirs,
   resolveClaudePluginsRoot,
   resolveUserClaudeDir,
   validateClaudeLocationEnv,
@@ -100,10 +101,21 @@ test('projects dir: derived from cwd, or the CLAUDE_CODE_PROJECT_DIR_NAME overri
   });
 });
 
-test('a project dir name that is not one folder name is rejected', async () => {
-  for (const bad of ['..', '.', '../other', 'a/b']) {
-    await withEnv({ CLAUDE_CODE_PROJECT_DIR_NAME: bad }, () => {
-      assert.throws(() => claudeProjectsDir('/a/b'), /CLAUDE_CODE_PROJECT_DIR_NAME/, bad);
+test('project dir name is ignored without CLAUDE_CONFIG_DIR', () => withEnv(
+  { CLAUDE_CODE_PROJECT_DIR_NAME: 'shared' },
+  () => assert.equal(claudeProjectsDir('/a/b'), join(homedir(), '.claude', 'projects', '-a-b')),
+));
+
+test('project dir name: values Claude Code would ignore fall back to the derived name', async () => {
+  const bad = ['..', '.', '../other', 'a/b', 'a b', 'x'.repeat(65), 'con', 'LPT1', 'nul'];
+  for (const name of bad) {
+    await withEnv({ CLAUDE_CONFIG_DIR: '/cfg', CLAUDE_CODE_PROJECT_DIR_NAME: name }, () => {
+      assert.equal(claudeProjectsDir('/a/b'), join('/cfg', 'projects', '-a-b'), name);
+    });
+  }
+  for (const name of ['w', 'work_1-b', 'x'.repeat(64)]) {
+    await withEnv({ CLAUDE_CONFIG_DIR: '/cfg', CLAUDE_CODE_PROJECT_DIR_NAME: name }, () => {
+      assert.equal(claudeProjectsDir('/a/b'), join('/cfg', 'projects', name), name);
     });
   }
 });
@@ -163,6 +175,29 @@ test('validateClaudeLocationEnv passes on a clean env and names the bad variable
   });
 });
 
+test('validation checks the effective config: explicit values hide a bad variable', async () => {
+  const env = { CLAUDE_CONFIG_DIR: 'relative', CLAUDE_CODE_PLUGIN_CACHE_DIR: 'relative' };
+  await withEnv(env, () => {
+    assert.throws(() => validateClaudeLocationEnv(), /CLAUDE_CONFIG_DIR/);
+    validateClaudeLocationEnv({ userClaudeDir: '/u', pluginsRoot: '/p' });
+    assert.throws(() => validateClaudeLocationEnv({ pluginsRoot: '/p' }), /CLAUDE_CONFIG_DIR/);
+  });
+  await withEnv({ CLAUDE_CODE_PLUGIN_CACHE_DIR: 'relative' }, () => {
+    assert.throws(() => validateClaudeLocationEnv(), /CLAUDE_CODE_PLUGIN_CACHE_DIR/);
+    validateClaudeLocationEnv({ pluginsRoot: '/p' });
+  });
+});
+
+test('CLAUDE_CODE_PLUGIN_DIRS: absolute and ~ entries load, relative entries are skipped', async () => {
+  const raw = ['/abs/one', '~/two', '~', 'relative/three', '', './four'].join(delimiter);
+  await withEnv({ CLAUDE_CODE_PLUGIN_DIRS: raw }, () => {
+    const { dirs, skipped } = envPluginDirs();
+    assert.deepEqual(dirs, ['/abs/one', join(homedir(), 'two'), homedir()]);
+    assert.deepEqual(skipped, ['relative/three', './four']);
+    validateClaudeLocationEnv();
+  });
+});
+
 test('apply() with a bad location variable logs one line and does not activate', async () => {
   const errors = [];
   const original = console.error;
@@ -195,6 +230,32 @@ test('seed dirs add plugins; the primary root wins a key collision', async () =>
     const byKey = Object.fromEntries(readInstalledClaudePlugins(primary).map((p) => [p.key, p.installPath]));
     assert.equal(byKey['both@m'], '/primary/both');
     assert.equal(byKey['seeded@m'], '/seed/seeded');
+  });
+});
+
+test('a seed mounted at another path resolves content under the current seed root', async () => {
+  const seed = tmp('dcc-seed-moved-');
+  const cached = join(seed, 'cache', 'm', 'seeded', '1.0.0');
+  mkdirSync(cached, { recursive: true });
+  writeInstalled(seed, { 'seeded@m': '/build/time/seed/cache/m/seeded/1.0.0' });
+  await withEnv({ CLAUDE_CODE_PLUGIN_SEED_DIR: seed }, () => {
+    const found = readInstalledClaudePlugins(tmp('dcc-primary-')).find((p) => p.key === 'seeded@m');
+    assert.equal(found.installPath, cached);
+  });
+});
+
+test('an inline plugin replaces an installed plugin with the same manifest name', async () => {
+  const primary = tmp('dcc-primary-');
+  const installedDir = tmp('dcc-installed-');
+  mkdirSync(join(installedDir, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(installedDir, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'shared' }));
+  writeInstalled(primary, { 'entry-name@m': installedDir, 'other@m': '/other' });
+  const inlineDir = tmp('dcc-inline-');
+  mkdirSync(join(inlineDir, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(inlineDir, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'shared' }));
+  await withEnv({ CLAUDE_CODE_PLUGIN_DIRS: inlineDir }, () => {
+    const keys = readInstalledClaudePlugins(primary).map((p) => p.key).sort();
+    assert.deepEqual(keys, ['other@m', 'shared@inline']);
   });
 });
 

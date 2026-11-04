@@ -17,6 +17,7 @@ import {
   pathExists,
   readTextSafe,
   envPathList,
+  envPluginDirs,
   resolveClaudePluginsRoot,
   parseFrontmatter,
   stringField,
@@ -24,21 +25,48 @@ import {
 import { translateMcpServers } from './mcp.js';
 import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
-// Installed plugins from three places, earliest wins a key collision: the
-// primary plugins root, the read-only CLAUDE_CODE_PLUGIN_SEED_DIR roots, and
-// the CLAUDE_CODE_PLUGIN_DIRS plugin directories (each loaded as one plugin).
+// Installed plugins from three places: the primary plugins root, the read-only
+// CLAUDE_CODE_PLUGIN_SEED_DIR roots (the first root that holds a plugin wins),
+// and the CLAUDE_CODE_PLUGIN_DIRS plugin directories. An inline plugin replaces
+// an installed plugin with the same manifest name, as a whole.
 export function readInstalledClaudePlugins(pluginsRoot, userDir) {
   const primary = resolveClaudePluginsRoot(pluginsRoot, userDir);
   const installed = [
     ...readInstalledFile(primary, { missingIsFine: true }),
-    ...envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR').flatMap((root) => readInstalledFile(root)),
+    ...envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR').flatMap((root) => readInstalledFile(root, { seed: true })),
   ];
-  const inline = envPathList('CLAUDE_CODE_PLUGIN_DIRS').map(inlinePlugin).filter(Boolean);
+  const { dirs, skipped } = envPluginDirs();
+  for (const entry of skipped) {
+    warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not absolute or "~"-prefixed, skipped: ${entry}`);
+  }
+  const inline = dirs.map(inlinePlugin).filter(Boolean);
+  const inlineNames = new Set(inline.map((plugin) => plugin.name));
   const byKey = new Map();
-  for (const plugin of [...installed, ...inline]) {
+  for (const plugin of installed) {
+    if (inlineNames.has(manifestName(plugin)) || byKey.has(plugin.key)) continue;
+    byKey.set(plugin.key, plugin);
+  }
+  for (const plugin of inline) {
     if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
   }
   return [...byKey.values()];
+}
+
+// The name that plugin conflicts compare: the manifest name, else the key name.
+function manifestName(plugin) {
+  return readManifestName(plugin.installPath) ?? plugin.name;
+}
+
+function readManifestName(dir, onError) {
+  const path = join(dir, '.claude-plugin', 'plugin.json');
+  if (!existsSync(path)) return undefined;
+  try {
+    const manifest = JSON.parse(claReadSync(path));
+    return typeof manifest?.name === 'string' && manifest.name !== '' ? manifest.name : undefined;
+  } catch (error) {
+    onError?.(path, error);
+    return undefined;
+  }
 }
 
 // Environment-supplied paths are read on every catalog read; warn once each.
@@ -56,16 +84,10 @@ function inlinePlugin(dir) {
     warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not a directory, skipped: ${dir}`);
     return undefined;
   }
-  let name = basename(dir);
-  const manifestPath = join(dir, '.claude-plugin', 'plugin.json');
-  if (existsSync(manifestPath)) {
-    try {
-      const manifest = JSON.parse(claReadSync(manifestPath));
-      if (typeof manifest?.name === 'string' && manifest.name !== '') name = manifest.name;
-    } catch (error) {
-      warnOnce(`cannot read plugin manifest ${manifestPath}: ${error.message}. Using "${name}".`);
-    }
-  }
+  const fallback = basename(dir);
+  const name = readManifestName(dir, (path, error) => {
+    warnOnce(`cannot read plugin manifest ${path}: ${error.message}. Using "${fallback}".`);
+  }) ?? fallback;
   return { key: `${name}@inline`, name, marketplace: 'inline', installPath: dir, version: 'inline' };
 }
 
@@ -73,7 +95,7 @@ function inlinePlugin(dir) {
 // entries. Dedupe per key, keeping the last entry (Claude Code appends
 // reinstall records; last is freshest). A missing file is normal for the
 // primary root only; any other failure is reported once.
-function readInstalledFile(root, { missingIsFine = false } = {}) {
+function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
   const manifestPath = join(root, 'installed_plugins.json');
   let parsed;
   try { parsed = JSON.parse(claReadSync(manifestPath)); }
@@ -92,15 +114,25 @@ function readInstalledFile(root, { missingIsFine = false } = {}) {
     const record = entries.findLast((e) => e?.scope === 'user');
     if (record === undefined || typeof record.installPath !== 'string') continue;
     const at = key.lastIndexOf('@');
+    const name = at > 0 ? key.slice(0, at) : key;
+    const marketplace = at > 0 ? key.slice(at + 1) : '';
+    const version = typeof record.version === 'string' ? record.version : 'unknown';
     byKey.set(key, {
       key,
-      name: at > 0 ? key.slice(0, at) : key,
-      marketplace: at > 0 ? key.slice(at + 1) : '',
-      installPath: record.installPath,
-      version: typeof record.version === 'string' ? record.version : 'unknown',
+      name,
+      marketplace,
+      installPath: seed ? seedInstallPath(root, record.installPath, { name, marketplace, version }) : record.installPath,
+      version,
     });
   }
   return [...byKey.values()];
+}
+
+// A seed can be mounted at another path than it was built at, so the recorded
+// absolute installPath may not exist. Look in the plugin cache of the seed root first.
+function seedInstallPath(root, recorded, { name, marketplace, version }) {
+  const local = join(root, 'cache', marketplace, name, version);
+  return existsSync(local) ? local : recorded;
 }
 
 // readFileSync kept local so readInstalledClaudePlugins stays sync-simple.

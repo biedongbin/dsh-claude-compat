@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 
@@ -61,26 +61,45 @@ export function resolveClaudePluginsRoot(dir, userDir) {
   return resolveUserClaudeDir(dir);
 }
 
-// Claude Code names a project folder after the working directory, unless
-// CLAUDE_CODE_PROJECT_DIR_NAME overrides the name. The name is one path segment.
-export function claudeProjectsDir(cwd) {
+// Claude Code honors CLAUDE_CODE_PROJECT_DIR_NAME only together with
+// CLAUDE_CONFIG_DIR, and only for 1-64 letters, digits, hyphens or underscores
+// that are not a Windows device name. Any other value is ignored, not an error.
+const PROJECT_DIR_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+
+function projectDirNameOverride() {
   const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
-  if (name && (name === '.' || name === '..' || basename(name) !== name)) {
-    throw new Error(
-      `CLAUDE_CODE_PROJECT_DIR_NAME must be one folder name, got "${name}". Remove any "/" or "..".`,
-    );
-  }
-  return join(resolveUserClaudeDir(), 'projects', name || cwd.replaceAll('/', '-'));
+  if (!process.env.CLAUDE_CONFIG_DIR || !name) return undefined;
+  if (!PROJECT_DIR_NAME.test(name) || WINDOWS_DEVICE.test(name)) return undefined;
+  return name;
 }
 
-// Read every location variable once so a bad value fails at startup with one
-// clear message, not later inside a catalog read.
-export function validateClaudeLocationEnv() {
-  resolveUserClaudeDir();
-  resolveClaudePluginsRoot();
-  claudeProjectsDir(process.cwd());
+export function claudeProjectsDir(cwd) {
+  const folder = projectDirNameOverride() ?? cwd.replaceAll('/', '-');
+  return join(resolveUserClaudeDir(), 'projects', folder);
+}
+
+// CLAUDE_CODE_PLUGIN_DIRS: each entry is an absolute path or starts with `~`.
+// Claude Code skips any other entry, so this returns the skipped ones for a warning.
+export function envPluginDirs() {
+  const dirs = [];
+  const skipped = [];
+  for (const entry of (process.env.CLAUDE_CODE_PLUGIN_DIRS ?? '').split(delimiter)) {
+    if (entry === '') continue;
+    if (entry === '~' || entry.startsWith('~/')) dirs.push(resolveUserClaudeDir(entry));
+    else if (isAbsolute(entry)) dirs.push(entry);
+    else skipped.push(entry);
+  }
+  return { dirs, skipped };
+}
+
+// Read the variables that the effective configuration still uses, so a bad value
+// fails at startup with one clear message. An explicit config value overrides its
+// variable, so a bad variable behind it is not an error.
+export function validateClaudeLocationEnv({ userClaudeDir, pluginsRoot } = {}) {
+  resolveUserClaudeDir(userClaudeDir);
+  resolveClaudePluginsRoot(pluginsRoot, userClaudeDir);
   envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR');
-  envPathList('CLAUDE_CODE_PLUGIN_DIRS');
 }
 
 // No marker on the whole ancestor chain → fall back to cwd, matching DSH's own
