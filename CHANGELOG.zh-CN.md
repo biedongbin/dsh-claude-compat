@@ -16,6 +16,9 @@
 - **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则会在 hook 加载时报告一次。
   不属于 `.*` 的 `*` 仍像早期版本一样当作通配符，因此 `mcp__*__delete` 这类守卫继续有效。
   Stop、UserPromptSubmit 等没有 subject 的事件和 Claude Code 一样忽略 matcher。
+- **hook 不能批准它本想修改的输入。** 返回 `updatedInput` 的 PreToolUse hook 现在会让 DSH 询问用户；带 `updatedInput` 的 PermissionRequest `allow` 被忽略，因为 DSH 无法修改工具输入，而原输入正是 hook 想去掉的内容。
+- **丢失的 hook 取值会写入日志。** 日志现在会指出使用了未列出或未设置变量的 HTTP 头、没有匹配任何字段的 `mcp_tool` 占位符、无法读取或超出大小上限的规则文件，以及 DSH 无法执行的 PreToolUse `allow` 或 PostToolUse 停止请求。
+- **验证子代理受到限制。** `agent` hook 子代理的停止不再占住 DSH 事件，它启动的子代理也会被静音。hook 输出按完整字符截断，空白的 command、server、tool 或 prompt 会被拒绝。
 - **SessionStart hooks 从未运行。** 插件监听的 `agent/session-start` 在 DSH 中不存在。现在改用 `agent/created`，并按启动来源（`startup`、`resume`、`clear`、`compact`）过滤。
 - **工具 hooks 把工具调用 id 当作 `session_id` 发送。** 输入现在携带 DSH 会话 id；在子 agent 内携带主会话 id，并附带 `agent_id` 与 `agent_type`。
 - **会话与回合 hooks 会对子 agent 会话运行，规则或 hook 上下文被当作用户提示。** SessionStart、SessionEnd、UserPromptSubmit、Stop 等主会话 hooks 现在会跳过子 agent 会话。本插件自己注入的消息不再触发 UserPromptSubmit hooks。
