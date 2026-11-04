@@ -4,6 +4,12 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [Unreleased]
+
+### 修复
+- **`/cc-resume` 无法发现路径包含标点、空格或非 ASCII 字符的 Claude 会话**（[#11](https://github.com/biedongbin/dsh-claude-compat/issues/11)）。Claude 项目目录名现按原生规则，将每个非字母数字的 UTF-16 码元替换为 `-`；超过 200 字符时截断并附加完整路径的哈希。
+- **导入会话写入了 DSH 不读取的项目目录**，影响空格、非 ASCII 字符、连续分隔符、根目录与长路径（[#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)）。导入及已导入状态检测统一使用 DSH 原生项目 key，折叠分隔符、以 `~XXXX` 转义，并将 slug 限制为 251 字符。新增 CLI 回归覆盖会话列表、导入及已导入状态检测。
+
 ## [1.0.1] — 2026-11-04
 
 ### 修复

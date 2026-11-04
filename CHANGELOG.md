@@ -4,6 +4,12 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **`/cc-resume` could not find Claude sessions in paths with punctuation, spaces or non-ASCII characters** ([#11](https://github.com/biedongbin/dsh-claude-compat/issues/11)). Claude project names now replace every non-alphanumeric UTF-16 code unit with `-`, including the native truncation and full-path hash for names over 200 characters.
+- **Imported sessions were written outside DSH's project directory** for spaces, non-ASCII characters, repeated separators, root and long paths ([#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)). Import and imported-status lookup now use DSH's native project key: collapsed separators, `~XXXX` escaping and a 251-character slug limit. CLI regression tests cover listing, importing and detecting the imported session.
+
 ## [1.0.1] — 2026-11-04
 
 ### Fixed

@@ -17,6 +17,38 @@ import { parse } from 'yaml';
 // carry the identical kind. Emission and dedup must both use this constant.
 export const CLAUDE_COMPAT_SOURCE_KIND = 'plugin:dsh-claude-compat';
 
+// Claude Code project-directory encoder; hash the original UTF-16 path.
+export function claudeProjectKey(cwd) {
+  const sanitized = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (sanitized.length <= 200) return sanitized;
+  let hash = 0;
+  for (let i = 0; i < cwd.length; i += 1) {
+    hash = ((hash << 5) - hash + cwd.charCodeAt(i)) | 0;
+  }
+  return `${sanitized.slice(0, 200)}-${Math.abs(hash).toString(36)}`;
+}
+
+// DSH dsh-v0.2.2-alpha.2 session-persistence-jsonl/src/format.ts encoder.
+export function projectKey(cwd) {
+  if (!cwd) throw new Error('empty project path');
+  let readable = '';
+  let separator = false;
+  for (let i = 0; i < cwd.length; i += 1) {
+    const char = cwd[i];
+    if (char === '/' || char === '\\' || char === ':') {
+      if (!separator) readable += '-';
+      separator = true;
+    } else {
+      separator = false;
+      readable += /[a-zA-Z0-9._-]/.test(char)
+        ? char
+        : `~${cwd.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`;
+    }
+  }
+  const slug = readable.replace(/^-+/, '') || 'root';
+  return `--${slug.slice(0, 251)}--`;
+}
+
 export function resolveUserClaudeDir(dir) {
   if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
   if (dir === '~') return homedir();

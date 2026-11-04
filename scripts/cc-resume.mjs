@@ -31,22 +31,16 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
 import { zstdFramesSync } from './zstd-compat.mjs';
+import { claudeProjectKey, projectKey } from '../src/lib.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function munge(dir) {
-  return dir.replaceAll('/', '-');
-}
-
 function claudeProjectDir(cwd) {
-  return join(homedir(), '.claude', 'projects', munge(cwd));
+  return join(homedir(), '.claude', 'projects', claudeProjectKey(cwd));
 }
 
 function dshSessionsDir(cwd) {
-  // DSH munges /Users/x/proj → --Users-x-proj-- (leading '-' for the empty
-  // segment before the absolute path's first '/'), unlike Claude's
-  // -Users-x-proj (no leading '-'). Both keep a trailing '-'.
-  return join(homedir(), '.dsh', 'sessions', `-${munge(cwd)}--`);
+  return join(homedir(), '.dsh', 'sessions', projectKey(cwd));
 }
 
 function targetSessionDir(sessionId, cwd) {
