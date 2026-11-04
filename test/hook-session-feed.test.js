@@ -304,6 +304,19 @@ test('compaction summaries are dropped at the end, also when no PostCompact hook
   assert.equal(second.compact_summary, '', 'the summary of one compaction does not reach the next');
 });
 
+test('PostCompact: the summaries of compactions that never end are bounded, oldest first', async () => {
+  const file = join(tempDir('dcc-compact-'), 'lines');
+  const h = harness({ PostCompact: [{ hooks: [{ command: logTo(file) }] }] });
+  const s = session('s-many');
+  for (let n = 0; n <= 60; n += 1) await feed(h, s, 'compaction/summary', { compactionId: `c${n}`, summary: `summary ${n}` });
+  await feed(h, s, 'compaction/end', { compactionId: 'c0' });
+  await feed(h, s, 'compaction/end', { compactionId: 'c60' });
+  await h.drain();
+  const [oldest, newest] = readLines(file);
+  assert.equal(oldest.compact_summary, '', 'the oldest summary was dropped');
+  assert.equal(newest.compact_summary, 'summary 60');
+});
+
 test('TeammateIdle: exit 2 steers the teammate to keep working', async () => {
   const h = harness({ TeammateIdle: [{ hooks: [{ command: 'echo tests are still red >&2; exit 2' }] }] });
   await feed(h, session('lead'), 'team/member', member('mate-1', 'builder'));

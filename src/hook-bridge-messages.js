@@ -52,15 +52,14 @@ export function registerMessageHooks(ctx, engine, support) {
       delta,
     });
     state.index += 1;
+    // One failed batch must not stop the batches after it.
     state.queue = state.queue.then(async () => {
       const outcome = await engine.fire('message-display', 'MessageDisplay', { defaultMs: DISPLAY_DEFAULT_MS, payload });
       if (outcome.specific.displayContent !== undefined && !warnedDisplayContent) {
         warnedDisplayContent = true;
         console.warn('dsh-claude-compat: MessageDisplay hook returned displayContent; DSH cannot change displayed text, ignored');
       }
-    });
-    // One failed batch must not stop the batches after it.
-    state.queue = state.queue.catch((error) => {
+    }).catch((error) => {
       console.warn(`dsh-claude-compat: MessageDisplay hooks failed: ${error?.message ?? error}`);
     });
     support.track(state.queue);

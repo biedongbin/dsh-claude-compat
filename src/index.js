@@ -501,20 +501,16 @@ function registerRulesSection(ctx, config, onLoaded) {
     if (!cache.has(cwd)) {
       const { text, files } = buildRulesText(cwd, config, maxBytes);
       // Rules are read once per directory for the life of the process, also when there are none.
-      if (text.length === 0) {
-        cache.set(cwd, { files, message: undefined });
-        return decision;
-      }
       // Claude Code's mechanism (leaked source, api.ts prependUserContext):
       // rules as ONE user-role <system-reminder> message at the very front
       // of the message array. Not in system prompt.
-      cache.set(cwd, {
-        files,
-        message: createUserMessage({
+      const message = text === ''
+        ? undefined
+        : createUserMessage({
           content: [{ type: 'text', text }],
           source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'rules' },
-        }),
-      });
+        });
+      cache.set(cwd, { files, message });
     }
     const { files, message } = cache.get(cwd);
     if (message === undefined) return decision;
@@ -537,9 +533,15 @@ function buildRulesText(cwd, config, maxBytes) {
       const basename = f.split('/').pop();
       if (seen.has(basename)) continue; // higher-priority root already included
       let raw;
-      try { raw = readFileSync(f, 'utf8'); } catch { continue; }
+      try { raw = readFileSync(f, 'utf8'); } catch (error) {
+        console.warn(`dsh-claude-compat: cannot read rules file ${f} (${error?.code ?? error?.message}); skipped`);
+        continue;
+      }
       const chunk = `## ${basename}\n\n${raw.trim()}\n`;
-      if (chunk.length > remaining) break;
+      if (chunk.length > remaining) {
+        console.warn(`dsh-claude-compat: rules file ${f} does not fit the rules size cap; it and the later ${scope.toLowerCase()} rules are skipped`);
+        break;
+      }
       remaining -= chunk.length;
       seen.add(basename);
       parts.push(chunk);

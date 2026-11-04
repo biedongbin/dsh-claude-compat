@@ -42,7 +42,8 @@ const ERROR_TYPES = {
  */
 export function classifyError(error) {
   if (error?.failure?.status === 529) return 'overloaded';
-  return ERROR_TYPES[error?.code] ?? 'unknown';
+  // An own key only: a code such as `constructor` must not find a member of Object.prototype.
+  return Object.hasOwn(ERROR_TYPES, error?.code) ? ERROR_TYPES[error.code] : 'unknown';
 }
 
 // What Stop asks for: the text to continue with, or undefined to let the turn end.

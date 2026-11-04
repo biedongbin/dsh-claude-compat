@@ -18,7 +18,7 @@
 // Run: node --test test/self-check.test.js  (or plain `node test/self-check.test.js`)
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -35,7 +35,7 @@ function writeSkill(dir, name, description) {
   writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\nbody ${name}\n`);
 }
 
-async function newHarness({ userClaudeDir }) {
+async function newHarness({ userClaudeDir, ...extra }) {
   // A real cordis root context and a real skill registry, like dsh-cordis-host.
   const ctx = new Context();
   ctx.skills = new SkillRegistry(ctx);
@@ -45,6 +45,7 @@ async function newHarness({ userClaudeDir }) {
   await ctx.plugin({ name: 'claude-compat', apply, Config }, {
     projectRootMarkers: ['.git'],
     userClaudeDir,
+    ...extra,
     // hermetic: don't pick up the real ~/.claude/plugins installs
     pluginsRoot: makeSandbox('dcc-plugins-none-'),
   });
@@ -144,6 +145,58 @@ test('rules: a directory with no rules is read once, like one with rules', async
   mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
   writeFileSync(join(project, '.claude', 'rules', 'late.md'), 'LATE RULE\n');
   assert.equal((await step()).messages.length, 0, 'a rule added later waits for the next session, as a cached result does');
+});
+
+async function rulesStep(ctx, project) {
+  return ctx.waterfall(
+    'agent/pre-step',
+    { agent: { session: { header: { cwd: project }, surface: { nodes: [] }, eventAt: () => undefined } }, messages: [] },
+    async () => ({ kind: 'enter', messages: [] }),
+  );
+}
+
+test('rules: a file over the size cap is logged with its path, and the later rules are skipped', async () => {
+  const project = makeSandbox('dcc-rules-cap-');
+  mkdirSync(join(project, '.git'));
+  mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
+  writeFileSync(join(project, '.claude', 'rules', 'a.md'), 'SMALL\n');
+  writeFileSync(join(project, '.claude', 'rules', 'b.md'), `${'BIG '.repeat(100)}\n`);
+  writeFileSync(join(project, '.claude', 'rules', 'c.md'), 'AFTER\n');
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  try {
+    const ctx = await newHarness({ userClaudeDir: makeSandbox('dcc-rules-cap-user-'), rulesMaxBytes: 100 });
+    const { messages } = await rulesStep(ctx, project);
+    const text = messages[0].content[0].text;
+    assert.ok(text.includes('SMALL') && !text.includes('AFTER'));
+  } finally {
+    console.warn = original;
+  }
+  assert.match(warnings.join('\n'), /rules file .*b\.md does not fit the rules size cap/);
+});
+
+test('rules: a file that cannot be read is logged with its path', async (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('needs POSIX permissions and a non-root user');
+  const project = makeSandbox('dcc-rules-locked-');
+  mkdirSync(join(project, '.git'));
+  mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
+  const locked = join(project, '.claude', 'rules', 'locked.md');
+  writeFileSync(locked, 'SECRET\n');
+  writeFileSync(join(project, '.claude', 'rules', 'open.md'), 'OPEN\n');
+  chmodSync(locked, 0o000);
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  try {
+    const ctx = await newHarness({ userClaudeDir: makeSandbox('dcc-rules-locked-user-') });
+    const { messages } = await rulesStep(ctx, project);
+    assert.ok(messages[0].content[0].text.includes('OPEN'));
+  } finally {
+    console.warn = original;
+    chmodSync(locked, 0o600);
+  }
+  assert.match(warnings.join('\n'), /cannot read rules file .*locked\.md \(EACCES\)/);
 });
 
 test('rules: project .claude/rules wins same-basename ~/.claude/rules in one envelope', async () => {

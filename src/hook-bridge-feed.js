@@ -91,7 +91,11 @@ function dispatchEvent(deps, session, event) {
     return engine.has('user-prompt-expansion') ? onCommandRun(deps, session, data) : undefined;
   }
   if (type === 'compaction/start' && engine.has('pre-compact')) return onCompactionStart(deps, session, data);
-  if (type === 'compaction/summary' && engine.has('post-compact')) summaries.set(data.compactionId, data.summary);
+  if (type === 'compaction/summary' && engine.has('post-compact')) {
+    // A compaction that never ends leaves its summary here, so the map is bounded like `commands`.
+    if (summaries.size >= MAX_REMEMBERED_COMMANDS) summaries.delete(summaries.keys().next().value);
+    summaries.set(data.compactionId, data.summary);
+  }
   if (type === 'compaction/end') {
     if (engine.has('post-compact')) return onCompactionEnd(deps, session, data);
     summaries.delete(data.compactionId);

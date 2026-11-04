@@ -99,3 +99,15 @@ export function fakeSubagent(id = 'sub-1', parent = 'sess-1') {
   agent.session.header.parentSession = parent;
   return agent;
 }
+
+/** Run a synchronous function and collect the warnings it logs. */
+export function withWarningsSync(fn) {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  try {
+    return { value: fn(), warnings };
+  } finally {
+    console.warn = original;
+  }
+}

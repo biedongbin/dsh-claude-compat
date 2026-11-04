@@ -52,7 +52,8 @@ export function settingsFiles(config) {
   return files;
 }
 
-// Combined hooks map. A later file wins same (event, matcher, handler) keys.
+// Combined hooks map. A later file wins same (event, matcher, handler) keys. The project is the one
+// that DSH started in: hooks load once at startup, before any session has a directory.
 export function loadHookSettings(config) {
   const combined = {};
   const projectDir = findProjectRootSync(process.cwd(), config.projectRootMarkers) ?? process.cwd();
@@ -72,8 +73,8 @@ function applySettingsFile(combined, path, projectDir) {
     return;
   }
   let parsed;
-  try { parsed = JSON.parse(raw); } catch {
-    warnAt(path, 'unparseable settings.json');
+  try { parsed = JSON.parse(raw); } catch (error) {
+    warnAt(path, `unparseable settings.json (${error.message}); its hooks are not loaded`);
     return;
   }
   const hooks = parsed?.hooks;
@@ -83,7 +84,8 @@ function applySettingsFile(combined, path, projectDir) {
   }
   if (hooks === undefined) return;
   for (const [eventName, entries] of Object.entries(hooks)) {
-    const event = CLAUDE_EVENTS[eventName];
+    // An own key only: `constructor` or `__proto__` must not find a member of Object.prototype.
+    const event = Object.hasOwn(CLAUDE_EVENTS, eventName) ? CLAUDE_EVENTS[eventName] : undefined;
     if (event === undefined) {
       warnAt(path, `hook event "${eventName}" is not a Claude Code event, skipped`);
       continue;

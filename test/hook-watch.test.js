@@ -39,6 +39,27 @@ test('remove drops a group: its files are no longer reported', async () => {
   assert.deepEqual(seen, []);
 });
 
+test('a path that was unreadable at registration and is then removed is not reported as an unlink', async (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('needs POSIX permissions and a non-root user');
+  const dir = tempDir('dcc-watch-');
+  const file = join(dir, 'gone.txt');
+  writeFileSync(file, 'x');
+  chmodSync(dir, 0o000);
+  const original = console.warn;
+  console.warn = () => {};
+  const { seen, watcher } = watched([file], 1_000_000);
+  try {
+    chmodSync(dir, 0o700);
+    rmSync(file);
+    watcher.poll();
+    assert.deepEqual(seen, []);
+  } finally {
+    console.warn = original;
+    watcher.close();
+    chmodSync(dir, 0o700);
+  }
+});
+
 test('an unreadable path is logged once, and reading it later is not reported as an add', async (t) => {
   if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('needs POSIX permissions and a non-root user');
   const dir = tempDir('dcc-watch-');

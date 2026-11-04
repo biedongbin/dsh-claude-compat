@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { runHookCommand, runHttpHook } from '../src/hook-handlers.js';
 import { createWatcher } from '../src/hook-watch.js';
 import { HOOK_CALL_PREFIX } from '../src/hook-support.js';
-import { fakeAgent, fakeSubagent, harness, say, tempDir, withWarnings } from './hook-kit.js';
+import { loadHookSettings } from '../src/hooks.js';
+import { fakeAgent, fakeSubagent, harness, say, tempDir, withWarnings, withWarningsSync } from './hook-kit.js';
 
 const plain = (command, extra = {}) => ({ type: 'command', command, projectDir: '/tmp', ...extra });
 const allow = async () => ({ kind: 'allow' });
@@ -285,6 +286,41 @@ test('a file that cannot be read now is not reported as removed', () => {
   watcher.poll();
   watcher.close();
   assert.deepEqual(seen, [], 'neither an unlink nor a change');
+});
+
+test('a team/member event with no member id is logged once', async () => {
+  const h = harness({ TeammateIdle: [{ hooks: [{ command: 'true' }] }] });
+  const lead = { id: 'lead', header: { id: 'lead' } };
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('session/event', [lead, { type: 'team/member', seq: 1, time: 0, data: { member: { name: 'n' } } }], () => {});
+    await h.dispatch('session/event', [lead, { type: 'team/member', seq: 2, time: 0, data: {} }], () => {});
+  });
+  assert.equal(warnings.filter((line) => /team\/member event has no member id/.test(line)).length, 1);
+});
+
+test('a bad todo_write call is logged once, not again when it ends', async () => {
+  const h = harness({ TaskCreated: [{ hooks: [{ command: 'true' }] }] });
+  const exec = { name: 'todo_write', arguments: { todos: 'not a list' }, callId: 'c1', agent: fakeAgent() };
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('tools/pre-execute', [exec], allow);
+    await h.dispatch('tools/post-execute', [exec, { isError: false, content: [] }], async () => ({ kind: 'accept' }));
+  });
+  assert.equal(warnings.filter((line) => /no todos list/.test(line)).length, 1);
+});
+
+test('a settings file that does not parse is logged with the parse error', () => {
+  const dir = tempDir('dcc-settings-');
+  writeFileSync(join(dir, 'settings.json'), '{"hooks": {},}');
+  const { warnings } = withWarningsSync(() => loadHookSettings({ userClaudeDir: dir, projectRootMarkers: ['.git'] }));
+  assert.match(warnings.join('\n'), /unparseable settings\.json \(.*\); its hooks are not loaded/);
+});
+
+test('an event name that is a member of Object.prototype is reported as no Claude event', () => {
+  const dir = tempDir('dcc-settings-');
+  writeFileSync(join(dir, 'settings.json'), '{"hooks": {"constructor": [{"hooks": [{"command": "true"}]}], "toString": []}}');
+  const { value, warnings } = withWarningsSync(() => loadHookSettings({ userClaudeDir: dir, projectRootMarkers: ['.git'] }));
+  assert.deepEqual(Object.keys(value), []);
+  assert.equal(warnings.filter((line) => /is not a Claude Code event/.test(line)).length, 2);
 });
 
 test('a subagent of the subagent of an agent hook is muted too, at any depth, and forgotten after', () => {

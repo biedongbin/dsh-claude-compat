@@ -174,6 +174,9 @@ test('classifyError maps the DSH failure codes to Claude Code error types', () =
   for (const [code, type] of Object.entries(cases)) assert.equal(classifyError(llmError(code)), type, code);
   assert.equal(classifyError(llmError('SERVER', { failure: { status: 529 } })), 'overloaded');
   assert.equal(classifyError(undefined), 'unknown');
+  for (const code of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    assert.equal(classifyError(llmError(code)), 'unknown', `${code} is not an error code`);
+  }
 });
 
 test('StopFailure runs for a model-request error, with the type, the details and the type as matcher subject', async () => {

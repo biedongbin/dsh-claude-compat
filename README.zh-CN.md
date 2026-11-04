@@ -228,7 +228,8 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 
 - **Skill 命名**：DSH 要求 kebab-case。嵌套 skill 目录扁平化（`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`）；frontmatter 名字非法时回退目录名。
 - **MCP 生命周期**：`.mcp.json` 仅在 DSH 启动时（启动工区）读取一次，每个服务器随进程生命周期挂载 —— 非按会话。修改后需重启 DSH。
-- **项目级 hook**：插件没有工作区信任提示。`<project>/.claude/settings.json` 或 `<project>/.claude/settings.local.json` 中的 hook 会在 DSH 打开该项目时以你的权限运行，请只打开你信任的项目。PermissionRequest hook 还会收到 DSH 发起请求的 `reason`，因此可以区分沙箱升级与普通审批。
+- **项目级 hook**：插件没有工作区信任提示。`<project>/.claude/settings.json` 或 `<project>/.claude/settings.local.json` 中的 hook 会在 DSH 打开该项目时以你的权限运行，请只打开你信任的项目。
+  插件只在启动时读取一次项目设置，读取的是 DSH 启动时所在的目录，而不是每个会话的目录。PermissionRequest hook 还会收到 DSH 发起请求的 `reason`，因此可以区分沙箱升级与普通审批。
 - **Hooks 范围**：33 个 Claude Code hook 事件中有 26 个可运行，五种处理器类型都支持。每个事件对应的 DSH 扩展点以及无法运行的事件见 [Hooks](#hooks)。
 - **Rules 粒度**：每个新会话读取（按会话 cwd 缓存）。会话中改 rule，下一会话生效。
 - **Rules 内容**：rules 原文注入为模型指令。只提交你想让模型遵循的 rule —— 信任级别同 `CLAUDE.md`。

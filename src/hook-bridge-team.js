@@ -21,9 +21,16 @@ export function registerTeamHooks(ctx, engine, support) {
     members.delete(id);
   });
 
+  let warnedMember = false;
   ctx.on('session/event', (_session, event) => {
-    const member = event.type === 'team/member' ? event.data?.member : undefined;
-    if (typeof member?.id === 'string') members.set(member.id, { name: member.name, teamId: event.data.teamId });
+    if (event.type !== 'team/member') return;
+    const member = event.data?.member;
+    if (typeof member?.id === 'string') {
+      members.set(member.id, { name: member.name, teamId: event.data.teamId });
+    } else if (!warnedMember) {
+      warnedMember = true;
+      console.warn('dsh-claude-compat: a team/member event has no member id; TeammateIdle hooks do not run for that member');
+    }
   });
 
   async function onIdle(agent, member) {

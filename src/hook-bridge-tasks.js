@@ -9,14 +9,15 @@ import { sessionIdOf } from './hook-support.js';
 
 const TODO_TOOL = 'todo_write';
 
-function validTodos(exec) {
+// `quiet` is for the second read of the same call, so one bad call is logged once.
+function validTodos(exec, { quiet = false } = {}) {
   const todos = exec.arguments?.todos;
   if (!Array.isArray(todos)) {
-    console.warn('dsh-claude-compat: todo_write arguments have no todos list; TaskCreated and TaskCompleted hooks skipped');
+    if (!quiet) console.warn('dsh-claude-compat: todo_write arguments have no todos list; TaskCreated and TaskCompleted hooks skipped');
     return undefined;
   }
   const valid = todos.filter((todo) => typeof todo?.content === 'string');
-  if (valid.length !== todos.length) {
+  if (!quiet && valid.length !== todos.length) {
     console.warn(`dsh-claude-compat: ${todos.length - valid.length} todo_write item(s) have no text; TaskCreated and TaskCompleted skip them`);
   }
   return valid;
@@ -87,7 +88,7 @@ async function onPreTool(engine, support, lists, exec, next) {
 
 // The list that DSH accepted is the baseline for the next call.
 async function onPostTool(lists, exec, result, next) {
-  const todos = exec.name === TODO_TOOL && result.isError !== true ? validTodos(exec) : undefined;
+  const todos = exec.name === TODO_TOOL && result.isError !== true ? validTodos(exec, { quiet: true }) : undefined;
   if (todos !== undefined) lists.set(sessionIdOf(exec.agent), todos);
   return next();
 }

@@ -51,8 +51,9 @@ export function createWatcher({ onChange, intervalMs = DEFAULT_INTERVAL_MS }) {
       }
       unreadable.delete(path);
       known.set(path, now);
-      // A path that could not be read before has no earlier state, so its first read is not an add.
-      if (before === now || (before === UNREADABLE && now !== undefined)) continue;
+      // A path that could not be read before has no earlier state: its first read is not an add,
+      // and its removal is not an unlink.
+      if (before === now || before === UNREADABLE) continue;
       try {
         if (before === undefined) onChange(path, 'add');
         else if (now === undefined) onChange(path, 'unlink');
