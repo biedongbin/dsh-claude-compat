@@ -197,6 +197,7 @@ test('a stdio server gets CLAUDE_PROJECT_DIR in its environment', async () => {
 
 test('headersHelper output is merged into the headers, and it overrides a static header', async () => {
   const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
   const helper = `"${process.execPath}" -e 'process.stdout.write(JSON.stringify({"Authorization":"Bearer t"}))'`;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headers: { Authorization: 'static', 'X-Keep': 'yes' }, headersHelper: helper,
@@ -207,6 +208,7 @@ test('headersHelper output is merged into the headers, and it overrides a static
 
 test('a headersHelper that fails skips its server with a warning', async () => {
   const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.exit(3)'`,
   } } });
@@ -217,6 +219,7 @@ test('a headersHelper that fails skips its server with a warning', async () => {
 
 test('a headersHelper that prints a non-object is skipped with a warning', async () => {
   const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("[1]")'`,
   } } });

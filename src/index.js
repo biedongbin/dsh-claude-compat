@@ -93,6 +93,8 @@ export const Config = z.object({
   enableSkills: z.boolean().default(true),
   enableMcp: z.boolean().default(true),
   mcpFailOnStartupError: z.boolean().default(false),
+  // A headersHelper in a project .mcp.json is a shell command from the repository.
+  mcpTrustProjectHelpers: z.boolean().default(false),
   enableHooks: z.boolean().default(true),
   // Node delays above 2147483647 ms fire after 1 ms, so a larger value kills hooks at once.
   hooksTimeoutMs: z.number().step(1).min(1).max(2147483647).default(60000),

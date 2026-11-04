@@ -116,6 +116,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `enableSkills` | `true` | 注册 `.claude/skills` + `.claude/commands` + `.claude/agents` provider（项目与 `~/.claude` 均含） |
 | `enableRules` | `true` | 注入项目 + `~/.claude` 的 `rules/*.md` 到消息流 |
 | `enableMcp` | `true` | 把 `<projectRoot>/.mcp.json` 翻译为挂载的 MCP 服务器插件 |
+| `mcpTrustProjectHelpers` | `false` | 运行项目 `.mcp.json` 的 `headersHelper`，运行时不带用户的凭据变量。关闭时服务器只带静态 headers 挂载 |
 | `mcpFailOnStartupError` | `false` | 转发给 `dsh-mcp-client`：MCP 服务器连接失败时让插件启动失败 |
 | `enableHooks` | `true` | 运行 `.claude/settings.json` 文件中的 hooks（见 [Hooks](#hooks)） |
 | `hooksTimeoutMs` | `60000` | 每个 hook 的默认运行超时，单位毫秒，取值 1 至 2147483647。hook 自身的 `timeout`（单位秒）优先生效。与 Claude Code 一致，SessionEnd 默认 1.5 秒，UserPromptSubmit 与 PostModelSwitch 默认 30 秒，MessageDisplay 默认 10 秒；prompt hook 默认 30 秒，agent hook 默认 60 秒 |
@@ -257,12 +258,22 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 - 策略条目引用未设置的变量时，保留原文，并在告警中给出变量名与条目位置。在 managed settings 中，该条目会使整个 managed 策略失效并关闭所有服务器。
 - 任一 settings 文件中的 `disabledMcpjsonServers` 按名称关闭项目服务器。
 - `.claude.json` 中本项目下的 `disabledMcpServers` 按名称关闭用户与 managed 服务器。
+- `managedMcpServers` 中的条目必须是固定的 `https://` 远程服务器。
+它不能有 `command`、`args`、`env`、`headersHelper` 或 `${VAR}`，违反者会被跳过并给出告警。
+`managed-mcp.json` 有自己的约定，不受此规则限制。
+- 不是对象的条目（例如 `"bad": null`）会被跳过并给出告警，其他服务器仍会加载。
 
 条目处理：
 
 - `command`、`args`、`env`、`url` 与 `headers` 中的 `${VAR}` 和 `${VAR:-default}` 会展开。未设置且无默认值的变量保留原文，并在告警中给出变量名。
 - `timeout` 设置每次调用的时限（毫秒）。小于 1000 的值被忽略。
 - `headersHelper` 在挂载时运行，时限 10 秒。其 JSON 输出覆盖静态 `headers`。运行失败的 helper 会跳过其服务器。在 `allowedMcpServers` 允许列表下，只有组织服务器可以使用 helper，因为列表无法看到 helper 的命令。
+- 项目 `.mcp.json` 中的 `headersHelper` 是仓库提供的命令。
+仅当 `mcpTrustProjectHelpers` 为 `true` 时才运行，并且运行时不带用户的凭据变量。
+名称含 `TOKEN`、`SECRET`、`PASSWORD`、`KEY` 或 `AUTH` 的变量会被移除（Git 的 `GIT_CONFIG_KEY_<n>` 除外），`ANTHROPIC_CUSTOM_HEADERS` 也会被移除。
+helper 收到的 `CLAUDE_CODE_MCP_SERVER_URL` 中，被移除变量的值会替换为 `REDACTED`。
+该选项为 `false` 时，服务器只带静态 `headers` 挂载，日志会指出该服务器。
+来自用户、本地或 managed 来源的 helper 保留用户的环境。
 - `type: stdio` 与 `type: http`（或 `streamable-http`）会运行。有 `url` 但无 `type` 的条目会被跳过，与 Claude Code 一致。
 - 字段类型错误（例如 `args` 中有非字符串项）会跳过该条目，告警中给出字段名。
 - 传输方式不会读取的字段（例如 stdio 条目中的 `url`）会被报告为已忽略。

@@ -11,7 +11,7 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { findProjectRootSync, isObject } from './lib.js';
-import { expandVars } from './mcp-vars.js';
+import { expandVars, redactValues, scrubbedEnv } from './mcp-vars.js';
 import { buildPolicy, policyVerdict } from './mcp-policy.js';
 import { readSourceDocs, selectEntries } from './mcp-sources.js';
 
@@ -195,15 +195,26 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
   return { servers: out, warns, names };
 }
 
+// The environment of a helper. A helper from a project file is a command the user did not
+// write, so it gets no credential variables, and the server URL hides their values.
+function helperEnv({ name, url, scrub }) {
+  const base = scrub ? scrubbedEnv(process.env) : { env: process.env, removed: [] };
+  return {
+    ...base.env,
+    CLAUDE_CODE_MCP_SERVER_NAME: name,
+    CLAUDE_CODE_MCP_SERVER_URL: redactValues(url, base.removed),
+  };
+}
+
 // Run a headersHelper and parse its JSON object of header values. Errors are
 // returned, not thrown, so the caller can warn and skip the one server.
-async function runHeadersHelper(command, { name, url }) {
+async function runHeadersHelper(command, context) {
   let stdout;
   try {
     ({ stdout } = await execAsync(command, {
       timeout: HEADERS_HELPER_TIMEOUT_MS,
       maxBuffer: 1024 * 1024,
-      env: { ...process.env, CLAUDE_CODE_MCP_SERVER_NAME: name, CLAUDE_CODE_MCP_SERVER_URL: url },
+      env: helperEnv(context),
     }));
   } catch (error) {
     return { error: `command failed: ${error?.message ?? error}` };
@@ -216,8 +227,8 @@ async function runHeadersHelper(command, { name, url }) {
 }
 
 // Apply the headersHelper output. Dynamic headers override static ones with the same name.
-async function withDynamicHeaders(name, server, helper) {
-  const result = await runHeadersHelper(helper, { name, url: server.url });
+async function withDynamicHeaders(name, server, helper, scrub) {
+  const result = await runHeadersHelper(helper, { name, url: server.url, scrub });
   if (result.error !== undefined) return { warn: `${name}: headersHelper ${result.error}, server skipped` };
   return { server: { ...server, headers: { ...server.headers, ...result.headers } } };
 }
@@ -229,9 +240,50 @@ function policyView(entry, translated) {
   return { ...translated.server, label: entry.name, skipAllowlist };
 }
 
+// The managed settings entry contract: a fixed https remote server. It has no command,
+// arguments, environment, helper or variable. managed-mcp.json has its own contract.
+function managedSettingsProblem(raw) {
+  const fields = ['command', 'args', 'env', 'headersHelper'].filter((field) => raw[field] !== undefined);
+  if (fields.length > 0) return `${fields.join(', ')} not allowed`;
+  if (JSON.stringify(raw).includes('${')) return 'variable references not allowed';
+  if (typeof raw.url !== 'string' || !/^https:\/\//i.test(raw.url)) return 'url must start with https://';
+  return undefined;
+}
+
+// Apply the headersHelper of one entry. Returns the server to mount, or undefined to skip it.
+async function withHelper(entry, view, translated, state) {
+  const name = entry.name;
+  // A helper from a project .mcp.json is a command that the user did not write.
+  if (entry.scope === 'project' && state.options.trustProjectHelpers !== true) {
+    state.out.warns.push(
+      `${name}: headersHelper of a project .mcp.json is not run, because mcpTrustProjectHelpers is false. `
+      + 'The server mounts with its static headers.',
+    );
+    return translated.server;
+  }
+  // An allowlist cannot see the helper command, so a helper could run any command.
+  // Under an allowlist, only the organization's own servers may use one.
+  if (state.policy.allowed !== undefined && view.skipAllowlist !== true) {
+    state.out.warns.push(`${name}: headersHelper is not run under an allowlist, skipped`);
+    return undefined;
+  }
+  const dynamic = await withDynamicHeaders(name, translated.server, translated.helper, entry.scope === 'project');
+  if (dynamic.warn !== undefined) state.out.warns.push(dynamic.warn);
+  return dynamic.server;
+}
+
 // Translate, check the policy, run the helper, and collect one server. `state`
 // holds the translation options, the policy and the output lists.
 async function loadOne(entry, state) {
+  if (!isObject(entry.raw)) {
+    state.out.warns.push(`${entry.name}: malformed entry, skipped`);
+    return;
+  }
+  const invalid = entry.scope === 'managed-settings' ? managedSettingsProblem(entry.raw) : undefined;
+  if (invalid !== undefined) {
+    state.out.warns.push(`${entry.name}: managedMcpServers entry is invalid (${invalid}), skipped`);
+    return;
+  }
   const translated = translateEntry(entry.name, entry.raw, state.options);
   state.out.warns.push(...translated.warns);
   if (translated.server === undefined) return;
@@ -241,21 +293,10 @@ async function loadOne(entry, state) {
     state.out.warns.push(`${entry.name}: ${reason}, skipped`);
     return;
   }
-  let server = translated.server;
-  if (translated.helper !== undefined) {
-    // An allowlist cannot see the helper command, so a helper could run any command.
-    // Under an allowlist, only the organization's own servers may use one.
-    if (state.policy.allowed !== undefined && view.skipAllowlist !== true) {
-      state.out.warns.push(`${entry.name}: headersHelper is not run under an allowlist, skipped`);
-      return;
-    }
-    const dynamic = await withDynamicHeaders(entry.name, server, translated.helper);
-    if (dynamic.warn !== undefined) {
-      state.out.warns.push(dynamic.warn);
-      return;
-    }
-    server = dynamic.server;
-  }
+  const server = translated.helper === undefined
+    ? translated.server
+    : await withHelper(entry, view, translated, state);
+  if (server === undefined) return;
   state.out.servers.push(server);
 }
 
@@ -274,7 +315,12 @@ export async function loadMcpServers(config, { cwd = process.cwd(), managedDir }
     return { servers: [], exclusive: true, warns, policy };
   }
   const state = {
-    options: { vars, failOnStartupError: config.mcpFailOnStartupError ?? false, projectDir },
+    options: {
+      vars,
+      failOnStartupError: config.mcpFailOnStartupError ?? false,
+      projectDir,
+      trustProjectHelpers: config.mcpTrustProjectHelpers === true,
+    },
     policy,
     out: { servers: [], warns: [...selected.warns, ...policy.warns] },
   };

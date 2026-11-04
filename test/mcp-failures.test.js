@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildPolicy, urlMatches } from '../src/mcp-policy.js';
+import { redactValues, scrubbedEnv } from '../src/mcp-vars.js';
 import { translatePluginMcp } from '../src/plugins.js';
 import { applyPolicy, extraServers, loadMcpServers, translateMcpServers, withoutDuplicateUrls } from '../src/mcp.js';
 
@@ -136,6 +137,7 @@ test('allowManagedMcpServersOnly that is not a boolean fails closed, and says so
 
 test('a headersHelper under an allowlist is refused, since the allowlist cannot see the helper', async () => {
   const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
   write(join(fx.userDir, 'settings.json'), { allowedMcpServers: [{ serverUrl: 'https://a.example/*' }] });
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{}")'`,
@@ -147,9 +149,10 @@ test('a headersHelper under an allowlist is refused, since the allowlist cannot 
 
 test('an organization server may use a headersHelper under an allowlist', async () => {
   const fx = fixture();
-  write(join(fx.managedDir, 'managed-settings.json'), { managedMcpServers: { corp: {
+  write(join(fx.managedDir, 'managed-mcp.json'), { mcpServers: { corp: {
     type: 'http', url: 'https://c.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{\\"X-A\\":\\"1\\"}")'`,
-  } }, allowedMcpServers: [{ serverUrl: 'https://other.example/*' }] });
+  } } });
+  write(join(fx.managedDir, 'managed-settings.json'), { allowedMcpServers: [{ serverUrl: 'https://other.example/*' }] });
   const result = await load(fx);
   assert.deepEqual(names(result), ['corp']);
   assert.deepEqual(result.servers[0].headers, { 'X-A': '1' });
@@ -157,6 +160,7 @@ test('an organization server may use a headersHelper under an allowlist', async 
 
 test('a headersHelper that prints a non-string value skips the server', async () => {
   const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{\\"X\\":{}}")'`,
   } } });
@@ -382,4 +386,83 @@ test('a plugin path with $\' in it is substituted literally, not as a replacemen
   mkdirSync(plugin, { recursive: true });
   const result = translatePluginMcp({ mcpServers: { tool: { command: '${CLAUDE_PLUGIN_ROOT}/bin/run' } } }, plugin);
   assert.equal(result.servers[0].command, `${plugin}/bin/run`);
+});
+
+// ─── review: entry isolation, managed settings contract, helper environment ───
+
+test('a null entry is skipped with a warning, and the valid servers still load, in any source', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), '{"mcpServers":{"good":{"type":"stdio","command":"g"},"bad":null,"list":[1],"text":"x"}}');
+  write(join(fx.userDir, '.claude.json'), '{"mcpServers":{"bad2":null,"mine":{"type":"stdio","command":"m"}}}');
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['good', 'mine']);
+  assert.equal(result.warns.filter((w) => /malformed entry, skipped/.test(w)).length, 4);
+});
+
+test('managedMcpServers entries must be fixed https servers, and managed-mcp.json is not held to that', async () => {
+  const fx = fixture();
+  const remote = { type: 'http', url: 'https://c.example/mcp' };
+  write(join(fx.managedDir, 'managed-settings.json'), { managedMcpServers: {
+    ok: remote,
+    cmd: { type: 'stdio', command: 'x' },
+    args: { ...remote, args: ['a'] },
+    env: { ...remote, env: { A: '1' } },
+    helper: { ...remote, headersHelper: 'run' },
+    vars: { type: 'http', url: 'https://c.example/${HOST}' },
+    inHeader: { ...remote, headers: { Authorization: 'Bearer ${TOKEN}' } },
+    plain: { type: 'http', url: 'http://c.example/mcp' },
+  } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['ok']);
+  assert.equal(result.warns.filter((w) => /managedMcpServers entry is invalid/.test(w)).length, 7);
+  const file = fixture();
+  write(join(file.managedDir, 'managed-mcp.json'), { mcpServers: { local: stdio('tool') } });
+  assert.deepEqual(names(await load(file)), ['local']);
+});
+
+test('scrubbedEnv removes credential names, keeps Git config keys, and reports the removed values', () => {
+  const { env, removed } = scrubbedEnv({
+    PATH: '/bin', GIT_CONFIG_KEY_0: 'k', MY_REGISTRY_TOKEN: 't1', api_key: 'k1', Db_Password: 'p1',
+    AUTH_HEADER: 'a1', ANTHROPIC_CUSTOM_HEADERS: 'h1', EMPTY_SECRET: '', HOME: '/h',
+  });
+  assert.deepEqual(Object.keys(env).sort(), ['GIT_CONFIG_KEY_0', 'HOME', 'PATH']);
+  assert.deepEqual(removed.sort(), ['a1', 'h1', 'k1', 'p1', 't1']);
+  assert.equal(redactValues('https://x/?a=t1&b=p1', removed), 'https://x/?a=REDACTED&b=REDACTED');
+});
+
+const SHOW_ENV = `"${process.execPath}" -e 'const e=process.env;process.stdout.write(JSON.stringify({token:e.FAKE_REVIEW_TOKEN??"none",url:e.CLAUDE_CODE_MCP_SERVER_URL}))'`;
+
+async function withToken(run) {
+  process.env.FAKE_REVIEW_TOKEN = 'sekret-value';
+  try { return await run(); } finally { delete process.env.FAKE_REVIEW_TOKEN; }
+}
+
+test('a project headersHelper runs without credential variables, and the URL hides their values', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectHelpers = true;
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp?k=${FAKE_REVIEW_TOKEN}', headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.deepEqual(result.servers[0].headers, { token: 'none', url: 'https://a.example/mcp?k=REDACTED' });
+});
+
+test('a user or local headersHelper keeps the environment of the user', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.equal(result.servers[0].headers.token, 'sekret-value');
+});
+
+test('a project headersHelper does not run until mcpTrustProjectHelpers is true, and the server mounts', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headers: { 'X-Static': '1' }, headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.deepEqual(names(result), ['api']);
+  assert.deepEqual(result.servers[0].headers, { 'X-Static': '1' });
+  assert.match(result.warns.join('\n'), /api: headersHelper of a project \.mcp\.json is not run, because mcpTrustProjectHelpers is false/);
 });

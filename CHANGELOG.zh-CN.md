@@ -14,6 +14,9 @@
 - **处理器类型 `http`、`mcp_tool`、`prompt` 与 `agent`。** `http` 以 JSON 提交输入，请求头只读取 `allowedEnvVars` 中列出的变量。`mcp_tool` 通过 DSH 工具服务调用 MCP 工具。`prompt` 向会话模型提一个问题。`agent` 启动 DSH 子 agent 并读取它的结构化回答。每种类型只在 Claude Code 允许的事件上运行。后台 hook 以退出码 2 结束时，`asyncRewake` 会引导 agent 继续。
 
 ### 修复
+- **项目 `headersHelper` 不带凭据变量运行，且仅在受信任时运行。** 项目 `.mcp.json` 的 helper 仅在 `mcpTrustProjectHelpers` 为 `true` 时运行，且拿不到 `*_TOKEN`、`*_KEY`、`ANTHROPIC_CUSTOM_HEADERS` 等变量，服务器 URL 中这些变量的值会被隐藏。该选项关闭时，服务器只带静态 headers 挂载。用户、本地与 managed 来源的 helper 保留用户环境。
+- **校验 `managedMcpServers` 条目。** 条目必须是固定的 `https://` 服务器，不能有 `command`、`args`、`env`、`headersHelper` 或 `${VAR}`。不合格的条目会被跳过，也不再跳过 allowlist。`managed-mcp.json` 不受此规则限制。
+- **单个格式错误的 MCP 条目不再中断加载。** 类似 `"bad": null` 的条目会被跳过并给出告警，其他服务器仍会加载。
 - **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则会在 hook 加载时报告一次。
   不属于 `.*` 的 `*` 仍像早期版本一样当作通配符，因此 `mcp__*__delete` 这类守卫继续有效。
   Stop、UserPromptSubmit 等没有 subject 的事件和 Claude Code 一样忽略 matcher。

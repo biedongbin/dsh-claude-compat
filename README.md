@@ -116,6 +116,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` + `.claude/agents` provider (project and `~/.claude`) |
 | `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
 | `enableMcp` | `true` | Translate `<projectRoot>/.mcp.json` into mounted MCP server plugins |
+| `mcpTrustProjectHelpers` | `false` | Run the `headersHelper` of a project `.mcp.json`, without the credential variables of the user. Off means the server mounts with its static headers |
 | `mcpFailOnStartupError` | `false` | Forward to `dsh-mcp-client`: fail plugin startup when an MCP server fails to connect |
 | `enableHooks` | `true` | Run hooks from the `.claude/settings.json` files (see [Hooks](#hooks)) |
 | `hooksTimeoutMs` | `60000` | Default per-hook run timeout in ms, 1 to 2147483647. A handler's own `timeout`, in seconds, overrides it. Like Claude Code, the default is 1.5 s for SessionEnd, 30 s for UserPromptSubmit and PostModelSwitch, and 10 s for MessageDisplay. prompt hooks default to 30 s and agent hooks to 60 s |
@@ -259,12 +260,22 @@ Policy comes from the settings files:
 - A policy entry that names a variable which is not set keeps the literal text, and a warning names the variable and the entry. In managed settings, that entry makes the whole managed policy fail closed.
 - `disabledMcpjsonServers` in any settings file turns off project servers by name.
 - `disabledMcpServers` under this project in `.claude.json` turns off user and managed servers by name.
+- An entry in `managedMcpServers` must be a fixed `https://` remote server.
+It has no `command`, `args`, `env`, `headersHelper` or `${VAR}`, and an entry that breaks this is skipped with a warning.
+`managed-mcp.json` has its own contract and is not held to this rule.
+- An entry that is not an object, such as `"bad": null`, is skipped with a warning, and the other servers still load.
 
 Entry handling:
 
 - `${VAR}` and `${VAR:-default}` expand in `command`, `args`, `env`, `url` and `headers`. An unset variable with no default keeps the literal text, and a warning names it.
 - `timeout` sets the per-call limit in milliseconds. A value under 1000 is ignored.
 - `headersHelper` runs at mount, with a 10-second limit. Its JSON output overrides the static `headers`. A helper that fails skips its server. Under an `allowedMcpServers` list, only organization servers may use a helper, because the list cannot see the helper command.
+- A `headersHelper` from a project `.mcp.json` is a command that the repository supplies.
+It runs only when `mcpTrustProjectHelpers` is `true`, and then without the credential variables of the user.
+A variable name with `TOKEN`, `SECRET`, `PASSWORD`, `KEY` or `AUTH` in it is removed, except Git's `GIT_CONFIG_KEY_<n>`, and so is `ANTHROPIC_CUSTOM_HEADERS`.
+The values of removed variables are replaced with `REDACTED` in the `CLAUDE_CODE_MCP_SERVER_URL` that the helper receives.
+While the option is `false`, the server mounts with its static `headers` and the log names the server.
+A helper from the user, local or managed source keeps the environment of the user.
 - `type: stdio` and `type: http` (or `streamable-http`) run. An entry with a `url` and no `type` is skipped, as Claude Code skips it.
 - A field of the wrong type, such as a non-string `args` item, skips the entry. The warning names the field.
 - A field that the transport never reads, such as `url` on a stdio entry, is reported as ignored.
