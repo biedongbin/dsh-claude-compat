@@ -10,7 +10,10 @@ import { matcherPaths } from '../src/hook-bridge-files.js';
 import { splitLines } from '../src/hook-bridge-messages.js';
 import { completedTodos, createdTodos } from '../src/hook-bridge-tasks.js';
 import { matchIfRule, parseHookHandler } from '../src/hook-spec.js';
-import { parseVerdict } from '../src/hook-verdict.js';
+import { denyRun, parseVerdict, verdictToRun } from '../src/hook-verdict.js';
+import { appendCapped, runHttpHook } from '../src/hook-handlers.js';
+import { failureText } from '../src/hook-bridge-tools.js';
+import { blocksToText } from '../src/hook-support.js';
 
 const RUNS = 400;
 
@@ -293,5 +296,204 @@ test('property: buildPrompt always carries the payload verbatim, and appends it 
     if (!prompt.includes('$ARGUMENTS')) assert.equal(buildPrompt(prompt, payload), `${prompt}\n\n${payload}`);
     const withToken = buildPrompt(`before $ARGUMENTS after`, payload);
     assert.equal(withToken, `before ${payload} after`, JSON.stringify(payload));
+  }
+});
+
+// ─── appendCapped, http headers and responses, readBody, denyRun, verdictToRun ───────────────────
+
+const LIMIT = 1_048_576;
+const ASTRAL = '\u{1F600}';
+
+test('property: appendCapped is a prefix of the join, is well formed, and stays within the limit', () => {
+  const random = rng(1301);
+  for (let i = 0; i < 40; i += 1) {
+    const head = 'a'.repeat(LIMIT - Math.floor(random() * 4));
+    const chunk = Array.from({ length: Math.floor(random() * 13) }, () => ['a', 'b', ASTRAL, 'é'][Math.floor(random() * 4)]).join('');
+    const joined = head + chunk;
+    const capped = appendCapped(head, chunk);
+    assert.ok(joined.startsWith(capped), 'prefix');
+    assert.ok(capped.isWellFormed(), `well formed: ${JSON.stringify(chunk)}`);
+    assert.ok(capped.length <= LIMIT && capped.length >= Math.min(joined.length, LIMIT - 1));
+    if (joined.length <= LIMIT) assert.equal(capped, joined);
+  }
+  assert.equal(appendCapped('a'.repeat(LIMIT - 1), ASTRAL).length, LIMIT - 1, 'a split pair is dropped');
+});
+
+function headerFetch(seen) {
+  return async (_url, init) => {
+    seen.push(init.headers);
+    return new Response('', { status: 200 });
+  };
+}
+
+test('property: an http header gets only the allowed variables, and a value with no $ is unchanged', async () => {
+  const random = rng(1302);
+  const names = ['A1', 'B2', 'C_3'];
+  const env = { A1: 'x1', B2: 'y2', C_3: 'z3' };
+  const noWarn = console.warn;
+  console.warn = () => {};
+  try {
+    for (let i = 0; i < 150; i += 1) {
+      const allowed = names.filter(() => random() < 0.5);
+      let template = '';
+      let expected = '';
+      for (let part = 0; part < 4; part += 1) {
+        if (random() < 0.5) {
+          // A leading space ends a bare $NAME, which would otherwise read the literal as more of the name.
+          const literal = ` ${textFrom(random, 'ab -:', 5)}`;
+          template += literal;
+          expected += literal;
+        } else {
+          const name = names[Math.floor(random() * 3)];
+          template += random() < 0.5 ? `$${name}` : `\${${name}}`;
+          expected += allowed.includes(name) ? env[name] : '';
+        }
+      }
+      const seen = [];
+      const hook = { url: 'https://h.test/x', headers: { 'x-test': template }, allowedEnvVars: allowed };
+      await runHttpHook(hook, '{}', { env, fetchImpl: headerFetch(seen) });
+      assert.equal(seen[0]['x-test'], expected, JSON.stringify({ template, allowed }));
+    }
+  } finally {
+    console.warn = noWarn;
+  }
+});
+
+test('property: an http response is a failure unless it is 2xx with an empty body or a JSON object', async () => {
+  const random = rng(1303);
+  const bodies = ['', '  \n', '{"a":1}', ' {"decision":"block"} ', '[1]', 'null', '7', 'text', '{', '"s"'];
+  for (let i = 0; i < 200; i += 1) {
+    const status = 100 + Math.floor(random() * 500);
+    const body = bodies[Math.floor(random() * bodies.length)];
+    const noBody = status === 204 || status === 205 || status === 304 || status < 200;
+    const response = () => new Response(noBody ? null : body, { status: status < 200 ? 200 : status });
+    const run = await runHttpHook({ url: 'https://h.test/x' }, '{}', { fetchImpl: async () => response() });
+    const realStatus = status < 200 ? 200 : status;
+    const text = noBody ? '' : body.trim();
+    const isObject = text.startsWith('{') && (() => { try { return typeof JSON.parse(text) === 'object'; } catch { return false; } })();
+    const ok = realStatus >= 200 && realStatus < 300 && (text === '' || isObject);
+    assert.equal(!run.failed, ok, JSON.stringify({ realStatus, body }));
+    if (ok) assert.equal(run.stdout, text);
+    else assert.ok(typeof run.reason === 'string' && run.reason !== '');
+  }
+});
+
+test('property: readBody refuses the same bodies on the stream path and on the text path', async () => {
+  const random = rng(1304);
+  for (const [char, width] of [['a', 1], ['é', 2], ['€', 3], [ASTRAL, 4]]) {
+    for (const delta of [-1, 0, 1]) {
+      const count = Math.floor(LIMIT / width) + delta;
+      const body = char.repeat(count);
+      const tooLarge = count * width > LIMIT;
+      const viaStream = await runHttpHook({ url: 'https://h.test/x' }, '{}', {
+        fetchImpl: async () => new Response(body, { status: 200 }),
+      });
+      const viaText = await runHttpHook({ url: 'https://h.test/x' }, '{}', {
+        fetchImpl: async () => ({ status: 200, headers: { get: () => null }, text: async () => body }),
+      });
+      for (const run of [viaStream, viaText]) {
+        assert.equal(/too large/.test(run.reason ?? ''), tooLarge, `${width}-byte char, delta ${delta}`);
+      }
+    }
+  }
+  // A character split across two chunks stays whole.
+  for (let i = 0; i < 100; i += 1) {
+    const json = JSON.stringify({ text: textFrom(random, `ab${ASTRAL}é€`, 12) });
+    const bytes = new TextEncoder().encode(json);
+    const cut = Math.floor(random() * (bytes.length + 1));
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, cut));
+        controller.enqueue(bytes.slice(cut));
+        controller.close();
+      },
+    });
+    const run = await runHttpHook({ url: 'https://h.test/x' }, '{}', { fetchImpl: async () => new Response(stream, { status: 200 }) });
+    assert.equal(run.stdout, json, `cut at ${cut}`);
+  }
+});
+
+test('a Content-Length that is not plain digits is not a length', async () => {
+  for (const header of ['0x10', '1e9', ' ', 'NaN', '-5']) {
+    const response = { status: 200, headers: { get: () => header }, text: async () => '' };
+    const run = await runHttpHook({ url: 'https://h.test/x' }, '{}', { fetchImpl: async () => response });
+    assert.equal(run.failed, false, header);
+  }
+  const big = { status: 200, headers: { get: () => String(LIMIT + 1) }, text: async () => '' };
+  assert.match((await runHttpHook({ url: 'https://h.test/x' }, '{}', { fetchImpl: async () => big })).reason, /too large/);
+});
+
+test('property: a deny message survives the round trip through denyRun and interpretRun', () => {
+  const random = rng(1305);
+  for (let i = 0; i < RUNS; i += 1) {
+    const message = textFrom(random, `ab "\\\n\t${ASTRAL}é `, 20);
+    const outcome = interpretRun('permission-request', 'PermissionRequest', denyRun(message));
+    assert.deepEqual(outcome.specific.decision, { behavior: 'deny', message }, JSON.stringify(message));
+  }
+});
+
+test('property: a block verdict still blocks, or still reaches the model, on each event that can block', () => {
+  const random = rng(1306);
+  const events = {
+    'user-prompt-submit': 'UserPromptSubmit', 'pre-tool-use': 'PreToolUse', 'post-tool-use': 'PostToolUse',
+    'post-tool-batch': 'PostToolBatch', 'subagent-stop': 'SubagentStop', 'task-created': 'TaskCreated',
+    'task-completed': 'TaskCompleted', stop: 'Stop', 'config-change': 'ConfigChange', 'pre-compact': 'PreCompact',
+  };
+  for (let i = 0; i < RUNS; i += 1) {
+    const reason = `r${textFrom(random, 'ab c', 10)}`;
+    const [event, claude] = Object.entries(events)[Math.floor(random() * 10)];
+    for (const hook of [{ type: 'prompt' }, { type: 'agent' }]) {
+      const outcome = interpretRun(event, claude, verdictToRun(event, { ok: false, reason }, hook));
+      assert.equal(outcome.blocked, true, event);
+      assert.equal(interpretRun(event, claude, verdictToRun(event, { ok: true }, hook)).blocked, false, event);
+    }
+  }
+  const denied = interpretRun('permission-request', 'PermissionRequest', verdictToRun('permission-request', { ok: false, reason: 'no' }, { type: 'prompt' }));
+  assert.equal(denied.specific.decision.behavior, 'deny');
+  const failure = interpretRun('post-tool-use-failure', 'PostToolUseFailure', verdictToRun('post-tool-use-failure', { ok: false, reason: 'why' }, { type: 'prompt' }));
+  assert.deepEqual(failure.contexts, ['why']);
+});
+
+test('property: the first PermissionRequest deny decision stays, in any order', () => {
+  const random = rng(1307);
+  const ask = (behavior, message) => interpretRun('permission-request', 'PermissionRequest', {
+    exitCode: 0, failed: false,
+    stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior, message } } }),
+  });
+  for (let i = 0; i < RUNS; i += 1) {
+    const list = Array.from({ length: 1 + Math.floor(random() * 5) }, (_, n) => ask(random() < 0.5 ? 'deny' : 'allow', `m${n}`));
+    const merged = mergeOutcomes(list);
+    const firstDeny = list.find((outcome) => outcome.specific.decision.behavior === 'deny');
+    if (firstDeny === undefined) assert.equal(merged.specific.decision.behavior, 'allow');
+    else assert.deepEqual(merged.specific.decision, firstDeny.specific.decision);
+  }
+});
+
+test('property: blocksToText is the text of the text blocks, in order, and ignores every other block', () => {
+  const random = rng(1308);
+  for (let i = 0; i < RUNS; i += 1) {
+    const blocks = Array.from({ length: Math.floor(random() * 6) }, () => {
+      const kind = Math.floor(random() * 4);
+      const text = textFrom(random, 'ab c', 5);
+      if (kind === 0) return { type: 'text', text };
+      if (kind === 1) return { type: 'image', text };
+      if (kind === 2) return { type: 'text', text: 5 };
+      return null;
+    });
+    const expected = blocks.filter((block) => block?.type === 'text' && typeof block.text === 'string').map((block) => block.text).join('');
+    assert.equal(blocksToText(blocks), expected);
+  }
+  assert.equal(blocksToText(undefined), '');
+});
+
+test('property: failureText is never empty', () => {
+  const random = rng(1309);
+  const parts = [undefined, '', 'boom'];
+  for (let i = 0; i < RUNS; i += 1) {
+    const result = {
+      content: random() < 0.5 ? [{ type: 'text', text: parts[Math.floor(random() * 3)] ?? '' }] : undefined,
+      error: random() < 0.7 ? { message: parts[Math.floor(random() * 3)], code: parts[Math.floor(random() * 3)] } : undefined,
+    };
+    assert.notEqual(failureText(result), '', JSON.stringify(result));
   }
 });

@@ -244,3 +244,20 @@ test('runHandler uses an override runner for a type, and reports a type with no 
   assert.equal(missing.failed, true);
   assert.match(missing.reason, /"prompt" is not available/);
 });
+
+test('an http header that uses an unlisted or unset variable is logged once for the hook', async () => {
+  const original = console.warn;
+  const lines = [];
+  console.warn = (...args) => lines.push(args.join(' '));
+  try {
+    const hook = { ...httpHook(), headers: { authorization: 'Bearer $API_TOKEN', 'x-other': '${OTHER}' }, allowedEnvVars: ['OTHER'] };
+    await runHttpHook(hook, '{}', { env: { API_TOKEN: 'secret' }, fetchImpl: fakeFetch(200, '') });
+    await runHttpHook(hook, '{}', { env: { API_TOKEN: 'secret' }, fetchImpl: fakeFetch(200, '') });
+  } finally {
+    console.warn = original;
+  }
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /header authorization uses \$API_TOKEN, which is not in allowedEnvVars/);
+  assert.match(lines[0], /header x-other uses \$OTHER, which is not set/);
+  assert.ok(!lines[0].includes('secret'));
+});

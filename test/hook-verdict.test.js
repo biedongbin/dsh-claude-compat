@@ -108,3 +108,15 @@ test('a block with a reason that holds JSON characters stays text', () => {
   const run = verdictToRun('pre-tool-use', { ok: false, reason: '{"a": 1}' }, { type: 'prompt' });
   assert.equal(outcomeOf('pre-tool-use', run).reason, '{"a": 1}');
 });
+
+test('an impossible verdict on a Stop prompt hook lets the turn end, and is logged', () => {
+  const original = console.warn;
+  const lines = [];
+  console.warn = (...args) => lines.push(args.join(' '));
+  try {
+    assert.equal(verdictToRun('stop', { ok: false, reason: 'x', impossible: true }, { type: 'prompt' }).exitCode, 0);
+  } finally {
+    console.warn = original;
+  }
+  assert.match(lines[0], /stop hook answered "not ok".*cannot be met/);
+});

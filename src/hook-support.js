@@ -6,8 +6,9 @@ import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
 // The agent type that DSH subagents report. DSH does not name a type for a run.
 export const SUBAGENT_TYPE = 'general-purpose';
 
-// A tool call that a hook made has an id with this prefix. The tool hooks skip it, so a hook
-// cannot start itself again.
+// A tool call that a hook made has an id with this prefix, so a log line shows where it came from.
+// The prefix does not mark the call: the tool hooks skip the ids in `hookCalls`, because a provider
+// can send an id with any text.
 export const HOOK_CALL_PREFIX = 'dsh-claude-compat-hook-';
 
 /** The session id of an agent, or of an object that only holds a session. */

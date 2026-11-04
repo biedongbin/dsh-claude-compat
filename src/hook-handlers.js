@@ -7,8 +7,19 @@ import { spawn } from 'node:child_process';
 // A hook's output goes back to the model, so each stream keeps at most this many characters.
 const OUTPUT_LIMIT = 1_048_576;
 
-function appendCapped(text, chunk) {
-  return (text + chunk).slice(0, OUTPUT_LIMIT);
+/**
+ * Append `chunk` to `text`, and cut the result at OUTPUT_LIMIT characters. A cut never leaves half
+ * of a surrogate pair, because that text is not valid UTF-16 and JSON.parse refuses it.
+ * @param {string} text
+ * @param {string} chunk
+ * @returns {string}
+ */
+export function appendCapped(text, chunk) {
+  const joined = text + chunk;
+  if (joined.length <= OUTPUT_LIMIT) return joined;
+  const cut = joined.slice(0, OUTPUT_LIMIT);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
 // ----- command ----------------------------------------------------------------
@@ -54,7 +65,8 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
       settled = true;
       clearTimeout(timer);
       // A stream that reached the limit may have been cut, so a decision in it may be lost.
-      const truncated = stdout.length >= OUTPUT_LIMIT || stderr.length >= OUTPUT_LIMIT;
+      // A cut may also drop one half of a surrogate pair, so one character less counts.
+      const truncated = stdout.length >= OUTPUT_LIMIT - 1 || stderr.length >= OUTPUT_LIMIT - 1;
       resolve({ exitCode, stdout, stderr, failed, reason, ...truncated ? { truncated } : {} });
     };
     const [file, argv] = hook.args === undefined
@@ -91,19 +103,36 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
 // `$VAR` and `${VAR}` in a header value. A variable that `allowedEnvVars` does
 // not list becomes an empty string, as in Claude Code. The list comes from the same hook
 // entry, so it limits a typo or a copied header, not a settings file that is hostile: such a
-// file can already run a command hook that reads the environment.
-function interpolateHeader(value, allowed, env) {
+// file can already run a command hook that reads the environment. Each empty result is pushed
+// to `problems`, so the author can see why the request has an empty value.
+function interpolateHeader(value, { allowed, env, problems, header }) {
   return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (_match, braced, bare) => {
     const name = braced ?? bare;
-    return allowed.includes(name) ? (env[name] ?? '') : '';
+    if (!allowed.includes(name)) {
+      problems.push(`header ${header} uses $${name}, which is not in allowedEnvVars`);
+      return '';
+    }
+    if (env[name] === undefined) {
+      problems.push(`header ${header} uses $${name}, which is not set`);
+      return '';
+    }
+    return env[name];
   });
 }
 
+// One log line for each hook, for the first request.
+const warnedHeaderHooks = new WeakSet();
+
 function httpHeaders(hook, env) {
   const allowed = hook.allowedEnvVars ?? [];
+  const problems = [];
   const headers = { 'content-type': 'application/json' };
-  for (const [name, value] of Object.entries(hook.headers ?? {})) {
-    headers[name] = interpolateHeader(value, allowed, env);
+  for (const [header, value] of Object.entries(hook.headers ?? {})) {
+    headers[header] = interpolateHeader(value, { allowed, env, problems, header });
+  }
+  if (problems.length > 0 && !warnedHeaderHooks.has(hook)) {
+    warnedHeaderHooks.add(hook);
+    console.warn(`dsh-claude-compat: http hook ${hook.url}: ${problems.join('; ')}`);
   }
   return headers;
 }
@@ -138,12 +167,13 @@ function interpretHttpResponse(status, body) {
 // limit, and a declared Content-Length over the limit is refused before any read.
 async function readBody(response) {
   const tooLarge = () => new RangeError('response body is too large');
-  const declared = Number(response.headers?.get?.('content-length'));
-  if (Number.isFinite(declared) && declared > OUTPUT_LIMIT) throw tooLarge();
+  // A header that is not plain digits is not a length, so only the byte count of the read applies.
+  const header = response.headers?.get?.('content-length')?.trim() ?? '';
+  if (/^[0-9]{1,15}$/.test(header) && Number(header) > OUTPUT_LIMIT) throw tooLarge();
   const reader = response.body?.getReader?.();
   if (reader === undefined) {
     const text = await response.text();
-    if (text.length > OUTPUT_LIMIT) throw tooLarge();
+    if (Buffer.byteLength(text) > OUTPUT_LIMIT) throw tooLarge();
     return text;
   }
   const decoder = new TextDecoder();

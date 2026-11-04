@@ -65,7 +65,7 @@ export function responseOf(result) {
 
 /** The error text of a failed tool result. */
 export function failureText(result) {
-  return blocksToText(result.content) || String(result.error?.message ?? result.error?.code ?? 'tool failed');
+  return blocksToText(result.content) || String(result.error?.message || result.error?.code || 'tool failed');
 }
 
 function failureFields(result) {

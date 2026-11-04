@@ -52,19 +52,23 @@ function lookup(input, path) {
  * A text field is used as is, another value as JSON, and a missing field as an empty string.
  * @param {unknown} value the `input` of an mcp_tool hook
  * @param {object} input the hook input
+ * @param {string[]} [missing] receives the path of each placeholder that matched no field
  * @returns {unknown}
  */
-export function substitute(value, input) {
+export function substitute(value, input, missing = []) {
   if (typeof value === 'string') {
     return value.replace(PLACEHOLDER, (_match, path) => {
       const found = lookup(input, path);
-      if (found === undefined || found === null) return '';
+      if (found === undefined || found === null) {
+        missing.push(path.trim());
+        return '';
+      }
       return typeof found === 'string' ? found : JSON.stringify(found);
     });
   }
-  if (Array.isArray(value)) return value.map((item) => substitute(item, input));
+  if (Array.isArray(value)) return value.map((item) => substitute(item, input, missing));
   if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, substitute(item, input)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, substitute(item, input, missing)]));
   }
   return value;
 }
@@ -88,7 +92,11 @@ async function runMcpToolHook(ctx, support, hook, payload, { timeoutMs, agent })
   const guard = timeoutGuard(timeoutMs, abort);
   support.hookCalls?.add(callId);
   try {
-    const input = substitute(hook.input ?? {}, JSON.parse(payload));
+    const missing = [];
+    const input = substitute(hook.input ?? {}, JSON.parse(payload), missing);
+    if (missing.length > 0) {
+      console.warn(`dsh-claude-compat: mcp_tool hook ${name}: no field of the hook input at ${missing.map((path) => `\${${path}}`).join(', ')}; sent as empty text`);
+    }
     // ToolRuntime.execute takes one call and returns one result. A tool that ignores the signal
     // must not hold the DSH event, so the guard also ends the wait.
     const result = await Promise.race([

@@ -68,7 +68,9 @@ export function verdictToRun(event, verdict, hook) {
   if (verdict.ok) return ALLOWED;
   const reason = verdict.reason ?? '';
   // `impossible` lets the turn end on Stop and SubagentStop. Agent hooks do not have it.
-  if ((event === 'stop' || event === 'subagent-stop') && hook.type === 'prompt' && verdict.impossible) return ALLOWED;
+  if ((event === 'stop' || event === 'subagent-stop') && hook.type === 'prompt' && verdict.impossible) {
+    return ignored(event, 'the verifier says the condition cannot be met, so the turn ends');
+  }
   // The denial already happened. A PermissionRequest block becomes a deny decision.
   if (event === 'permission-denied') return ignored(event, 'the denial already happened');
   if (event === 'permission-request') return denyRun(reason);

@@ -526,3 +526,10 @@ test('the runners reject nothing: say() output from a command still works beside
   const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'c' } }) }] }] });
   assert.equal((await h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow)).kind, 'deny');
 });
+
+test('substitute lists the placeholders that match no field of the hook input', () => {
+  const missing = [];
+  const out = substitute({ a: '${tool_inpt.command}', b: ['${cwd}', '${ nope }'] }, { cwd: '/w' }, missing);
+  assert.deepEqual(out, { a: '', b: ['/w', ''] });
+  assert.deepEqual(missing, ['tool_inpt.command', 'nope']);
+});
