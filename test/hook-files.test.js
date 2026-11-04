@@ -1,8 +1,8 @@
 // FileChanged, ConfigChange and the settings file list, on real files.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { loadHookSettings, settingsFiles } from '../src/hooks.js';
 import { fakeAgent, fakeSubagent, harness, say, tempDir, waitFor, withWarnings } from './hook-kit.js';
 
@@ -266,13 +266,17 @@ test('settingsFiles lists user, project and project-local settings, and hooks lo
   }
 });
 
-test('settingsFiles outside a project lists only the user settings', () => {
+test('settingsFiles in a directory with no project marker reads the cwd as the project root', () => {
   const outside = tempDir('dcc-outside-');
   const before = process.cwd();
   process.chdir(outside);
   try {
     const files = settingsFiles({ userClaudeDir: tempDir('dcc-user-'), projectRootMarkers: ['.git-not-here'] });
-    assert.deepEqual(files.map((file) => file.source), ['user_settings']);
+    assert.deepEqual(files.map((file) => file.source), ['user_settings', 'project_settings', 'local_settings']);
+    const [, project, local] = files;
+    assert.ok(project.path.endsWith(join('.claude', 'settings.json')), project.path);
+    assert.ok(local.path.endsWith(join('.claude', 'settings.local.json')), local.path);
+    assert.equal(dirname(dirname(project.path)), realpathSync(outside));
   } finally {
     process.chdir(before);
   }
