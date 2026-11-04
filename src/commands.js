@@ -86,6 +86,7 @@ const RELOAD_DONE = [
  * because commands may register before the provider factory has run.
  */
 export function registerManagerCommands(ctx, config, getProvider) {
+  const userDirArgs = config.userClaudeDir ? ['--user-claude-dir', config.userClaudeDir] : [];
   try {
     ctx.inject(['commands'], (commandCtx) => {
       const reloadHandler = async () => {
@@ -106,13 +107,13 @@ export function registerManagerCommands(ctx, config, getProvider) {
           handler: async ({ agent, rawInput, signal }) => {
             const args = splitArgs(rawInput);
             if (args[0] === 'list' || args[0] === 'import') {
-              return runScript('cc-resume.mjs', args, { cwd: invocationCwd(agent), signal, timeoutMs: 300_000 });
+              return runScript('cc-resume.mjs', [...args, ...userDirArgs], { cwd: invocationCwd(agent), signal, timeoutMs: 300_000 });
             }
             const cwd = invocationCwd(agent);
             let sessions = [];
-            try { sessions = listClaudeSessions(cwd, 12); } catch { /* no claude dir */ }
+            try { sessions = listClaudeSessions(cwd, 12, config.userClaudeDir); } catch { /* no claude dir */ }
             if (sessions.length === 0) {
-              return runScript('cc-resume.mjs', ['list'], { cwd, signal });
+              return runScript('cc-resume.mjs', ['list', ...userDirArgs], { cwd, signal });
             }
             const two = (n) => String(n).padStart(2, '0');
             const rows = sessions.map((s, i) => {

@@ -203,8 +203,8 @@ export function writeDshSession(sessionDir, id, cwd, events) {
 }
 
 /** List Claude sessions for a cwd. */
-export function listClaudeSessions(cwd, limit = 30) {
-  const dir = claudeProjectsDir(cwd);
+export function listClaudeSessions(cwd, limit = 30, userDir) {
+  const dir = claudeProjectsDir(cwd, userDir);
   if (!existsSync(dir)) return [];
   const out = readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
@@ -268,25 +268,28 @@ function clipByWidth(s, maxCols) {
 const invokedDirectly = process.argv[1]?.endsWith('cc-resume.mjs') ?? false;
 if (invokedDirectly) {
 const [cmd, ...rest] = process.argv.slice(2);
-try { validateClaudeLocationEnv(); } catch (error) { console.error(error.message); process.exit(2); }
 const flag = (name) => {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : undefined;
 };
+// The plugin passes its configured userClaudeDir here, so list and import read the
+// same Claude directory as the skill catalog.
+const userDir = flag('user-claude-dir');
+try { validateClaudeLocationEnv({ userClaudeDir: userDir }); } catch (error) { console.error(error.message); process.exit(2); }
 const cwd = flag('cwd') ?? process.cwd();
 
 if (cmd === 'list') {
   const limit = Number(flag('limit') ?? 12);
-  const sessions = listClaudeSessions(cwd, limit);
+  const sessions = listClaudeSessions(cwd, limit, userDir);
   if (sessions.length === 0) {
-    console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectsDir(cwd)})`);
+    console.log(`No Claude sessions found for ${cwd} (looked in ${claudeProjectsDir(cwd, userDir)})`);
     console.log('Tip: list another project with --cwd <dir>, e.g. /cc-resume list --cwd ~/workspace/<project>');
     process.exit(0);
   }
   // The command card takes the FIRST line as its title — lead with a summary
   // so no data row is eaten. Totals come from a cheap dir count (the list is
   // already sliced to the limit).
-  const total = readdirSync(claudeProjectsDir(cwd)).filter((f) => f.endsWith('.jsonl')).length;
+  const total = readdirSync(claudeProjectsDir(cwd, userDir)).filter((f) => f.endsWith('.jsonl')).length;
   const imported = sessions.filter((s) => s.imported).length;
   console.log(`${total} Claude sessions · ${basename(cwd)} · newest first${imported > 0 ? ` · ${imported} imported` : ''}${total > sessions.length ? ` · showing ${sessions.length}` : ''}`);
   // Local time (ISO strings are UTC — off by the user's offset) and compact
@@ -303,7 +306,7 @@ if (cmd === 'list') {
 } else if (cmd === 'import') {
   let sessionId = rest.find((a) => !a.startsWith('--'));
   if (!sessionId) { console.error('usage: import <sessionId> [--cwd dir] [--limit-turns N]'); process.exit(2); }
-  const projectDir = claudeProjectsDir(cwd);
+  const projectDir = claudeProjectsDir(cwd, userDir);
   let src = join(projectDir, `${sessionId}.jsonl`);
   if (!existsSync(src) && /^[0-9a-f]{4,}$/i.test(sessionId)) {
     // Short-prefix resolution: the list shows 8-char ids; accept any unique
@@ -323,7 +326,7 @@ if (cmd === 'list') {
   console.log(`session id: ${id}`);
   console.log('Open it in the DSH session list (refresh the GUI), or: dsh --profile web --resume ' + id);
 } else {
-  console.error('usage: cc-resume.mjs list|import [<sessionId>] [--cwd dir] [--limit N] [--limit-turns N]');
+  console.error('usage: cc-resume.mjs list|import [<sessionId>] [--cwd dir] [--limit N] [--limit-turns N] [--user-claude-dir dir]');
   process.exit(2);
 }
 }

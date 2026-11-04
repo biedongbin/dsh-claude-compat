@@ -91,9 +91,9 @@ export function claudeProjectFolder(cwd) {
   return `${name.slice(0, MAX_PROJECT_FOLDER)}-${Math.abs(pathHash(cwd)).toString(36)}`;
 }
 
-export function claudeProjectsDir(cwd) {
+export function claudeProjectsDir(cwd, userDir) {
   const folder = projectDirNameOverride() ?? claudeProjectFolder(cwd);
-  return join(resolveUserClaudeDir(), 'projects', folder);
+  return join(resolveUserClaudeDir(userDir), 'projects', folder);
 }
 
 // CLAUDE_CODE_PLUGIN_DIRS: each entry is an absolute path or starts with `~`.

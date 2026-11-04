@@ -16,8 +16,9 @@ import {
   validateClaudeLocationEnv,
 } from '../src/lib.js';
 import { readInstalledClaudePlugins } from '../src/plugins.js';
+import { listClaudeSessions } from '../scripts/cc-resume.mjs';
 import { runPluginCommand } from '../src/plugin-manager.js';
-import { apply } from '../src/index.js';
+import { Config, apply } from '../src/index.js';
 import { withEnv } from './env-helper.js';
 
 const tmp = (prefix) => mkdtempSync(join(tmpdir(), prefix));
@@ -137,6 +138,25 @@ test('project dir name: values Claude Code would ignore fall back to the derived
       assert.equal(claudeProjectsDir('/a/b'), join('/cfg', 'projects', name), name);
     });
   }
+});
+
+test('cc-resume lists sessions from an explicit user dir, not only the env or default dir', async () => {
+  const userDir = tmp('dcc-userdir-');
+  const cwd = '/tmp/dcc.proj_x';
+  const projDir = join(userDir, 'projects', claudeProjectFolder(cwd));
+  mkdirSync(projDir, { recursive: true });
+  const line = { type: 'user', message: { content: 'hello' }, timestamp: '2026-10-28T02:00:00.000Z', cwd };
+  writeFileSync(join(projDir, 'aaaabbbb-1111.jsonl'), `${JSON.stringify(line)}\n`);
+  await withEnv({}, () => {
+    assert.equal(listClaudeSessions(cwd, 5, userDir).length, 1);
+    assert.equal(listClaudeSessions(cwd, 5).length, 0);
+  });
+});
+
+test('Config accepts an empty object: userClaudeDir and pluginsRoot stay unset', () => {
+  const parsed = Config({});
+  assert.equal(parsed.userClaudeDir, undefined);
+  assert.equal(parsed.pluginsRoot, undefined);
 });
 
 // ─── path lists ──────────────────────────────────────────────────────────────
