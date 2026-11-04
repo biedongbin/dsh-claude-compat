@@ -200,14 +200,32 @@ const VERDICT_SCHEMA = {
 const AGENT_INSTRUCTION = '\n\nYou verify a condition for a hook. Investigate with tools that only read. '
   + 'Do not change any file. Finish by returning ok, and a reason when ok is false.';
 
-async function finishActivation(activation, timeout) {
+// The hook's own deadline has passed or been cleared when the cleanup runs, so a subagent that
+// does not stop must not hold the DSH event.
+const DISPOSE_LIMIT_MS = 5000;
+
+// Stop the verifier subagent. A slow stop is not waited for. The child stays muted until it ends.
+async function disposeVerifier(activation, late) {
+  const disposing = activation.dispose().catch((error) => {
+    console.warn(`dsh-claude-compat: agent hook cleanup failed: ${error?.message ?? error}`);
+  });
+  let timer;
+  const limit = new Promise((resolve) => { timer = setTimeout(() => resolve('slow'), DISPOSE_LIMIT_MS); });
+  const done = await Promise.race([disposing.then(() => 'done'), limit]);
+  clearTimeout(timer);
+  if (done === 'slow') {
+    console.warn(`dsh-claude-compat: agent hook cleanup took more than ${DISPOSE_LIMIT_MS}ms; not waiting for it`);
+    late.pending = true;
+    disposing.finally(late.release);
+  }
+}
+
+async function finishActivation(activation, timeout, late) {
   try {
     return await Promise.race([activation.result, timeout.promise]);
   } finally {
     clearTimeout(timeout.timer);
-    await activation.dispose().catch((error) => {
-      console.warn(`dsh-claude-compat: agent hook cleanup failed: ${error?.message ?? error}`);
-    });
+    await disposeVerifier(activation, late);
   }
 }
 
@@ -230,6 +248,8 @@ async function startVerifier(ctx, spec, timeout, late) {
   try {
     return await Promise.race([starting, timeout.promise]);
   } catch (error) {
+    // A start that failed has nothing to stop. Only a start that the timeout cut off may finish later.
+    if (error?.name !== 'TimeoutError') throw error;
     late.pending = true;
     starting
       .then((activation) => activation.dispose())
@@ -269,7 +289,7 @@ async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, age
         outputSchema: VERDICT_SCHEMA,
       },
     }, timeout, late);
-    const answer = agentVerdict(await finishActivation(activation, timeout));
+    const answer = agentVerdict(await finishActivation(activation, timeout, late));
     return answer.verdict === undefined
       ? failedRun(`agent hook: ${answer.error}`)
       : verdictToRun(event, answer.verdict, hook);

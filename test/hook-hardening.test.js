@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { runHookCommand, runHttpHook } from '../src/hook-handlers.js';
 import { createWatcher } from '../src/hook-watch.js';
 import { HOOK_CALL_PREFIX } from '../src/hook-support.js';
-import { fakeAgent, harness, say, tempDir, withWarnings } from './hook-kit.js';
+import { fakeAgent, fakeSubagent, harness, say, tempDir, withWarnings } from './hook-kit.js';
 
 const plain = (command, extra = {}) => ({ type: 'command', command, projectDir: '/tmp', ...extra });
 const allow = async () => ({ kind: 'allow' });
@@ -285,4 +285,19 @@ test('a file that cannot be read now is not reported as removed', () => {
   watcher.poll();
   watcher.close();
   assert.deepEqual(seen, [], 'neither an unlink nor a change');
+});
+
+test('a subagent of the subagent of an agent hook is muted too, at any depth, and forgotten after', () => {
+  const h = harness({ Stop: [{ hooks: [{ type: 'command', command: 'true' }] }] });
+  h.support.hookAgents.add('verifier');
+  const child = fakeSubagent('child', 'verifier');
+  const grandchild = fakeSubagent('grandchild', 'child');
+  assert.equal(h.support.isHookAgent(fakeSubagent('verifier', 'main')), true);
+  assert.equal(h.support.isHookAgent(grandchild), false, 'its parent is not known as a hook agent yet');
+  assert.equal(h.support.isHookAgent(child), true);
+  assert.equal(h.support.isHookAgent(grandchild), true);
+  assert.equal(h.support.isHookAgent(fakeSubagent('other', 'main')), false);
+  h.support.forget(grandchild);
+  h.support.forget(child);
+  assert.equal(h.support.isHookAgent(fakeSubagent('grandchild', 'main')), false);
 });

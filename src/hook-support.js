@@ -51,10 +51,12 @@ export function createSupport(ctx) {
   const pending = new Set();
   // Session ids of the subagents that agent hooks started. No hook runs inside them.
   const hookAgents = new Set();
+  // Session ids of the subagents that those subagents started, at any depth. They are muted too.
+  const hookDescendants = new Set();
   // Ids of the tool calls that mcp_tool hooks make right now. The id of a model tool call comes
   // from the provider, so a prefix cannot tell the two apart: the plugin remembers its own ids.
   const hookCalls = new Set();
-  const forgetters = [];
+  const forgetters = [(id) => hookDescendants.delete(id)];
 
   return {
     hookAgents,
@@ -75,7 +77,14 @@ export function createSupport(ctx) {
       }
     },
 
-    isHookAgent: (agent) => hookAgents.has(sessionIdOf(agent)),
+    isHookAgent(agent) {
+      const id = sessionIdOf(agent);
+      if (hookAgents.has(id) || hookDescendants.has(id)) return true;
+      const parent = agent?.session?.header?.parentSession;
+      if (parent === undefined || !(hookAgents.has(parent) || hookDescendants.has(parent))) return false;
+      hookDescendants.add(id);
+      return true;
+    },
 
     isHookCall: (exec) => typeof exec?.callId === 'string' && hookCalls.has(exec.callId),
 

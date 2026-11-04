@@ -533,3 +533,34 @@ test('substitute lists the placeholders that match no field of the hook input', 
   assert.deepEqual(out, { a: '', b: ['/w', ''] });
   assert.deepEqual(missing, ['tool_inpt.command', 'nope']);
 });
+
+test('a verifier subagent that is slow to stop does not hold the event, and stays muted until it stopped', async () => {
+  let finish;
+  const subagents = {
+    getProvider: () => ({}),
+    startActivation: async (spec) => ({
+      childId: spec.childId,
+      result: Promise.resolve(completed({ ok: true })),
+      dispose: () => new Promise((resolve) => { finish = resolve; }),
+    }),
+  };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [agentHook()] }] }, { ctx: { subagents } });
+  const started = Date.now();
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow));
+  assert.equal(value.kind, 'allow');
+  assert.ok(Date.now() - started < 8000, 'the event ends after the cleanup limit, not when the subagent stops');
+  assert.match(warnings.join('\n'), /agent hook cleanup took more than \d+ms/);
+  assert.equal(h.support.hookAgents.size, 1, 'the child is still muted while it stops');
+  finish();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(h.support.hookAgents.size, 0, 'the child is forgotten after it stopped');
+});
+
+test('a subagent that fails to start is reported as that failure, and has no cleanup message', async () => {
+  const subagents = { getProvider: () => ({}), startActivation: async () => { throw new Error('no slot'); } };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [agentHook()] }] }, { ctx: { subagents } });
+  const { warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow));
+  assert.match(warnings.join('\n'), /agent hook: no slot/);
+  assert.doesNotMatch(warnings.join('\n'), /cleanup failed/);
+  assert.equal(h.support.hookAgents.size, 0);
+});
