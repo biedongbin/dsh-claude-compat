@@ -85,7 +85,7 @@ test('an unknown permissionDecision is logged and the call is not denied or allo
   const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { permissionDecision: 'Deny' } }) }] }] });
   const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', fakeAgent())], allow));
   assert.equal(value.kind, 'allow');
-  assert.match(warnings.join('\n'), /hook output ignored: permissionDecision "Deny" is not allow, deny, ask or defer/);
+  assert.match(warnings.join('\n'), /hook output: permissionDecision "Deny" is not allow, deny, ask or defer/);
 });
 
 // ─── bridges ─────────────────────────────────────────────────────────────────

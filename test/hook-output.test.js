@@ -11,7 +11,7 @@ const json = (value) => JSON.stringify(value);
 
 test('exit 2 blocks the events that can block, with the output as the reason', () => {
   for (const event of ['user-prompt-submit', 'pre-tool-use', 'post-tool-batch', 'subagent-stop', 'task-created',
-    'task-completed', 'stop', 'teammate-idle', 'config-change', 'pre-compact', 'pre-model-switch']) {
+    'task-completed', 'stop', 'teammate-idle', 'config-change', 'pre-compact']) {
     const outcome = interpretRun(event, 'X', run(2, 'not allowed'));
     assert.equal(outcome.blocked, true, event);
     assert.equal(outcome.reason, 'not allowed', event);
@@ -61,13 +61,45 @@ test('continue:false and stopReason are read on any event', () => {
   assert.deepEqual([outcome.stopped, outcome.stopReason], [true, 'done here']);
 });
 
-test('an unknown permissionDecision is a failed outcome that names the value, and is not read as allow', () => {
+test('an unknown permissionDecision is invalid output that names the value, and is not read as allow', () => {
   for (const given of ['Deny', 'block', 'toString', 7]) {
     const stdout = json({ hookSpecificOutput: { permissionDecision: given } });
     const outcome = interpretRun('pre-tool-use', 'PreToolUse', run(0, stdout));
-    assert.deepEqual([outcome.failed, outcome.permission], [true, undefined], String(given));
-    assert.match(outcome.reason, /is not allow, deny, ask or defer/);
+    assert.deepEqual([outcome.failed, outcome.permission], [false, undefined], String(given));
+    assert.match(outcome.invalid, /is not allow, deny, ask or defer/);
   }
+});
+
+test('an exit 2 block survives an invalid permissionDecision in the same run, also after merging', () => {
+  const stdout = json({ hookSpecificOutput: { permissionDecision: 'block' } });
+  const outcome = interpretRun('pre-tool-use', 'PreToolUse', run(2, stdout, { stderr: 'stop' }));
+  assert.equal(outcome.blocked, true);
+  const merged = mergeOutcomes([outcome]);
+  assert.deepEqual([merged.blocked, merged.reason], [true, 'stop']);
+});
+
+test('continue:false survives an invalid permissionDecision in the same run', () => {
+  const stdout = json({ continue: false, stopReason: 'halt', hookSpecificOutput: { permissionDecision: 'nope' } });
+  const merged = mergeOutcomes([interpretRun('pre-tool-use', 'PreToolUse', run(0, stdout))]);
+  assert.deepEqual([merged.stopped, merged.stopReason], [true, 'halt']);
+});
+
+test('problems: broken JSON, a wrong event name, a decision that is not block, and exit 2 on a non-blocking event', () => {
+  const broken = interpretRun('pre-tool-use', 'PreToolUse', run(0, '{"hookSpecificOutput":{"permissionDecision":"deny",}'));
+  assert.match(broken.problems[0], /starts with "\{" but is not valid JSON/);
+  const named = interpretRun('pre-tool-use', 'PreToolUse', run(0, json({ hookSpecificOutput: { hookEventName: 'PostToolUse', permissionDecision: 'deny' } })));
+  assert.match(named.problems[0], /names "PostToolUse", not PreToolUse/);
+  const decision = interpretRun('stop', 'Stop', run(0, json({ decision: 'deny' })));
+  assert.match(decision.problems[0], /decision "deny" is not "block"/);
+  const exit2 = interpretRun('session-start', 'SessionStart', run(2, 'x'));
+  assert.match(exit2.problems[0], /exit code 2 does not block on this event/);
+  assert.deepEqual(interpretRun('pre-tool-use', 'PreToolUse', run(0, json({ decision: 'block' }))).problems, []);
+});
+
+test('output cut at the size limit that is not valid JSON is invalid, so onFailure can act on it', () => {
+  const cut = interpretRun('pre-tool-use', 'PreToolUse', run(0, '{"hookSpecificOutput":{"permissionDec', { truncated: true }));
+  assert.match(cut.invalid, /size limit/);
+  assert.equal(interpretRun('pre-tool-use', 'PreToolUse', run(0, 'plain text', { truncated: true })).invalid, undefined);
 });
 
 test('on exit 2 the reason is stderr, and stdout is the fallback', () => {

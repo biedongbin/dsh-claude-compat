@@ -138,6 +138,58 @@ test('http: a 2xx body that is not a JSON object is a failure', async () => {
   }
 });
 
+test('http: a body over the limit is cancelled at the limit, not read to the end', async () => {
+  let pulled = 0;
+  let cancelled = false;
+  const chunk = new Uint8Array(256 * 1024).fill(97);
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled += 1;
+      controller.enqueue(chunk);
+    },
+    cancel() { cancelled = true; },
+  });
+  const run = await runHttpHook(httpHook(), '{}', { fetchImpl: async () => new Response(body, { status: 200 }) });
+  assert.equal(run.failed, true);
+  assert.match(run.reason, /response body is too large/);
+  assert.equal(cancelled, true);
+  assert.ok(pulled <= 8, `the stream was read ${pulled} times`);
+});
+
+test('http: a declared Content-Length over the limit is refused before any read', async () => {
+  let read = false;
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: new Headers({ 'content-length': String(5 * 1024 * 1024) }),
+    body: { getReader() { read = true; } },
+    text: async () => { read = true; return ''; },
+  });
+  const run = await runHttpHook(httpHook(), '{}', { fetchImpl });
+  assert.match(run.reason, /response body is too large/);
+  assert.equal(read, false);
+});
+
+test('http: a streamed JSON body is read whole, including a character split across chunks', async () => {
+  const bytes = new TextEncoder().encode('{"note":"€"}');
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.subarray(0, 10));
+      controller.enqueue(bytes.subarray(10));
+      controller.close();
+    },
+  });
+  const run = await runHttpHook(httpHook(), '{}', { fetchImpl: async () => new Response(body, { status: 200 }) });
+  assert.deepEqual([run.failed, run.stdout], [false, '{"note":"€"}']);
+});
+
+test('a command that prints more than the limit is marked truncated', async () => {
+  const script = "process.stdout.write('a'.repeat(1_100_000))";
+  const run = await runHookCommand({ type: 'command', command: process.execPath, args: ['-e', script], projectDir: '/tmp' }, '');
+  assert.equal(run.truncated, true);
+  assert.equal(run.stdout.length, 1_048_576);
+  assert.equal((await runHookCommand(plain('printf ok'), '')).truncated, undefined);
+});
+
 test('http: a non-2xx status is a failure that names the status', async () => {
   const run = await runHttpHook(httpHook(), '{}', { fetchImpl: fakeFetch(500, '{"decision":"block"}') });
   assert.deepEqual([run.failed, run.reason], [true, 'http 500']);

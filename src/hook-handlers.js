@@ -53,7 +53,9 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ exitCode, stdout, stderr, failed, reason });
+      // A stream that reached the limit may have been cut, so a decision in it may be lost.
+      const truncated = stdout.length >= OUTPUT_LIMIT || stderr.length >= OUTPUT_LIMIT;
+      resolve({ exitCode, stdout, stderr, failed, reason, ...truncated ? { truncated } : {} });
     };
     const [file, argv] = hook.args === undefined
       ? [hook.shell === 'bash' ? '/bin/bash' : '/bin/sh', ['-c', hook.command]]
@@ -87,8 +89,9 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
 // ----- http -------------------------------------------------------------------
 
 // `$VAR` and `${VAR}` in a header value. A variable that `allowedEnvVars` does
-// not list becomes an empty string, as in Claude Code, so a project's settings
-// cannot read an arbitrary variable into a request.
+// not list becomes an empty string, as in Claude Code. The list comes from the same hook
+// entry, so it limits a typo or a copied header, not a settings file that is hostile: such a
+// file can already run a command hook that reads the environment.
 function interpolateHeader(value, allowed, env) {
   return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (_match, braced, bare) => {
     const name = braced ?? bare;
@@ -130,12 +133,32 @@ function interpretHttpResponse(status, body) {
   return { exitCode: 0, stdout: text, failed: false };
 }
 
-// The body of a response, at most OUTPUT_LIMIT characters. A longer body is an error, so a
-// server cannot fill memory or flood the model.
+// The body of a response, at most OUTPUT_LIMIT bytes. A longer body is an error, so a server
+// cannot fill memory or flood the model. The body is read as a stream and cancelled at the
+// limit, and a declared Content-Length over the limit is refused before any read.
 async function readBody(response) {
-  const text = await response.text();
-  if (text.length > OUTPUT_LIMIT) throw new RangeError('response body is too large');
-  return text;
+  const tooLarge = () => new RangeError('response body is too large');
+  const declared = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declared) && declared > OUTPUT_LIMIT) throw tooLarge();
+  const reader = response.body?.getReader?.();
+  if (reader === undefined) {
+    const text = await response.text();
+    if (text.length > OUTPUT_LIMIT) throw tooLarge();
+    return text;
+  }
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > OUTPUT_LIMIT) {
+      await reader.cancel().catch(() => {});
+      throw tooLarge();
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 /**

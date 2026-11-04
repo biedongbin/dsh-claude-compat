@@ -21,7 +21,6 @@ const EXIT2_BLOCKS = new Set([
   'teammate-idle',
   'config-change',
   'pre-compact',
-  'pre-model-switch',
 ]);
 
 // A top-level `decision: "block"` in JSON output blocks on these events.
@@ -48,29 +47,40 @@ const STDOUT_CONTEXT = new Set([
 // Higher wins when several PreToolUse hooks disagree.
 const PERMISSION_RANK = { deny: 4, defer: 3, ask: 2, allow: 1 };
 
-function jsonObject(stdout) {
+// The JSON object that a run printed, or undefined. Text that starts with `{` and does not
+// parse is reported in `problems`: it is most likely a typo, or output cut at the limit.
+function jsonObject(stdout, problems) {
   const text = stdout.trim();
   if (!text.startsWith('{')) return undefined;
   try {
     const parsed = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : undefined;
-  } catch {
+  } catch (error) {
+    problems.push(`output starts with "{" but is not valid JSON (${error.message}); read as plain text`);
     return undefined;
   }
 }
 
 // `hookSpecificOutput` names its event. A block for another event is dropped,
 // the same as the DSH bridge does, because the schemas are keyed by event.
-function specificOutput(json, claudeName) {
+function specificOutput(json, claudeName, problems) {
   const specific = json?.hookSpecificOutput;
   if (typeof specific !== 'object' || specific === null || Array.isArray(specific)) return {};
-  if (specific.hookEventName !== undefined && specific.hookEventName !== claudeName) return {};
+  if (specific.hookEventName !== undefined && specific.hookEventName !== claudeName) {
+    problems.push(`hookSpecificOutput names ${JSON.stringify(specific.hookEventName)}, not ${claudeName}; it is ignored`);
+    return {};
+  }
   return specific;
 }
 
 function emptyOutcome() {
   return {
     failed: false,
+    // A value in the output that the event does not accept. The run is not a failure, because
+    // an exit code 2 block in the same run still counts.
+    invalid: undefined,
+    // What the hook did wrong, for the log. These do not change the decision.
+    problems: [],
     reason: undefined,
     blocked: false,
     stopped: false,
@@ -110,8 +120,7 @@ function applyJson(outcome, event, json, specific) {
   if (event === 'pre-tool-use') {
     const given = specific.permissionDecision ?? legacyPermission(json);
     if (given !== undefined && !Object.hasOwn(PERMISSION_RANK, given)) {
-      outcome.failed = true;
-      outcome.reason = `permissionDecision "${given}" is not allow, deny, ask or defer`;
+      outcome.invalid = `permissionDecision "${given}" is not allow, deny, ask or defer`;
       return;
     }
     outcome.permission = given;
@@ -142,11 +151,20 @@ export function interpretRun(event, claudeName, run) {
     outcome.reason = run.reason;
     return outcome;
   }
-  const json = jsonObject(run.stdout);
-  const specific = specificOutput(json, claudeName);
+  const json = jsonObject(run.stdout, outcome.problems);
+  const specific = specificOutput(json, claudeName, outcome.problems);
   outcome.specific = specific;
   outcome.contexts = contextsOf(json, specific);
   applyJson(outcome, event, json, specific);
+  if (run.truncated && json === undefined && run.stdout.trim().startsWith('{')) {
+    outcome.invalid = 'output reached the size limit and is not valid JSON, so a decision in it may be lost';
+  }
+  if (json?.decision !== undefined && DECISION_BLOCKS.has(event) && json.decision !== 'block') {
+    outcome.problems.push(`decision ${JSON.stringify(json.decision)} is not "block"; it is ignored`);
+  }
+  if (run.exitCode === 2 && !EXIT2_BLOCKS.has(event)) {
+    outcome.problems.push('exit code 2 does not block on this event; it is read as success');
+  }
   if (run.exitCode === 2 && EXIT2_BLOCKS.has(event)) {
     // Claude Code reads stderr on exit 2. A run with no stderr falls back to stdout.
     const errText = (run.stderr ?? '').trim();

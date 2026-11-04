@@ -179,9 +179,14 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
         }
         const run = await runOne(hook, spec);
         if (run.failed) console.warn(`dsh-claude-compat: ${claudeName} hook failed, ${failureText(run, hook)}`);
-        const outcome = interpretRun(event, claudeName, applyOnFailure(run, hook, event));
-        if (outcome.failed && !run.failed) {
-          console.warn(`dsh-claude-compat: ${claudeName} hook output ignored: ${outcome.reason}`);
+        let outcome = interpretRun(event, claudeName, applyOnFailure(run, hook, event));
+        // `onFailure: "block"` also covers output that the event cannot use, so a guard that
+        // prints a malformed decision does not fail open.
+        if (outcome.invalid !== undefined && !outcome.blocked && !outcome.stopped && hook.onFailure === 'block') {
+          outcome = interpretRun(event, claudeName, applyOnFailure({ ...run, failed: true, reason: outcome.invalid }, hook, event));
+        }
+        for (const problem of [outcome.invalid, ...outcome.problems]) {
+          if (problem !== undefined) console.warn(`dsh-claude-compat: ${claudeName} hook output: ${problem}`);
         }
         outcomes.push(outcome);
       }

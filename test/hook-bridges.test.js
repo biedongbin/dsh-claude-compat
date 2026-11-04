@@ -50,6 +50,24 @@ test('the PreToolUse payload names a native tool the way Claude Code does', asyn
 
 // ─── PreToolUse ──────────────────────────────────────────────────────────────
 
+test('PreToolUse: onFailure block also denies when the hook prints a malformed decision', async () => {
+  const bad = say({ hookSpecificOutput: { permissionDecision: 'block' } });
+  const guard = listenersFor({ PreToolUse: [{ matcher: '.*', hooks: [{ command: bad, onFailure: 'block' }] }] });
+  const { value } = await withWarnings(() => guard.get('tools/pre-execute')(preCall('Read', {}), allow));
+  assert.equal(value.kind, 'deny');
+  const lax = listenersFor({ PreToolUse: [{ matcher: '.*', hooks: [{ command: bad }] }] });
+  const { value: allowed, warnings } = await withWarnings(() => lax.get('tools/pre-execute')(preCall('Read', {}), allow));
+  assert.equal(allowed.kind, 'allow');
+  assert.match(warnings.join('\n'), /permissionDecision "block" is not allow/);
+});
+
+test('PreToolUse: an exit 2 block is not lost when the same run prints a malformed decision', async () => {
+  const command = `printf '%s' '${JSON.stringify({ hookSpecificOutput: { permissionDecision: 'block' } })}'; echo stop >&2; exit 2`;
+  const listeners = listenersFor({ PreToolUse: [{ matcher: '.*', hooks: [{ command }] }] });
+  const { value } = await withWarnings(() => listeners.get('tools/pre-execute')(preCall('Read', {}), allow));
+  assert.equal(value.kind, 'deny');
+});
+
 test('PreToolUse: no hook objection delegates to next(), so later listeners still run', async () => {
   const listeners = listenersFor({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 0' }] }] });
   const decision = await listeners.get('tools/pre-execute')(preCall('Read', {}), async () => ({ kind: 'cancel' }));
