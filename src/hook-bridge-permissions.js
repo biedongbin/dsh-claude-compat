@@ -6,7 +6,7 @@
 // group of tool results, which is the point before the next model call.
 
 import { claudeToolName } from './hook-spec.js';
-import { HOOK_CALL_PREFIX, sessionIdOf } from './hook-support.js';
+import { sessionIdOf } from './hook-support.js';
 import { failureText, responseOf } from './hook-bridge-tools.js';
 
 // DSH has no event that groups parallel calls. The log of calls whose input an
@@ -39,13 +39,20 @@ function permissionDecision(outcome) {
 
 async function onApproval(engine, support, calls, req, next) {
   // The call of a hook asks nobody for permission through the hooks again.
-  if (typeof req.callId === 'string' && req.callId.startsWith(HOOK_CALL_PREFIX)) return next();
+  if (support.isHookCall({ callId: req.callId })) return next();
   const recorded = calls.get(req.callId);
   if (recorded === undefined) {
     console.warn(`dsh-claude-compat: no input is known for the approval of ${req.toolName}; PermissionRequest hooks get an empty tool_input`);
   }
   const call = recorded ?? { name: req.toolName, input: {} };
-  const fields = { tool_name: claudeToolName(req.toolName), tool_input: call.input, permission_suggestions: [] };
+  // `reason` is why DSH asks. A sandbox escalation puts its justification there, so a hook can
+  // tell it from a plain approval of the same tool.
+  const fields = {
+    tool_name: claudeToolName(req.toolName),
+    tool_input: call.input,
+    permission_suggestions: [],
+    ...typeof req.reason === 'string' && req.reason !== '' ? { reason: req.reason } : {},
+  };
   const outcome = await engine.fire('permission-request', 'PermissionRequest', {
     subject: req.toolName,
     agent: req.agent,

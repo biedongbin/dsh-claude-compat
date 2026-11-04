@@ -23,6 +23,16 @@ test('PermissionRequest: an allow decision answers the request without asking ne
   assert.equal(asked, false);
 });
 
+test('PermissionRequest: the reason of a sandbox escalation reaches the hook', async () => {
+  const dir = tempDir('dcc-reason-');
+  const file = join(dir, 'in.json');
+  const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: `cat > "${file}"` }] }] });
+  await h.dispatch('approval/request', [approval(fakeAgent(), { reason: 'needs network access' })], async () => 'allowed-once');
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).reason, 'needs network access');
+  await h.dispatch('approval/request', [approval(fakeAgent())], async () => 'allowed-once');
+  assert.equal('reason' in JSON.parse(readFileSync(file, 'utf8')), false, 'no reason, no field');
+});
+
 test('PermissionRequest: a deny decision rejects and logs its message', async () => {
   const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: decide({ behavior: 'deny', message: 'no way' }) }] }] });
   const { value, warnings } = await withWarnings(() => h.dispatch('approval/request', [approval(fakeAgent())], async () => 'allowed-once'));

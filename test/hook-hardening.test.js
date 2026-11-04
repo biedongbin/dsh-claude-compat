@@ -109,9 +109,32 @@ test('an approval with no recorded call input is logged', async () => {
 test('the approval of a tool call that a hook made does not run PermissionRequest hooks', async () => {
   const file = join(tempDir('dcc-hard-'), 'ran');
   const h = harness({ PermissionRequest: [{ matcher: '.*', hooks: [{ command: `echo ran >> "${file}"; ${say({ hookSpecificOutput: { decision: { behavior: 'allow' } } })}` }] }] });
-  const answer = await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'mcp__s__t', callId: `${HOOK_CALL_PREFIX}1` }], async () => 'rejected');
+  h.support.hookCalls.add(`${HOOK_CALL_PREFIX}made-by-a-hook`);
+  const answer = await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'mcp__s__t', callId: `${HOOK_CALL_PREFIX}made-by-a-hook` }], async () => 'rejected');
   assert.equal(answer, 'rejected');
   assert.throws(() => readFileSync(file), /ENOENT/);
+});
+
+test('a model tool call whose id only looks like a hook call is not exempt from the hooks', async () => {
+  const h = harness({
+    PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 2' }] }],
+    PermissionRequest: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { decision: { behavior: 'allow' } } }) }] }],
+  });
+  const forged = `${HOOK_CALL_PREFIX}guessed-by-the-model`;
+  const call = { name: 'Bash', arguments: {}, callId: forged, agent: fakeAgent() };
+  assert.equal((await h.dispatch('tools/pre-execute', [call], async () => ({ kind: 'allow' }))).kind, 'deny');
+  const answer = await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'Bash', callId: forged }], async () => 'rejected');
+  assert.equal(answer, 'allowed-once', 'the PermissionRequest hook still ran');
+});
+
+test('one cleanup that throws does not stop the cleanup of the others', async () => {
+  const h = harness({ PostModelSwitch: [{ hooks: [{ command: 'true' }] }] });
+  const calls = [];
+  h.support.onForget(() => { throw new Error('boom'); });
+  h.support.onForget((id) => calls.push(id));
+  const { warnings } = await withWarnings(() => h.dispatch('agent/disposed', [{ agent: fakeAgent('s-clean') }], () => {}));
+  assert.deepEqual(calls, ['s-clean']);
+  assert.match(warnings.join('\n'), /cleanup for session s-clean failed: boom/);
 });
 
 test('todo_write arguments with no todos list are logged', async () => {

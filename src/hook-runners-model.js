@@ -77,27 +77,38 @@ function abortReason(error, timeoutMs) {
 
 // ToolRuntime.get(name, scope) sees global tools, and the tools of the scope it is given.
 // A tool that an agent connected for itself is invisible without that agent.
-async function runMcpToolHook(ctx, hook, payload, { timeoutMs, agent }) {
+async function runMcpToolHook(ctx, support, hook, payload, { timeoutMs, agent }) {
   const name = mcpToolName(hook.server, hook.tool);
   const scope = agent?.session === undefined ? undefined : agent;
   if (ctx.tools?.get?.(name, scope) === undefined) {
     return failedRun(`MCP tool ${name} is not available: the server is not configured, or still connecting`);
   }
+  const callId = `${HOOK_CALL_PREFIX}${randomUUID()}`;
+  const abort = new AbortController();
+  const guard = timeoutGuard(timeoutMs, abort);
+  support.hookCalls?.add(callId);
   try {
     const input = substitute(hook.input ?? {}, JSON.parse(payload));
-    // ToolRuntime.execute takes one call and returns one result.
-    const result = await ctx.tools.execute({
-      callId: `${HOOK_CALL_PREFIX}${randomUUID()}`,
-      name,
-      arguments: input,
-      signal: AbortSignal.timeout(timeoutMs),
-      ...scope === undefined ? {} : { agent: scope },
-    });
+    // ToolRuntime.execute takes one call and returns one result. A tool that ignores the signal
+    // must not hold the DSH event, so the guard also ends the wait.
+    const result = await Promise.race([
+      ctx.tools.execute({
+        callId,
+        name,
+        arguments: input,
+        signal: abort.signal,
+        ...scope === undefined ? {} : { agent: scope },
+      }),
+      guard.promise,
+    ]);
     const text = blocksToText(result.content);
     if (result.isError) return failedRun(`MCP tool ${name} failed: ${text}`);
     return { exitCode: 0, stdout: text, failed: false };
   } catch (error) {
     return failedRun(`MCP tool ${name}: ${abortReason(error, timeoutMs)}`);
+  } finally {
+    clearTimeout(guard.timer);
+    support.hookCalls?.delete(callId);
   }
 }
 
@@ -136,18 +147,25 @@ async function runPromptHook(ctx, hook, payload, { timeoutMs, event, agent }) {
   const target = modelTarget(agent, hook.model);
   if (target === undefined) return failedRun('no model is known for this prompt hook; set "model" as provider/model');
   if (typeof ctx.llm?.stream !== 'function') return failedRun('the DSH model service is not available');
+  const abort = new AbortController();
+  const guard = timeoutGuard(timeoutMs, abort);
   try {
     const assembler = new BlockAssembler();
     const wantsImpossible = event === 'stop' || event === 'subagent-stop';
-    for await (const chunk of ctx.llm.stream({
-      provider: target.provider,
-      model: target.model,
-      system: PROMPT_SYSTEM + (wantsImpossible ? IMPOSSIBLE_NOTE : ''),
-      messages: [{ role: 'user', content: [{ type: 'text', text: buildPrompt(hook.prompt, payload) }] }],
-      maxTokens: PROMPT_MAX_TOKENS,
-      temperature: 0,
-      signal: AbortSignal.timeout(timeoutMs),
-    })) assembler.push(chunk);
+    const consume = (async () => {
+      for await (const chunk of ctx.llm.stream({
+        provider: target.provider,
+        model: target.model,
+        system: PROMPT_SYSTEM + (wantsImpossible ? IMPOSSIBLE_NOTE : ''),
+        messages: [{ role: 'user', content: [{ type: 'text', text: buildPrompt(hook.prompt, payload) }] }],
+        maxTokens: PROMPT_MAX_TOKENS,
+        temperature: 0,
+        signal: abort.signal,
+      })) assembler.push(chunk);
+    })();
+    consume.catch(() => {});
+    // An adapter that ignores the signal must not hold the DSH event, so the guard ends the wait.
+    await Promise.race([consume, guard.promise]);
     const { finish } = assembler;
     if (finish.kind === 'error' || finish.kind === 'aborted') {
       return failedRun(`model call ${finish.kind === 'aborted' ? 'was cancelled or timed out' : 'failed'}: ${finish.failure?.message ?? finish.kind}`);
@@ -156,6 +174,8 @@ async function runPromptHook(ctx, hook, payload, { timeoutMs, event, agent }) {
     return parsed.ok ? verdictToRun(event, parsed.verdict, hook) : failedRun(`prompt hook answer: ${parsed.error}`);
   } catch (error) {
     return failedRun(`prompt hook: ${abortReason(error, timeoutMs)}`);
+  } finally {
+    clearTimeout(guard.timer);
   }
 }
 
@@ -195,13 +215,18 @@ function timeoutGuard(timeoutMs, abort) {
   return guard;
 }
 
-// Start the subagent. When the timeout wins, a late start is still stopped.
-async function startVerifier(ctx, spec, timeout) {
+// Start the subagent. When the timeout wins, a late start is still stopped. `late.release` runs
+// when that has finished, so the child stays muted until it is gone.
+async function startVerifier(ctx, spec, timeout, late) {
   const starting = ctx.subagents.startActivation(spec);
   try {
     return await Promise.race([starting, timeout.promise]);
   } catch (error) {
-    starting.then((late) => late.dispose()).catch(() => {});
+    late.pending = true;
+    starting
+      .then((activation) => activation.dispose())
+      .catch((failure) => console.warn(`dsh-claude-compat: agent hook cleanup failed: ${failure?.message ?? failure}`))
+      .finally(late.release);
     throw error;
   }
 }
@@ -222,6 +247,7 @@ async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, age
   support.hookAgents.add(childId);
   const abort = new AbortController();
   const timeout = timeoutGuard(timeoutMs, abort);
+  const late = { pending: false, release: () => support.hookAgents.delete(childId) };
   try {
     const activation = await startVerifier(ctx, {
       provider: SUBAGENT_PROVIDER,
@@ -234,7 +260,7 @@ async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, age
         prompt: [{ type: 'text', text: buildPrompt(hook.prompt, payload) + AGENT_INSTRUCTION }],
         outputSchema: VERDICT_SCHEMA,
       },
-    }, timeout);
+    }, timeout, late);
     const answer = agentVerdict(await finishActivation(activation, timeout));
     return answer.verdict === undefined
       ? failedRun(`agent hook: ${answer.error}`)
@@ -243,7 +269,7 @@ async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, age
     return failedRun(`agent hook: ${abortReason(error, timeoutMs)}`);
   } finally {
     clearTimeout(timeout.timer);
-    support.hookAgents.delete(childId);
+    if (!late.pending) late.release();
   }
 }
 
@@ -255,7 +281,7 @@ async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, age
  */
 export function createModelRunners(ctx, support) {
   return {
-    mcp_tool: (hook, payload, options) => runMcpToolHook(ctx, hook, payload, options),
+    mcp_tool: (hook, payload, options) => runMcpToolHook(ctx, support, hook, payload, options),
     prompt: (hook, payload, options) => runPromptHook(ctx, hook, payload, options),
     agent: (hook, payload, options) => runAgentHook(ctx, support, hook, payload, options),
   };

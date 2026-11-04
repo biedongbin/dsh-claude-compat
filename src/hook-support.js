@@ -38,10 +38,14 @@ export function createSupport(ctx) {
   const pending = new Set();
   // Session ids of the subagents that agent hooks started. No hook runs inside them.
   const hookAgents = new Set();
+  // Ids of the tool calls that mcp_tool hooks make right now. The id of a model tool call comes
+  // from the provider, so a prefix cannot tell the two apart: the plugin remembers its own ids.
+  const hookCalls = new Set();
   const forgetters = [];
 
   return {
     hookAgents,
+    hookCalls,
 
     /** Register a cleanup that runs with the session id when a session's agent is disposed. */
     onForget(fn) {
@@ -50,12 +54,17 @@ export function createSupport(ctx) {
 
     forget(agent) {
       const id = sessionIdOf(agent);
-      for (const fn of forgetters) fn(id);
+      // One failing cleanup must not leave the state of the others behind.
+      for (const fn of forgetters) {
+        try { fn(id); } catch (error) {
+          console.warn(`dsh-claude-compat: cleanup for session ${id} failed: ${error?.message ?? error}`);
+        }
+      }
     },
 
     isHookAgent: (agent) => hookAgents.has(sessionIdOf(agent)),
 
-    isHookCall: (exec) => typeof exec?.callId === 'string' && exec.callId.startsWith(HOOK_CALL_PREFIX),
+    isHookCall: (exec) => typeof exec?.callId === 'string' && hookCalls.has(exec.callId),
 
     // File watching for FileChanged. registerFileHooks replaces this with the real controller.
     files: { track() {}, release() {}, setDynamic() {}, cwdChanged() {} },

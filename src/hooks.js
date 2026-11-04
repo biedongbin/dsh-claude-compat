@@ -162,5 +162,5 @@ export function registerHooks(ctx, config, { runners, intervalMs } = {}) {
   registerModelHooks(ctx, engine, support);
   registerTeamHooks(ctx, engine, support);
   registerConfigHooks(ctx, engine, support, { files: settingsFiles(config), intervalMs });
-  return { engine, instructionsLoaded: createInstructionsNotifier(engine, support) };
+  return { engine, support, instructionsLoaded: createInstructionsNotifier(engine, support) };
 }

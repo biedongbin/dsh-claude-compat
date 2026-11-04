@@ -70,6 +70,7 @@ export function harness(hooks, options = {}) {
     dir,
     instructionsLoaded: hooksApi.instructionsLoaded,
     engine: hooksApi.engine,
+    support: hooksApi.support,
     has: (name) => listeners.has(name),
     // Wait for the hook runs that are still going. Other effects, such as file watches, stay on.
     drain: () => Promise.all(effects.filter((e) => /drain hook runs/.test(e.name)).map((e) => e.teardown())),

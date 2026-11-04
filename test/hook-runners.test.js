@@ -192,9 +192,32 @@ test('an mcp_tool hook that throws, or runs too long, is a failed run', async ()
 
 test('the tool call of an mcp_tool hook does not start the hooks again', async () => {
   const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 2' }] }] });
+  h.support.hookCalls.add(`${HOOK_CALL_PREFIX}abc`);
   const own = { name: 'mcp__srv__scan', arguments: {}, callId: `${HOOK_CALL_PREFIX}abc`, agent: modelAgent() };
   assert.equal((await h.dispatch('tools/pre-execute', [own], allow)).kind, 'allow');
   assert.equal((await h.dispatch('tools/pre-execute', [{ ...own, callId: 'other' }], allow)).kind, 'deny');
+});
+
+test('an mcp_tool hook marks its own call id while it runs, and clears it afterwards', async () => {
+  let seen;
+  let h;
+  const tools = fakeTools((input) => {
+    seen = h.support.hookCalls.has(input.callId);
+    return toolResult('ok');
+  });
+  h = harness({ PreToolUse: [{ matcher: '.*', hooks: [mcpHook()] }] }, { ctx: { tools } });
+  await h.dispatch('tools/pre-execute', [call('Read', modelAgent())], allow);
+  assert.equal(seen, true);
+  assert.equal(h.support.hookCalls.size, 0);
+});
+
+test('an mcp_tool hook whose tool ignores the abort signal still ends at its deadline', async () => {
+  const stuck = fakeTools(() => new Promise(() => {}));
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [mcpHook({ timeout: 0.05 })] }] }, { ctx: { tools: stuck } });
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', modelAgent())], allow));
+  assert.equal(value.kind, 'allow');
+  assert.match(warnings.join('\n'), /timed out after 50ms/);
+  assert.equal(h.support.hookCalls.size, 0);
 });
 
 test('an mcp_tool hook runs without an agent, and sends no agent to the tool service', async () => {
@@ -392,6 +415,14 @@ test('an agent hook with no spawn provider, or no running agent, fails with a re
   assert.equal(subagents.started.length, 0);
 });
 
+test('a prompt hook whose model call ignores the abort signal still ends at its deadline', async () => {
+  const llm = { stream: () => (async function* hang() { await new Promise(() => {}); yield undefined; })() };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [promptHook({ timeout: 0.05 })] }] }, { ctx: { llm } });
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow));
+  assert.equal(value.kind, 'allow');
+  assert.match(warnings.join('\n'), /prompt hook: timed out after 50ms/);
+});
+
 test('an agent hook that runs too long is stopped and reported', async () => {
   const subagents = fakeSubagents(() => new Promise(() => {}));
   const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [agentHook({ timeout: 0.05 })] }] }, { ctx: { subagents } });
@@ -414,6 +445,30 @@ test('an agent hook whose subagent is slow to start is still stopped when it arr
   await withWarnings(() => h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow));
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.deepEqual(disposed, ['late']);
+});
+
+test('a late subagent stays muted until it is disposed, and a failed disposal is logged', async () => {
+  let release;
+  const subagents = {
+    getProvider: () => ({}),
+    startActivation: (spec) => new Promise((resolve) => {
+      setTimeout(() => resolve({
+        childId: spec.childId,
+        result: new Promise(() => {}),
+        dispose: () => new Promise((_done, fail) => { release = () => fail(new Error('dispose broke')); }),
+      }), 80);
+    }),
+  };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [agentHook({ timeout: 0.02 })] }] }, { ctx: { subagents } });
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('tools/pre-execute', [call('Bash', modelAgent())], allow);
+    assert.equal(h.support.hookAgents.size, 1, 'the child is still muted while it starts and stops');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  assert.equal(h.support.hookAgents.size, 0, 'the child is forgotten after its disposal settled');
+  assert.match(warnings.join('\n'), /agent hook cleanup failed: dispose broke/);
 });
 
 test('no hook runs inside the subagent of an agent hook, and the subagent is forgotten after the run', async () => {
