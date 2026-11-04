@@ -134,7 +134,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `pluginSkillRank` | `750` | Provider rank for plugin content (the long tail — everything else wins) |
 | `pluginSkillSource` | `claude-plugin` | Source tag for plugin catalog entries |
 | `pluginsRoot` | unset | Plugin-marketplace root (`installed_plugins.json` + `cache/`). Unset means `CLAUDE_CODE_PLUGIN_CACHE_DIR`, then `<user dir>/plugins` |
-| `enablePluginMcp` | `false` | Mount plugin-declared MCP servers (opt-in; requires `enablePlugins` and `enableMcp`) |
+| `enablePluginMcp` | `false` | Mount plugin-declared MCP servers (opt-in; requires `enablePlugins` and `enableMcp`). This covers every plugin the plugin catalog reads, including plugins from `CLAUDE_CODE_PLUGIN_SEED_DIR` and `CLAUDE_CODE_PLUGIN_DIRS` |
 | `enablePluginManager` | `true` | Register the `/cc-plugin`, `/reload-cc-plugins`, `/reload-skills` management skills |
 | `pluginManagerRank` | `40` | Rank for the built-in management skills (top of the catalog) |
 

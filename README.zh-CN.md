@@ -134,7 +134,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `pluginSkillRank` | `750` | 插件内容的 provider 排名（长尾 —— 其他一切优先） |
 | `pluginSkillSource` | `claude-plugin` | 插件目录条目来源标签 |
 | `pluginsRoot` | `~/.claude/plugins` | 插件市场根目录（`installed_plugins.json` + `cache/`） |
-| `enablePluginMcp` | `false` | 挂载插件声明的 MCP 服务器（需显式开启；要求 `enablePlugins` 与 `enableMcp`） |
+| `enablePluginMcp` | `false` | 挂载插件声明的 MCP 服务器（需显式开启；要求 `enablePlugins` 与 `enableMcp`）。范围包含插件目录读取到的所有插件，其中有来自 `CLAUDE_CODE_PLUGIN_SEED_DIR` 和 `CLAUDE_CODE_PLUGIN_DIRS` 的插件 |
 | `enablePluginManager` | `true` | 注册 `/cc-plugin`、`/reload-cc-plugins`、`/reload-skills` 管理 skill |
 | `pluginManagerRank` | `40` | 内置管理 skill 的 rank（catalog 顶部） |
 

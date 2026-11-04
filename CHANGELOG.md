@@ -12,7 +12,10 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ### Changed
 - A relative `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `CLAUDE_CODE_PLUGIN_SEED_DIR` stops activation with one error line that names the variable. Startup checks only the variables that the effective configuration uses, so an explicit `userClaudeDir` or `pluginsRoot` hides a bad variable.
 - `CLAUDE_CODE_PLUGIN_DIRS` accepts absolute and `~` entries and skips other entries with a warning, as Claude Code does.
-- A plugin from `CLAUDE_CODE_PLUGIN_DIRS` replaces an installed plugin with the same manifest name, as a whole.
+- A plugin from `CLAUDE_CODE_PLUGIN_DIRS` replaces an installed plugin with the same manifest name, as a whole. The plugin logs one warning for each replacement.
+- The plugin now logs a warning for an unreadable `plugin.json`, an `installed_plugins.json` without a `plugins` object, and a seed plugin that is missing. A seed record can no longer point the cache lookup outside `<seed>/cache`.
+- `/cc-resume` list and import read the configured `userClaudeDir`, as the skill catalog does. The `--user-claude-dir` flag carries it to the script.
+- A relative `CLAUDE_CODE_PLUGIN_SEED_DIR` no longer stops activation when `enablePlugins` is `false`.
 - A plugin seed mounted at another path than its build path now loads: plugin files are read from the current seed root.
 - `CLAUDE_CODE_PROJECT_DIR_NAME` applies only with `CLAUDE_CONFIG_DIR`, and only for 1 to 64 letters, digits, hyphens, or underscores that are not a Windows device name. Other values are ignored, not an error.
 - `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.

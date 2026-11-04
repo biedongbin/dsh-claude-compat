@@ -72,14 +72,6 @@ function locations(config = {}) {
   };
 }
 
-function pluginsRoot() {
-  return locations().pluginsDir;
-}
-
-function userSettingsPath() {
-  return locations().settingsPath;
-}
-
 function backupFile(path) {
   if (!existsSync(path)) return undefined;
   const backup = `${path}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
@@ -117,7 +109,7 @@ export function parsePluginList(output) {
 }
 
 /** Pure: list plugin entries from installed_plugins.json + enabledPlugins map. */
-export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
+export function listFromDisk(pluginsDir, settingsPath) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { version: 2, plugins: {} });
   const settings = readJson(settingsPath, {});
   const enabledMap = settings.enabledPlugins ?? {};
@@ -140,7 +132,7 @@ export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = userSett
 }
 
 /** Pure: search marketplace.json catalogs under marketplaces/ for a term. */
-export function searchMarketplaces(term, pluginsDir = pluginsRoot()) {
+export function searchMarketplaces(term, pluginsDir) {
   const marketRoot = join(pluginsDir, 'marketplaces');
   const needle = String(term ?? '').toLowerCase();
   const hits = [];
@@ -172,7 +164,7 @@ export function searchMarketplaces(term, pluginsDir = pluginsRoot()) {
  * already present under marketplaces/<name>; copy plugin source into cache and
  * register in installed_plugins.json + enabledPlugins.
  */
-export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
+export async function fallbackInstall(installId, pluginsDir, settingsPath) {
   const [pluginName, marketName] = String(installId).split('@');
   if (!marketName) return { ok: false, error: 'fallback install needs name@marketplace (marketplace repo must already be cloned)' };
   const marketJson = join(pluginsDir, 'marketplaces', marketName, '.claude-plugin', 'marketplace.json');
@@ -208,7 +200,7 @@ export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), set
 }
 
 /** Fallback enable/disable: flip enabledPlugins in settings.json (backed up). */
-export function fallbackToggle(pluginRef, enable, pluginsDir = pluginsRoot(), settingsPath = userSettingsPath()) {
+export function fallbackToggle(pluginRef, enable, pluginsDir, settingsPath) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { plugins: {} });
   const keys = Object.keys(installed.plugins ?? {});
   const key = keys.find((k) => k === pluginRef || k.startsWith(`${pluginRef}@`));
