@@ -57,7 +57,9 @@ import {
 } from './aliases.js';
 import { registerHooks } from './hooks.js';
 import { mountMcpServers, mountMcpConfigs } from './mcp.js';
+import { mountSessionMcpServers } from './mcp-project.js';
 import { registerManagerCommands } from './commands.js';
+import { NativeClaudeProvider } from './native-provider.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
   CLAUDE_COMPAT_SOURCE_KIND,
@@ -74,6 +76,8 @@ export const name = 'claude-compat';
 export const inject = ['skills'];
 
 export const Config = z.object({
+  nativeRealm: z.boolean().default(false),
+  skillDepth: z.number().default(3),
   projectRootMarkers: z.array(z.string()).default(['.git']),
   // DSH dedupes by rank ascending (lower wins). 50 beats the DSH-native
   // project roots (100/200) and the bundled root (600) — project .claude wins
@@ -89,6 +93,9 @@ export const Config = z.object({
   enableRules: z.boolean().default(true),
   enableSkills: z.boolean().default(true),
   enableMcp: z.boolean().default(true),
+  mcpScope: z.union(['launch', 'session']).default('launch'),
+  mcpSources: z.array(z.string()).default(['claude']),
+  mcpExcludedServers: z.array(z.string()).default([]),
   mcpFailOnStartupError: z.boolean().default(false),
   enableHooks: z.boolean().default(true),
   hooksTimeoutMs: z.number().default(60000),
@@ -138,6 +145,7 @@ Notes:
 - \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`;
 
 export function apply(ctx, config = {}) {
+  if(config.nativeRealm===true&&(config.enableRules!==false||config.enableHooks!==false||config.enablePluginManager!==false||config.enablePluginMcp===true))throw new Error('Native realm requires the sole rules/hooks dispatchers and disables legacy Host plugin management/MCP');
   // One-shot "found this useful? star it" nudge, surfaced exactly where the
   // value lands: the first profile activation of this process.
   try {
@@ -151,7 +159,9 @@ export function apply(ctx, config = {}) {
   if (config.enableSkills !== false) {
     let provider;
     ctx.skills.registerProvider((control) => {
-      provider = new ClaudeCompatSkillProvider(ctx, control, config);
+      provider = config.nativeRealm === true
+        ? new NativeClaudeProvider(ctx, control, config)
+        : new ClaudeCompatSkillProvider(ctx, control, config);
       return provider;
     });
     // Native human commands (host-executed, zero model tokens; see
@@ -169,8 +179,9 @@ export function apply(ctx, config = {}) {
     registerHooks(ctx, config);
   }
   if (config.enableMcp !== false) {
-    // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
-    mountMcpServers(ctx, config).catch((error) => {
+    // Legacy launch scope remains the default; Desktop can select per-session discovery.
+    const mount = config.nativeRealm===true||config.mcpScope === 'session' ? mountSessionMcpServers : mountMcpServers;
+    mount(ctx, config).catch((error) => {
       console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
     });
     if (config.enablePlugins !== false && config.enablePluginMcp === true) {
