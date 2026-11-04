@@ -97,9 +97,13 @@ function mcpToolProblem(raw) {
   return undefined;
 }
 
+// `provider/model`, or a model name that the session provider serves. Neither part may be empty.
+const MODEL_FORMAT = /^(?:[^/\s]+\/)?[^/\s]+$/;
+
 function promptProblem(raw) {
   if (!nonEmptyString(raw.prompt)) return 'prompt is missing';
   if (raw.model !== undefined && !nonEmptyString(raw.model)) return 'model must be a non-empty string';
+  if (raw.model !== undefined && !MODEL_FORMAT.test(raw.model.trim())) return 'model must be "provider/model" or a model name';
   return undefined;
 }
 
@@ -164,8 +168,19 @@ function fieldProblem(raw, type, event) {
 }
 
 // Notes name a field that is accepted but has no effect.
+// Every field of a handler that this plugin reads, or that Claude Code documents and this plugin
+// ignores on purpose. Any other key is most likely a typo, such as `onfailure` or `timeOut`.
+const KNOWN_FIELDS = new Set([
+  'type', 'command', 'args', 'shell', 'url', 'headers', 'allowedEnvVars', 'server', 'tool', 'input',
+  'prompt', 'model', 'continueOnBlock', 'if', 'timeout', 'async', 'asyncRewake', 'onFailure',
+  'statusMessage', 'once',
+]);
+
 function notesFor(raw, event) {
   const notes = [];
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_FIELDS.has(key)) notes.push(`unknown field "${key}" is ignored`);
+  }
   const background = raw.async === true || raw.asyncRewake === true;
   if (raw.onFailure !== undefined && NO_ONFAILURE_EVENTS.has(event)) {
     notes.push(`onFailure has no effect on ${event}; ignored`);

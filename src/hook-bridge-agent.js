@@ -8,10 +8,20 @@ import { SUBAGENT_TYPE, blocksToText, isSubagent, sessionIdOf } from './hook-sup
 
 const DEFAULT_STOP_CAP = 8;
 
+// The value is a plain run of decimal digits. Number() would also accept "0x10", "1e3" and " 5 ".
+const STOP_CAP_FORMAT = /^[1-9][0-9]{0,8}$/;
+let warnedStopCap = false;
+
 /** Consecutive Stop continuations allowed (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, default 8). */
 export function stopCap(env = process.env) {
-  const cap = Number(env.CLAUDE_CODE_STOP_HOOK_BLOCK_CAP);
-  return Number.isInteger(cap) && cap > 0 ? cap : DEFAULT_STOP_CAP;
+  const given = env.CLAUDE_CODE_STOP_HOOK_BLOCK_CAP;
+  if (given === undefined || given === '') return DEFAULT_STOP_CAP;
+  if (STOP_CAP_FORMAT.test(given)) return Number(given);
+  if (!warnedStopCap) {
+    warnedStopCap = true;
+    console.warn(`dsh-claude-compat: CLAUDE_CODE_STOP_HOOK_BLOCK_CAP must be a positive whole number, got "${given}"; using ${DEFAULT_STOP_CAP}`);
+  }
+  return DEFAULT_STOP_CAP;
 }
 
 // Claude Code error types, from the failure codes of the DSH LLM layer.

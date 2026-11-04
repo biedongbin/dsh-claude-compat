@@ -138,9 +138,17 @@ test('Stop: a stop with no objection starts the count again', async () => {
 
 test('stopCap reads the environment variable and ignores a value that is not a positive integer', () => {
   assert.equal(stopCap({ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: '3' }), 3);
-  for (const bad of [undefined, '', '0', '-2', '1.5', 'x']) {
+  for (const bad of [undefined, '', '0', '-2', '1.5', 'x', '0x10', '1e3', ' 5 ', '+5', '05', '5.0', '1234567890']) {
     assert.equal(stopCap({ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: bad }), 8, String(bad));
   }
+});
+
+test('stopCap logs a value it cannot use, once', async () => {
+  const { warnings } = await withWarnings(() => {
+    stopCap({ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: 'many' });
+    stopCap({ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: 'lots' });
+  });
+  assert.ok(warnings.length <= 1, `${warnings.length} warnings`);
 });
 
 // ─── StopFailure ─────────────────────────────────────────────────────────────

@@ -66,14 +66,22 @@ function warnAt(path, message) {
 
 function applySettingsFile(combined, path, projectDir) {
   let raw;
-  try { raw = readFileSync(path, 'utf8'); } catch { return; }
+  try { raw = readFileSync(path, 'utf8'); } catch (error) {
+    // A missing file is normal. Any other failure drops every hook of the file, so it is logged.
+    if (error?.code !== 'ENOENT') warnAt(path, `cannot read the settings file (${error?.code ?? error?.message}); its hooks are not loaded`);
+    return;
+  }
   let parsed;
   try { parsed = JSON.parse(raw); } catch {
     warnAt(path, 'unparseable settings.json');
     return;
   }
   const hooks = parsed?.hooks;
-  if (typeof hooks !== 'object' || hooks === null || Array.isArray(hooks)) return;
+  if (hooks !== undefined && (typeof hooks !== 'object' || hooks === null || Array.isArray(hooks))) {
+    warnAt(path, '"hooks" must be an object keyed by event name, skipped');
+    return;
+  }
+  if (hooks === undefined) return;
   for (const [eventName, entries] of Object.entries(hooks)) {
     const event = CLAUDE_EVENTS[eventName];
     if (event === undefined) {

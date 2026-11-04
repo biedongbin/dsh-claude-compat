@@ -11,6 +11,24 @@ function parse(raw, event = 'pre-tool-use') {
 
 // ─── command handlers ────────────────────────────────────────────────────────
 
+test('an unknown field is noted, so a typo such as onfailure does not pass silently', () => {
+  const result = parse({ type: 'command', command: 'true', onfailure: 'block', timeOut: 5 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.notes, ['unknown field "onfailure" is ignored', 'unknown field "timeOut" is ignored']);
+  assert.deepEqual(parse({ type: 'command', command: 'true', statusMessage: 'x', once: false }).notes, []);
+});
+
+test('a prompt model needs both parts when it has a provider', () => {
+  for (const model of ['openai/', '/gpt', 'a/b/c', 'two words', '/']) {
+    const result = parse({ type: 'prompt', prompt: 'ok?', model }, 'pre-tool-use');
+    assert.equal(result.ok, false, model);
+    assert.match(result.reason, /model must be/, model);
+  }
+  for (const model of ['gpt-5', 'openai/gpt-5']) {
+    assert.equal(parse({ type: 'prompt', prompt: 'ok?', model }).ok, true, model);
+  }
+});
+
 test('a plain command handler keeps its defaults', () => {
   const result = parse({ type: 'command', command: 'echo hi' });
   assert.equal(result.ok, true);

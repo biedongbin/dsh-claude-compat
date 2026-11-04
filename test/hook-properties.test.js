@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { compileMatcher } from '../src/hook-engine.js';
 import { interpretRun } from '../src/hook-output.js';
 import { mcpToolName, substitute } from '../src/hook-runners-model.js';
-import { matchIfRule } from '../src/hook-spec.js';
+import { stopCap } from '../src/hook-bridge-agent.js';
+import { matchIfRule, parseHookHandler } from '../src/hook-spec.js';
 import { parseVerdict } from '../src/hook-verdict.js';
 
 const RUNS = 400;
@@ -135,5 +136,57 @@ test('mcpToolName gives a valid DSH tool name, the same one each time, and one p
     assert.equal(mcpToolName(server, tool), name);
     const other = `${tool}x`;
     assert.notEqual(mcpToolName(server, other), name, `${tool} and ${other}`);
+  }
+});
+
+// ─── stopCap, parseHookHandler ───────────────────────────────────────────────
+
+test('property: stopCap is a positive safe integer, and equals the value only for a plain digit run', () => {
+  const random = rng(1101);
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    for (let i = 0; i < RUNS; i += 1) {
+      const given = textFrom(random, '0123456789xe+-. ', 12);
+      const cap = stopCap({ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: given });
+      assert.ok(Number.isSafeInteger(cap) && cap > 0, JSON.stringify(given));
+      const plain = /^[1-9][0-9]{0,8}$/.test(given);
+      assert.equal(cap, plain ? Number(given) : 8, JSON.stringify(given));
+    }
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('property: parseHookHandler never throws; ok gives a bounded timeout, and a rejection gives a reason', () => {
+  const random = rng(1102);
+  const pick = (list) => list[Math.floor(random() * list.length)];
+  const values = () => pick([undefined, null, 0, -1, 1, 2.5, 1e12, 'x', '', 'a b', 'openai/', 'p/m', true, [], {}, ['a'], [1]]);
+  const types = ['command', 'http', 'mcp_tool', 'prompt', 'agent', 'bogus', undefined, 7];
+  const events = ['pre-tool-use', 'post-tool-use', 'session-start', 'stop', 'user-prompt-submit'];
+  const fields = ['command', 'args', 'timeout', 'async', 'onFailure', 'if', 'url', 'headers', 'server', 'tool', 'prompt', 'model'];
+  for (let i = 0; i < RUNS; i += 1) {
+    const raw = { type: pick(types) };
+    for (const field of fields) if (random() < 0.5) raw[field] = values();
+    const result = parseHookHandler(raw, { event: pick(events), projectDir: '/proj' });
+    if (result.ok) {
+      const { timeoutMs, command, args } = result.handler;
+      assert.ok(timeoutMs === undefined || (Number.isInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= 2147483647), JSON.stringify(raw));
+      assert.ok(!String(command ?? '').includes('${CLAUDE_PROJECT_DIR}') || args === undefined, JSON.stringify(raw));
+      assert.ok(Array.isArray(result.notes));
+    } else {
+      assert.ok(typeof result.reason === 'string' && result.reason !== '', JSON.stringify(raw));
+    }
+  }
+});
+
+test('property: an accepted prompt model has no empty or extra segment', () => {
+  const random = rng(1103);
+  for (let i = 0; i < RUNS; i += 1) {
+    const model = textFrom(random, 'ab/ -', 10);
+    const result = parseHookHandler({ type: 'prompt', prompt: 'ok?', model }, { event: 'pre-tool-use', projectDir: '/p' });
+    if (!result.ok) continue;
+    const parts = model.trim().split('/');
+    assert.ok(parts.length <= 2 && parts.every((part) => part !== '' && !/\s/.test(part)), JSON.stringify(model));
   }
 });

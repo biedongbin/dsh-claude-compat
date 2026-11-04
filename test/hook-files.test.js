@@ -1,7 +1,7 @@
 // FileChanged, ConfigChange and the settings file list, on real files.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { loadHookSettings, settingsFiles } from '../src/hooks.js';
 import { fakeAgent, fakeSubagent, harness, say, tempDir, waitFor, withWarnings } from './hook-kit.js';
@@ -287,6 +287,32 @@ test('settingsFiles lists user, project and project-local settings, and hooks lo
   } finally {
     process.chdir(before);
   }
+});
+
+test('a settings file that cannot be read is logged, and a hooks value of the wrong type is logged', async (t) => {
+  const dir = tempDir('dcc-unreadable-');
+  const locked = join(dir, 'locked');
+  mkdirSync(locked);
+  writeFileSync(join(locked, 'settings.json'), '{"hooks":{}}');
+  writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: ['not', 'an', 'object'] }));
+  const canLock = process.platform !== 'win32' && process.getuid?.() !== 0;
+  if (canLock) chmodSync(join(locked, 'settings.json'), 0o000);
+  try {
+    const { warnings } = await withWarnings(() => {
+      loadHookSettings({ userClaudeDir: dir, projectRootMarkers: ['.git-not-here'] });
+      loadHookSettings({ userClaudeDir: locked, projectRootMarkers: ['.git-not-here'] });
+    });
+    assert.match(warnings.join('\n'), /"hooks" must be an object keyed by event name/);
+    if (canLock) assert.match(warnings.join('\n'), /cannot read the settings file \(EACCES\)/);
+    else t.diagnostic('the unreadable-file case needs POSIX permissions and a non-root user');
+  } finally {
+    if (canLock) chmodSync(join(locked, 'settings.json'), 0o600);
+  }
+});
+
+test('a missing settings file is not logged', async () => {
+  const { warnings } = await withWarnings(() => loadHookSettings({ userClaudeDir: tempDir('dcc-none-'), projectRootMarkers: ['.git-not-here'] }));
+  assert.deepEqual(warnings, []);
 });
 
 test('settingsFiles in a directory with no project marker reads the cwd as the project root', () => {
