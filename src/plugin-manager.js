@@ -79,9 +79,19 @@ function backupFile(path) {
   return backup;
 }
 
+// A file whose JSON is not an object (`null`, a list, a number) counts as unreadable.
 function readJson(path, fallback) {
-  try { return JSON.parse(readFileSync(path, 'utf8')); }
-  catch { return fallback; }
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : fallback;
+  } catch { return fallback; }
+}
+
+// The plugin entries of a marketplace catalog. A catalog that has no list, or an entry that is
+// not an object, gives nothing, so one bad catalog does not stop a search.
+function catalogPlugins(catalog) {
+  const list = Array.isArray(catalog?.plugins) ? catalog.plugins : [];
+  return list.filter((plugin) => typeof plugin === 'object' && plugin !== null);
 }
 
 /** Pure: parse `claude plugin list` output into [{name, marketplace, version, scope, enabled}]. */
@@ -143,7 +153,7 @@ export function searchMarketplaces(term, pluginsDir) {
     const manifest = join(marketRoot, dir.name, '.claude-plugin', 'marketplace.json');
     if (!existsSync(manifest)) continue;
     const json = readJson(manifest, null);
-    for (const plugin of json?.plugins ?? []) {
+    for (const plugin of catalogPlugins(json)) {
       const haystack = `${plugin.name} ${plugin.description ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase();
       if (needle === '' || haystack.includes(needle)) {
         hits.push({
@@ -169,7 +179,7 @@ export async function fallbackInstall(installId, pluginsDir, settingsPath) {
   if (!marketName) return { ok: false, error: 'fallback install needs name@marketplace (marketplace repo must already be cloned)' };
   const marketJson = join(pluginsDir, 'marketplaces', marketName, '.claude-plugin', 'marketplace.json');
   const catalog = readJson(marketJson, null);
-  const entry = (catalog?.plugins ?? []).find((p) => p.name === pluginName);
+  const entry = catalogPlugins(catalog).find((p) => p.name === pluginName);
   if (!entry) return { ok: false, error: `plugin "${pluginName}" not found in marketplace "${marketName}"` };
   const version = entry.version ?? 'unknown';
   const sourceRel = String(entry.source ?? './').replace(/^\.\//, '');

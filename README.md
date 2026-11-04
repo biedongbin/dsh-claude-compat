@@ -116,7 +116,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` + `.claude/agents` provider (project and `~/.claude`) |
 | `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
 | `enableMcp` | `true` | Translate `<projectRoot>/.mcp.json` into mounted MCP server plugins |
-| `mcpTrustProjectHelpers` | `false` | Run the `headersHelper` of a project `.mcp.json`, without the credential variables of the user. Off means the server mounts with its static headers |
+| `mcpTrustProjectConfig` | `false` | Trust the project `.mcp.json`: its `headersHelper` runs (without the credential variables of the user), and its `${VAR}` may read credential variables. Off means the server mounts with its static headers and the literal text |
 | `mcpFailOnStartupError` | `false` | Forward to `dsh-mcp-client`: fail plugin startup when an MCP server fails to connect |
 | `enableHooks` | `true` | Run hooks from the `.claude/settings.json` files (see [Hooks](#hooks)) |
 | `hooksTimeoutMs` | `60000` | Default per-hook run timeout in ms, 1 to 2147483647. A handler's own `timeout`, in seconds, overrides it. Like Claude Code, the default is 1.5 s for SessionEnd, 30 s for UserPromptSubmit and PostModelSwitch, and 10 s for MessageDisplay. prompt hooks default to 30 s and agent hooks to 60 s |
@@ -254,6 +254,8 @@ Every warning names the file or entry, and says what stays off.
 Policy comes from the settings files:
 
 - `deniedMcpServers` blocks a server by URL, command or name. The denylist always wins. Plugin servers obey it too.
+- A `serverUrl` pattern follows the managed-MCP rules for both lists: a host written out in full matches the default port of the scheme only.
+To deny a host on every port and scheme, write `*://host:*`.
 - `allowedMcpServers` allows only the matching servers. The lists merge from every settings file, unless managed settings set `allowManagedMcpServersOnly`. Servers from `managedMcpServers` and `managed-mcp.json` skip the allowlist.
 - A malformed policy entry in a user, project or local settings file is ignored with a warning. In managed settings it keeps every MCP server off. A policy list that is not a list allows nothing (for `allowedMcpServers`) or denies nothing (for `deniedMcpServers`), with a warning.
 - A URL pattern with no port covers the default port only (443 for `https`), as Claude Code documents. A pattern with `*` in the host, or `*` as the port, covers every port. A pattern path of `/` matches only the root path. Write `/*` to match every path. A `serverCommand` entry compares the command and its arguments. It does not compare `env` (as Claude Code documents), and it does not compare `cwd`.
@@ -264,6 +266,10 @@ Policy comes from the settings files:
 It has no `command`, `args`, `env`, `headersHelper` or `${VAR}`, and an entry that breaks this is skipped with a warning.
 `managed-mcp.json` has its own contract and is not held to this rule.
 - An entry that is not an object, such as `"bad": null`, is skipped with a warning, and the other servers still load.
+- A disabled entry, and an entry that a higher source with the same name hides, are skipped with a warning that names the source.
+- A plugin folder with no `plugin.json` still loads the `.mcp.json` at its root.
+A path in `mcpServers` must stay inside the plugin folder, and `${CLAUDE_PLUGIN_ROOT}` is the install path.
+- A `timeout` above the largest Node timer delay is cut to that delay, with a warning.
 
 Entry handling:
 
@@ -271,9 +277,13 @@ Entry handling:
 - `timeout` sets the per-call limit in milliseconds. A value under 1000 is ignored.
 - `headersHelper` runs at mount, with a 10-second limit. Its JSON output overrides the static `headers`. A helper that fails skips its server. Under an `allowedMcpServers` list, only organization servers may use a helper, because the list cannot see the helper command.
 - A `headersHelper` from a project `.mcp.json` is a command that the repository supplies.
-It runs only when `mcpTrustProjectHelpers` is `true`, and then without the credential variables of the user.
-A variable name with `TOKEN`, `SECRET`, `PASSWORD`, `KEY` or `AUTH` in it is removed, except Git's `GIT_CONFIG_KEY_<n>`, and so is `ANTHROPIC_CUSTOM_HEADERS`.
+It runs only when `mcpTrustProjectConfig` is `true`, and then without the credential variables of the user.
+A variable name with `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CRED`, `COOKIE` or `DSN` in it is removed, except Git's `GIT_CONFIG_KEY_<n>`, and so are `ANTHROPIC_CUSTOM_HEADERS` and a variable whose value is a URL with a password.
 The values of removed variables are replaced with `REDACTED` in the `CLAUDE_CODE_MCP_SERVER_URL` that the helper receives.
+A trusted project helper is still a shell command, and it can read the files of the user.
+- `${VAR}` in a project `.mcp.json` does not read a credential variable (the same names) unless `mcpTrustProjectConfig` is `true`.
+The literal text stays and the log names the variable.
+This keeps a repository from sending a credential to a server that it names.
 While the option is `false`, the server mounts with its static `headers` and the log names the server.
 A helper from the user, local or managed source keeps the environment of the user.
 - `type: stdio` and `type: http` (or `streamable-http`) run. An entry with a `url` and no `type` is skipped, as Claude Code skips it.

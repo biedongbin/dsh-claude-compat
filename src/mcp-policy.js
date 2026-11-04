@@ -57,13 +57,7 @@ function normalizeHost(host) {
 // A host with `*` is a wildcard and is not parsed. Any other host must parse, so a
 // pattern that cannot match any real host is reported, not left to match nothing.
 function hostParses(host) {
-  if (host.includes('*')) return true;
-  try {
-    new URL(`http://${host}`);
-    return true;
-  } catch {
-    return false;
-  }
+  return host.includes('*') || URL.canParse(`http://${host}`);
 }
 
 // Split `scheme://host[:port][/path]` into its parts. The fragment is dropped,

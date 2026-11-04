@@ -11,12 +11,14 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { findProjectRootSync, isObject } from './lib.js';
-import { expandVars, redactValues, scrubbedEnv } from './mcp-vars.js';
+import { credentialNames, expandVars, redactValues, scrubbedEnv } from './mcp-vars.js';
 import { buildPolicy, policyVerdict } from './mcp-policy.js';
 import { readSourceDocs, selectEntries } from './mcp-sources.js';
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 60_000;
 const MIN_TIMEOUT_MS = 1000;
+// Node fires a timer with a larger delay after 1 ms.
+const MAX_TIMEOUT_MS = 2_147_483_647;
 // Claude Code gives a headersHelper 10 seconds, and so does this loader.
 const HEADERS_HELPER_TIMEOUT_MS = 10_000;
 const execAsync = promisify(exec);
@@ -29,18 +31,13 @@ function isScalarDict(value) {
   return isObject(value) && Object.values(value).every(isScalar);
 }
 
-// Turn a scalar dict into strings. Callers check the shape first.
-function scalarDict(value) {
-  if (value === undefined) return {};
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, String(v)]));
-}
-
-function stringList(value) {
-  return value ?? [];
-}
-
 function mapValues(object, fn) {
   return Object.fromEntries(Object.entries(object).map(([k, v]) => [k, fn(v)]));
+}
+
+// Turn a scalar dict into strings. Callers check the shape first.
+function scalarDict(value) {
+  return value === undefined ? {} : mapValues(value, String);
 }
 
 // The transport a Claude Code entry asks for, or undefined when DSH cannot run it.
@@ -82,7 +79,11 @@ function fieldProblem(name, entry) {
 // `timeout` is milliseconds. A value below one second is ignored, as in Claude Code.
 function timeoutOf(name, entry, warns) {
   if (entry.timeout === undefined) return DEFAULT_TOOL_CALL_TIMEOUT_MS;
-  if (typeof entry.timeout === 'number' && entry.timeout >= MIN_TIMEOUT_MS) return entry.timeout;
+  if (typeof entry.timeout === 'number' && entry.timeout >= MIN_TIMEOUT_MS) {
+    if (entry.timeout <= MAX_TIMEOUT_MS) return entry.timeout;
+    warns.push(`${name}: timeout is above ${MAX_TIMEOUT_MS} ms, ${MAX_TIMEOUT_MS} ms used`);
+    return MAX_TIMEOUT_MS;
+  }
   warns.push(`${name}: timeout must be at least ${MIN_TIMEOUT_MS} ms, default used`);
   return DEFAULT_TOOL_CALL_TIMEOUT_MS;
 }
@@ -102,9 +103,9 @@ function stdioConfig(name, entry, base, expand, projectDir) {
     ...base,
     transport: 'stdio',
     command: expand(entry.command),
-    args: stringList(entry.args).map(expand),
+    args: (entry.args ?? []).map(expand),
     env,
-    cwd: entry.cwd ?? '',
+    cwd: entry.cwd === undefined ? '' : expand(entry.cwd),
   };
   return { server };
 }
@@ -113,9 +114,8 @@ function httpConfig(name, entry, base, expand) {
   if (typeof entry.url !== 'string' || entry.url.length === 0) {
     return { warn: `${name}: http entry has no url, skipped` };
   }
-  const helper = typeof entry.headersHelper === 'string' && entry.headersHelper.length > 0
-    ? entry.headersHelper
-    : undefined;
+  // fieldProblem has already checked that a helper is a non-empty string.
+  const helper = entry.headersHelper;
   const server = {
     ...base,
     transport: 'streamable-http',
@@ -139,7 +139,10 @@ function translateEntry(name, entry, opts = {}) {
   if (problem !== undefined) return { warns: [problem] };
   const vars = opts.vars ?? process.env;
   const expand = (value) => expandVars(value, vars, (variable) => {
-    warns.push(`${name}: \${${variable}} is not set and has no default, the literal text is kept`);
+    const why = opts.withheld?.has(variable)
+      ? 'is a credential variable that a project .mcp.json may not read, and mcpTrustProjectConfig is false'
+      : 'is not set and has no default';
+    warns.push(`${name}: \${${variable}} ${why}, the literal text is kept`);
   });
   const base = {
     serverName,
@@ -160,29 +163,21 @@ function translateEntry(name, entry, opts = {}) {
   return { server: built.server, helper: built.helper, usesVars, warns };
 }
 
-// Translate a plugin's .mcp.json body into dsh-mcp-client configs, keyed by server
-// name. Malformed entries are skipped and reported. A plugin entry with a
-// headersHelper is skipped, because a helper that never runs would mount a server
-// that cannot authenticate.
-export function translateMcpServers(rawJson, { failOnStartupError = false } = {}) {
-  let parsed;
-  try { parsed = JSON.parse(rawJson); }
-  catch {
-    return { servers: [], warns: [`invalid-json: ${String(rawJson).slice(0, 100)}`], names: [] };
-  }
-  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'], names: [] };
-  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'], names: [] };
+// Translate server entries, as [name, entry] pairs, into dsh-mcp-client configs. Malformed
+// entries are skipped and reported. A plugin entry with a headersHelper is skipped, because
+// a helper that never runs would mount a server that cannot authenticate. `names[i]` is the
+// name the user wrote for `servers[i]`. The sanitized name can collide, so the position is
+// the key, not the name. `vars` is the environment that ${VAR} reads.
+export function translateServerEntries(pairs, { failOnStartupError = false, vars } = {}) {
   const out = [];
   const warns = [];
-  // `names[i]` is the name the user wrote for `servers[i]`. The sanitized name can
-  // collide, so the position is the key, not the name.
   const names = [];
-  for (const [name, entry] of Object.entries(parsed.mcpServers)) {
+  for (const [name, entry] of pairs) {
     if (!isObject(entry)) {
       warns.push(`${name}: malformed entry, skipped`);
       continue;
     }
-    const translated = translateEntry(name, entry, { failOnStartupError });
+    const translated = translateEntry(name, entry, { failOnStartupError, vars });
     warns.push(...translated.warns);
     if (translated.server === undefined) continue;
     if (translated.helper !== undefined) {
@@ -193,6 +188,18 @@ export function translateMcpServers(rawJson, { failOnStartupError = false } = {}
     names.push(name);
   }
   return { servers: out, warns, names };
+}
+
+// Translate the body of a .mcp.json file into dsh-mcp-client configs.
+export function translateMcpServers(rawJson, options = {}) {
+  let parsed;
+  try { parsed = JSON.parse(rawJson); }
+  catch (error) {
+    return { servers: [], warns: [`invalid-json: ${error.message}`], names: [] };
+  }
+  if (!isObject(parsed)) return { servers: [], warns: ['invalid-json: root must be an object'], names: [] };
+  if (!isObject(parsed.mcpServers)) return { servers: [], warns: ['mcpServers: missing or not an object'], names: [] };
+  return translateServerEntries(Object.entries(parsed.mcpServers), options);
 }
 
 // The environment of a helper. A helper from a project file is a command the user did not
@@ -217,20 +224,16 @@ async function runHeadersHelper(command, context) {
       env: helperEnv(context),
     }));
   } catch (error) {
-    return { error: `command failed: ${error?.message ?? error}` };
+    // The message of exec holds the command line, so the text is built from the parts.
+    const stderr = String(error?.stderr ?? '').trim().split('\n')[0].slice(0, 200);
+    const cause = error?.killed ? `timed out after ${HEADERS_HELPER_TIMEOUT_MS} ms` : `exit ${error?.code ?? 'unknown'}`;
+    return { error: `command failed (${cause})${stderr === '' ? '' : `: ${stderr}`}` };
   }
   let parsed;
   try { parsed = JSON.parse(stdout); } catch { return { error: 'output is not JSON' }; }
   if (!isObject(parsed)) return { error: 'output is not a JSON object' };
   if (!isScalarDict(parsed)) return { error: 'output has a value that is not a string, number or boolean' };
   return { headers: scalarDict(parsed) };
-}
-
-// Apply the headersHelper output. Dynamic headers override static ones with the same name.
-async function withDynamicHeaders(name, server, helper, scrub) {
-  const result = await runHeadersHelper(helper, { name, url: server.url, scrub });
-  if (result.error !== undefined) return { warn: `${name}: headersHelper ${result.error}, server skipped` };
-  return { server: { ...server, headers: { ...server.headers, ...result.headers } } };
 }
 
 // What the allowlist check sees. The organization's own servers skip the allowlist.
@@ -254,9 +257,9 @@ function managedSettingsProblem(raw) {
 async function withHelper(entry, view, translated, state) {
   const name = entry.name;
   // A helper from a project .mcp.json is a command that the user did not write.
-  if (entry.scope === 'project' && state.options.trustProjectHelpers !== true) {
+  if (entry.scope === 'project' && state.options.trustProject !== true) {
     state.out.warns.push(
-      `${name}: headersHelper of a project .mcp.json is not run, because mcpTrustProjectHelpers is false. `
+      `${name}: headersHelper of a project .mcp.json is not run, because mcpTrustProjectConfig is false. `
       + 'The server mounts with its static headers.',
     );
     return translated.server;
@@ -267,9 +270,22 @@ async function withHelper(entry, view, translated, state) {
     state.out.warns.push(`${name}: headersHelper is not run under an allowlist, skipped`);
     return undefined;
   }
-  const dynamic = await withDynamicHeaders(name, translated.server, translated.helper, entry.scope === 'project');
-  if (dynamic.warn !== undefined) state.out.warns.push(dynamic.warn);
-  return dynamic.server;
+  const server = translated.server;
+  const result = await runHeadersHelper(translated.helper, { name, url: server.url, scrub: entry.scope === 'project' });
+  if (result.error !== undefined) {
+    state.out.warns.push(`${name}: headersHelper ${result.error}, server skipped`);
+    return undefined;
+  }
+  // Dynamic headers override static ones with the same name.
+  return { ...server, headers: { ...server.headers, ...result.headers } };
+}
+
+// A project .mcp.json is not the user's own file. Unless the user trusts it, ${VAR} in it does
+// not read credential variables, so a repository cannot send them to a server it names.
+function optionsFor(entry, state) {
+  if (entry.scope !== 'project' || state.options.trustProject === true) return state.options;
+  const { vars } = state.options;
+  return { ...state.options, vars: scrubbedEnv(vars).env, withheld: credentialNames(vars) };
 }
 
 // Translate, check the policy, run the helper, and collect one server. `state`
@@ -284,7 +300,7 @@ async function loadOne(entry, state) {
     state.out.warns.push(`${entry.name}: managedMcpServers entry is invalid (${invalid}), skipped`);
     return;
   }
-  const translated = translateEntry(entry.name, entry.raw, state.options);
+  const translated = translateEntry(entry.name, entry.raw, optionsFor(entry, state));
   state.out.warns.push(...translated.warns);
   if (translated.server === undefined) return;
   const view = policyView(entry, translated);
@@ -319,12 +335,18 @@ export async function loadMcpServers(config, { cwd = process.cwd(), managedDir }
       vars,
       failOnStartupError: config.mcpFailOnStartupError ?? false,
       projectDir,
-      trustProjectHelpers: config.mcpTrustProjectHelpers === true,
+      trustProject: config.mcpTrustProjectConfig === true,
     },
     policy,
     out: { servers: [], warns: [...selected.warns, ...policy.warns] },
   };
-  for (const entry of selected.entries) await loadOne(entry, state);
+  for (const entry of selected.entries) {
+    try {
+      await loadOne(entry, state);
+    } catch (error) {
+      state.out.warns.push(`${entry.name}: unexpected error, skipped (${error?.message ?? error})`);
+    }
+  }
   return { servers: state.out.servers, exclusive: selected.exclusive, warns: state.out.warns, policy };
 }
 
@@ -366,7 +388,10 @@ export async function mountMcpConfigs(ctx, servers) {
   try {
     mcpClientModule = await import('@deepseek-ai/dsh-mcp-client');
   } catch (error) {
-    console.warn('dsh-claude-compat: @deepseek-ai/dsh-mcp-client not installed', '(MCP disabled)', error?.message ?? error);
+    console.warn(
+      `dsh-claude-compat: cannot import @deepseek-ai/dsh-mcp-client (${error?.code ?? error?.message ?? error}), `
+      + `so ${servers.length} MCP server(s) are not mounted`,
+    );
     return;
   }
   const mcpClient = mcpClientModule.default ?? mcpClientModule;

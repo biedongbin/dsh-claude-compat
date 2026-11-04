@@ -148,7 +148,14 @@ function applyDisables(entries, docs, project, warns) {
   for (const entry of entries) {
     const off = (entry.scope === 'project' && projectOff.has(entry.name))
       || (OPT_OUT_SCOPES.has(entry.scope) && optOut.has(entry.name));
-    if (off || seen.has(entry.name)) continue;
+    if (off) {
+      warns.push(`${entry.name}: the ${WHERE[entry.scope]} entry is turned off by a disable list, skipped`);
+      continue;
+    }
+    if (seen.has(entry.name)) {
+      warns.push(`${entry.name}: the ${WHERE[entry.scope]} entry is hidden by a higher source with the same name, skipped`);
+      continue;
+    }
     seen.add(entry.name);
     kept.push(entry);
   }
@@ -160,6 +167,17 @@ function managedFileProblem(doc) {
   if (doc === undefined) return undefined;
   if (doc.error !== undefined) return doc.error;
   return isObject(doc.value.mcpServers) ? undefined : 'managed-mcp.json: mcpServers must be an object';
+}
+
+// A managed disable list that is not a list of names cannot be applied. The organization's
+// block would be lost, so the rule for a broken managed policy applies: every server is off.
+function managedListProblem(docs) {
+  const list = docValue(docs.managedSettings).disabledMcpjsonServers;
+  if (list === undefined) return undefined;
+  if (!Array.isArray(list) || list.some((item) => typeof item !== 'string')) {
+    return 'managed settings: disabledMcpjsonServers must be a list of server names';
+  }
+  return undefined;
 }
 
 // managedMcpServers is read from managed settings only. A copy elsewhere is dropped.
@@ -180,6 +198,11 @@ export function selectEntries(docs) {
   }
   if (docs.managedSettings?.error !== undefined) {
     warns.push(`${docs.managedSettings.error}. Every MCP server is off.`);
+    return { entries: [], exclusive: true, warns };
+  }
+  const listProblem = managedListProblem(docs);
+  if (listProblem !== undefined) {
+    warns.push(`${listProblem}. Every MCP server is off.`);
     return { entries: [], exclusive: true, warns };
   }
   const exclusive = docs.managedMcp !== undefined;

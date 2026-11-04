@@ -11,9 +11,10 @@
 // opted in (mounting third-party MCP servers is a bigger trust step than
 // listing skills).
 
-import { existsSync, readFileSync as rfs, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync as rfs, statSync } from 'node:fs';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import {
+  isObject,
   pathExists,
   readTextSafe,
   envPathList,
@@ -22,7 +23,7 @@ import {
   parseFrontmatter,
   stringField,
 } from './lib.js';
-import { translateMcpServers } from './mcp.js';
+import { translateServerEntries } from './mcp.js';
 import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
 // Installed plugins from three places: the primary plugins root, the read-only
@@ -272,32 +273,39 @@ function manifestDirs(manifest, field, installPath) {
 
 // The server map in a plugin's .json file. The file holds an `mcpServers` wrapper,
 // as .mcp.json does, or the server map itself. Returns undefined, with a warning,
-// when the file exists but cannot be read.
+// when the file cannot be read or has the wrong shape.
 function mapFromFile(path, label, warns) {
-  const raw = readTextSafeSync(path);
-  if (raw === undefined) {
-    warns.push(`mcpServers file not readable: ${label}`);
+  let raw;
+  try { raw = rfs(path, 'utf8'); } catch (error) {
+    warns.push(`mcpServers file not readable: ${label} (${error?.code ?? error?.message})`);
     return undefined;
   }
   let parsed;
-  try { parsed = JSON.parse(raw); } catch {
-    warns.push(`mcpServers file is not valid JSON: ${label}`);
+  try { parsed = JSON.parse(raw); } catch (error) {
+    warns.push(`mcpServers file is not valid JSON: ${label} (${error.message})`);
     return undefined;
   }
-  if (!isPlainObject(parsed)) {
+  if (!isObject(parsed)) {
     warns.push(`mcpServers file root must be an object: ${label}`);
     return undefined;
   }
-  return isPlainObject(parsed.mcpServers) ? parsed.mcpServers : parsed;
+  if (!Object.hasOwn(parsed, 'mcpServers')) return parsed;
+  if (!isObject(parsed.mcpServers)) {
+    warns.push(`mcpServers in ${label} must be an object, the file is ignored`);
+    return undefined;
+  }
+  return parsed.mcpServers;
 }
 
-function isPlainObject(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+// A path in a plugin manifest must stay inside the plugin folder.
+function insidePlugin(installPath, target) {
+  const rel = relative(installPath, target);
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 }
 
 // One `mcpServers` shape as a server map. Bundles and URLs are not supported.
 function mapFromShape(shape, installPath, warns) {
-  if (typeof shape === 'object' && shape !== null && !Array.isArray(shape)) return shape;
+  if (isObject(shape)) return shape;
   if (typeof shape !== 'string') {
     warns.push('mcpServers entry must be a path or an object, ignored');
     return undefined;
@@ -306,31 +314,45 @@ function mapFromShape(shape, installPath, warns) {
     warns.push(`mcpServers ${shape}: MCP bundles and URLs are not supported, skipped`);
     return undefined;
   }
-  return mapFromFile(resolve(installPath, shape), shape, warns);
+  const target = resolve(installPath, shape);
+  if (!insidePlugin(installPath, target)) {
+    warns.push(`mcpServers ${shape}: the path is outside the plugin folder, skipped`);
+    return undefined;
+  }
+  return mapFromFile(target, shape, warns);
+}
+
+// A file that exists, including a link to a file that does not, so a broken link is reported.
+function present(path) {
+  try { lstatSync(path); return true; } catch { return false; }
 }
 
 // Translate a plugin's MCP config into dsh-mcp-client server configs. Claude Code
 // reads the plugin's own .mcp.json first, then each `mcpServers` shape in order,
 // and a later name replaces an earlier one. Returns { servers, warns, names }.
-// ${CLAUDE_PLUGIN_ROOT} is replaced with the install path, as Claude Code does.
+// ${CLAUDE_PLUGIN_ROOT} is the install path, as Claude Code does it. It is a variable
+// value, so a `${...}` inside the path is not expanded again.
 export function translatePluginMcp(manifest, installPath, opts = {}) {
   const warns = [];
   const maps = [];
   const rootFile = resolve(installPath, '.mcp.json');
-  if (existsSync(rootFile)) maps.push(mapFromFile(rootFile, '.mcp.json', warns));
+  if (present(rootFile)) maps.push(mapFromFile(rootFile, '.mcp.json', warns));
   const declared = manifest?.mcpServers;
   for (const shape of declared === undefined ? [] : [declared].flat()) {
+    // The manifest often names the root .mcp.json that was already read.
+    if (typeof shape === 'string' && resolve(installPath, shape) === rootFile) continue;
     maps.push(mapFromShape(shape, installPath, warns));
   }
-  const combined = {};
-  for (const map of maps) if (map !== undefined) Object.assign(combined, map);
-  if (Object.keys(combined).length === 0) return { servers: [], warns, names: [] };
-  // The path is escaped for JSON, so a Windows path with backslashes stays valid. The
-  // function replacer keeps `$&` and `$'` in the path from acting as patterns.
-  const root = JSON.stringify(installPath).slice(1, -1);
-  const body = JSON.stringify({ mcpServers: combined }).replaceAll('${CLAUDE_PLUGIN_ROOT}', () => root);
-  const translated = translateMcpServers(body, opts);
+  // A Map keeps a server named `__proto__`, which a plain object would turn into a prototype.
+  const combined = new Map();
+  for (const map of maps.filter((m) => m !== undefined)) {
+    for (const [name, entry] of Object.entries(map)) {
+      if (combined.has(name)) warns.push(`${name}: replaces an earlier server of the same name in this plugin`);
+      combined.set(name, entry);
+    }
+  }
+  const vars = { ...process.env, CLAUDE_PLUGIN_ROOT: installPath };
+  const translated = translateServerEntries([...combined], { ...opts, vars });
   return { ...translated, warns: [...warns, ...translated.warns] };
 }
 
-function readTextSafeSync(p) { try { return rfs(p, 'utf8'); } catch { return undefined; } }

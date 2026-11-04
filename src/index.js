@@ -93,8 +93,9 @@ export const Config = z.object({
   enableSkills: z.boolean().default(true),
   enableMcp: z.boolean().default(true),
   mcpFailOnStartupError: z.boolean().default(false),
-  // A headersHelper in a project .mcp.json is a shell command from the repository.
-  mcpTrustProjectHelpers: z.boolean().default(false),
+  // A project .mcp.json is not the user's own file: its headersHelper runs, and its ${VAR}
+  // reads credential variables, only when this is true.
+  mcpTrustProjectConfig: z.boolean().default(false),
   enableHooks: z.boolean().default(true),
   // Node delays above 2147483647 ms fire after 1 ms, so a larger value kills hooks at once.
   hooksTimeoutMs: z.number().step(1).min(1).max(2147483647).default(60000),
@@ -199,9 +200,15 @@ export function apply(ctx, config = {}) {
 // uses is dropped, and managed-mcp.json turns plugin servers off.
 async function mountMcp(ctx, config) {
   const loaded = await loadMcpServers(config);
-  const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
-  const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : { servers: [], names: [] };
-  const extra = extraServers(loaded, plugin);
+  let extra = [];
+  try {
+    const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
+    const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : { servers: [], names: [] };
+    extra = extraServers(loaded, plugin);
+  } catch (error) {
+    // The servers of the user still mount. Only the plugin servers are lost.
+    loaded.warns.push(`plugin MCP servers are not mounted: ${error?.message ?? error}`);
+  }
   loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
   await mountMcpConfigs(ctx, [...loaded.servers, ...extra]);
 }
@@ -210,22 +217,21 @@ async function mountMcp(ctx, config) {
 // manifest that is missing is skipped. One that cannot be read, or is not valid
 // JSON, is reported with the reason. Returns { servers, names }, where names[i]
 // is the name the user wrote for servers[i].
-async function pluginMcpServers(config, warns) {
+export async function pluginMcpServers(config, warns) {
   const servers = [];
   const names = [];
   for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const manifestPath = join(plugin.installPath, '.claude-plugin', 'plugin.json');
-    let raw;
-    try { raw = await readFile(manifestPath, 'utf8'); } catch (error) {
+    let manifest = {};
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch (error) {
+      // A plugin with no manifest can still have a .mcp.json at its root.
       if (error?.code !== 'ENOENT') {
-        warns.push(`plugin ${plugin.key}: plugin.json cannot be read (${error?.code ?? error?.message}), its MCP servers are skipped`);
+        const why = error instanceof SyntaxError ? `is not valid JSON (${error.message})` : `cannot be read (${error?.code ?? error?.message})`;
+        warns.push(`plugin ${plugin.key}: plugin.json ${why}, its MCP servers are skipped`);
+        continue;
       }
-      continue;
-    }
-    let manifest;
-    try { manifest = JSON.parse(raw); } catch (error) {
-      warns.push(`plugin ${plugin.key}: plugin.json is not valid JSON, its MCP servers are skipped (${error?.message ?? error})`);
-      continue;
     }
     const translated = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,

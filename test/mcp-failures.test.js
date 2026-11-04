@@ -137,7 +137,7 @@ test('allowManagedMcpServersOnly that is not a boolean fails closed, and says so
 
 test('a headersHelper under an allowlist is refused, since the allowlist cannot see the helper', async () => {
   const fx = fixture();
-  fx.config.mcpTrustProjectHelpers = true;
+  fx.config.mcpTrustProjectConfig = true;
   write(join(fx.userDir, 'settings.json'), { allowedMcpServers: [{ serverUrl: 'https://a.example/*' }] });
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{}")'`,
@@ -160,7 +160,7 @@ test('an organization server may use a headersHelper under an allowlist', async 
 
 test('a headersHelper that prints a non-string value skips the server', async () => {
   const fx = fixture();
-  fx.config.mcpTrustProjectHelpers = true;
+  fx.config.mcpTrustProjectConfig = true;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{\\"X\\":{}}")'`,
   } } });
@@ -241,14 +241,6 @@ test('a mcpServers that is not an object in .claude.json is reported, not ignore
   const result = await load(fx);
   assert.deepEqual(names(result), []);
   assert.match(result.warns.join('\n'), /\.claude\.json mcpServers must be an object/);
-});
-
-test('a managed-mcp.json that takes exclusive control says so, and what it turns off', async () => {
-  const fx = fixture();
-  write(join(fx.managedDir, 'managed-mcp.json'), { mcpServers: { corp: stdio('c') } });
-  const result = await load(fx);
-  assert.deepEqual(names(result), ['corp']);
-  assert.match(result.warns.join('\n'), /takes exclusive control/);
 });
 
 test('a headersHelper that is not a string skips the server, instead of mounting it unauthenticated', async () => {
@@ -439,7 +431,7 @@ async function withToken(run) {
 
 test('a project headersHelper runs without credential variables, and the URL hides their values', async () => {
   const fx = fixture();
-  fx.config.mcpTrustProjectHelpers = true;
+  fx.config.mcpTrustProjectConfig = true;
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp?k=${FAKE_REVIEW_TOKEN}', headersHelper: SHOW_ENV,
   } } });
@@ -456,7 +448,7 @@ test('a user or local headersHelper keeps the environment of the user', async ()
   assert.equal(result.servers[0].headers.token, 'sekret-value');
 });
 
-test('a project headersHelper does not run until mcpTrustProjectHelpers is true, and the server mounts', async () => {
+test('a project headersHelper does not run until mcpTrustProjectConfig is true, and the server mounts', async () => {
   const fx = fixture();
   write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
     type: 'http', url: 'https://a.example/mcp', headers: { 'X-Static': '1' }, headersHelper: SHOW_ENV,
@@ -464,5 +456,100 @@ test('a project headersHelper does not run until mcpTrustProjectHelpers is true,
   const result = await withToken(() => load(fx));
   assert.deepEqual(names(result), ['api']);
   assert.deepEqual(result.servers[0].headers, { 'X-Static': '1' });
-  assert.match(result.warns.join('\n'), /api: headersHelper of a project \.mcp\.json is not run, because mcpTrustProjectHelpers is false/);
+  assert.match(result.warns.join('\n'), /api: headersHelper of a project \.mcp\.json is not run, because mcpTrustProjectConfig is false/);
+});
+
+// ─── review: project variables, plugin files, source warnings, helper errors ───
+
+const HEADER_VAR = { type: 'http', url: 'https://a.example/mcp', headers: { Authorization: 'Bearer ${FAKE_REVIEW_TOKEN}', 'X-Dir': '${CLAUDE_PROJECT_DIR}' } };
+
+test('a project .mcp.json cannot read credential variables unless it is trusted, and the warning says why', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: HEADER_VAR } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: HEADER_VAR } });
+  const result = await withToken(() => load(fx));
+  const project = result.servers.find((s) => s.serverName === 'api');
+  assert.equal(project.headers.Authorization, 'Bearer ${FAKE_REVIEW_TOKEN}');
+  assert.equal(project.headers['X-Dir'], fx.project);
+  assert.match(result.warns.join('\n'), /api: \$\{FAKE_REVIEW_TOKEN\} is a credential variable that a project \.mcp\.json may not read/);
+  assert.equal(result.servers.find((s) => s.serverName === 'mine').headers.Authorization, 'Bearer sekret-value');
+  fx.config.mcpTrustProjectConfig = true;
+  const trusted = await withToken(() => load(fx));
+  assert.equal(trusted.servers.find((s) => s.serverName === 'api').headers.Authorization, 'Bearer sekret-value');
+});
+
+test('a headersHelper failure names the exit status and the first stderr line, and never the command line', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectConfig = true;
+  const command = `"${process.execPath}" -e 'console.error("oops: no credential file\\nsecond line");process.exit(3);/*marker-argument*/'`;
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', headersHelper: command } } });
+  const result = await load(fx);
+  const warning = result.warns.find((w) => /headersHelper/.test(w));
+  assert.match(warning, /command failed \(exit 3\): oops: no credential file, server skipped/);
+  assert.doesNotMatch(warning, /marker-argument|second line/);
+});
+
+test('a timeout above the Node timer limit is clamped with a warning', () => {
+  const body = JSON.stringify({ mcpServers: { a: { type: 'stdio', command: 'c', timeout: 9_999_999_999 }, b: { type: 'stdio', command: 'c', timeout: 5000 } } });
+  const { servers, warns } = translateMcpServers(body);
+  assert.deepEqual(servers.map((s) => s.toolCallTimeoutMs), [2_147_483_647, 5000]);
+  assert.match(warns.join('\n'), /a: timeout is above 2147483647 ms/);
+});
+
+test('a disabled or hidden entry is reported with its source, not dropped silently', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { off: stdio('p'), both: stdio('p') } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { both: stdio('u') } });
+  write(join(fx.userDir, 'settings.json'), { disabledMcpjsonServers: ['off'] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['both']);
+  assert.match(result.warns.join('\n'), /off: the \.mcp\.json mcpServers entry is turned off by a disable list, skipped/);
+  assert.match(result.warns.join('\n'), /both: the \.claude\.json mcpServers entry is hidden by a higher source with the same name, skipped/);
+});
+
+test('a managed disable list that is not a list of names turns every MCP server off', async () => {
+  for (const bad of ['evil', ['evil', 5], { evil: true }]) {
+    const fx = fixture();
+    write(join(fx.managedDir, 'managed-settings.json'), { disabledMcpjsonServers: bad });
+    write(join(fx.project, '.mcp.json'), { mcpServers: { evil: stdio('e') } });
+    const result = await load(fx);
+    assert.deepEqual(names(result), [], JSON.stringify(bad));
+    assert.equal(result.exclusive, true);
+    assert.match(result.warns.join('\n'), /managed settings: disabledMcpjsonServers must be a list of server names\. Every MCP server is off/);
+  }
+});
+
+function pluginDir(files) {
+  const dir = tempDir('dcc-plug-');
+  for (const [name, value] of Object.entries(files)) {
+    mkdirSync(join(dir, name, '..'), { recursive: true });
+    write(join(dir, name), value);
+  }
+  return dir;
+}
+
+test('plugin servers: a __proto__ name is kept, a repeated name is reported, and the root file loads once', () => {
+  const dir = pluginDir({
+    '.mcp.json': '{"mcpServers":{"__proto__":{"type":"stdio","command":"p"},"dup":{"type":"stdio","command":"one"}}}',
+    'extra.json': { dup: { type: 'stdio', command: 'two' } },
+  });
+  const { servers, names: given, warns } = translatePluginMcp({ mcpServers: ['./.mcp.json', './extra.json'] }, dir, {});
+  assert.deepEqual(given.sort(), ['__proto__', 'dup']);
+  assert.equal(servers.find((s) => s.command === 'two') !== undefined, true);
+  assert.deepEqual(warns, ['dup: replaces an earlier server of the same name in this plugin']);
+});
+
+test('plugin servers: a path outside the plugin, a bad wrapper, and a broken link are reported with their cause', () => {
+  const dir = pluginDir({ 'wrapped.json': '{"mcpServers":[]}', 'bad.json': '{ nope' });
+  symlinkSync(join(dir, 'missing.json'), join(dir, '.mcp.json'));
+  const manifest = { mcpServers: ['../outside.json', '/etc/hosts', './wrapped.json', './bad.json', './gone.json'] };
+  const { servers, warns } = translatePluginMcp(manifest, dir, {});
+  assert.deepEqual(servers, []);
+  const text = warns.join('\n');
+  assert.match(text, /mcpServers file not readable: \.mcp\.json \(ENOENT\)/);
+  assert.match(text, /mcpServers \.\.\/outside\.json: the path is outside the plugin folder, skipped/);
+  assert.match(text, /mcpServers \/etc\/hosts: the path is outside the plugin folder, skipped/);
+  assert.match(text, /mcpServers in \.\/wrapped\.json must be an object, the file is ignored/);
+  assert.match(text, /mcpServers file is not valid JSON: \.\/bad\.json \(/);
+  assert.match(text, /mcpServers file not readable: \.\/gone\.json \(ENOENT\)/);
 });

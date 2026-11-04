@@ -16,29 +16,36 @@ export function expandVars(value, vars, onUnset) {
 }
 
 // Claude Code runs a helper that a repository supplies without the credential variables of
-// the user. A name with one of these words is a credential, except Git's GIT_CONFIG_KEY_<n>.
-const CREDENTIAL_NAME = /TOKEN|SECRET|PASSWORD|KEY|AUTH/i;
+// the user. A name with one of these words is a credential, as is a fixed list of names
+// that do not follow the pattern. Git's GIT_CONFIG_KEY_<n> is not a credential. The words
+// go further than Claude Code's own list: PASS, CRED, COOKIE and DSN also hide a credential.
+const CREDENTIAL_NAME = /TOKEN|SECRET|PASS|KEY|AUTH|CRED|COOKIE|DSN|^ANTHROPIC_CUSTOM_HEADERS$/i;
 const GIT_CONFIG_KEY = /^GIT_CONFIG_KEY_[0-9]+$/i;
-// Credential variables whose names do not follow the pattern.
-const CREDENTIAL_NAMES = new Set(['ANTHROPIC_CUSTOM_HEADERS']);
+// A value that is a URL with a password in it, such as a database URL.
+const URL_WITH_PASSWORD = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/\s:@]*:[^/\s@]+@/;
 
-function isCredentialName(name) {
+function isCredential(name, value) {
   if (GIT_CONFIG_KEY.test(name)) return false;
-  return CREDENTIAL_NAME.test(name) || CREDENTIAL_NAMES.has(name.toUpperCase());
+  return CREDENTIAL_NAME.test(name) || URL_WITH_PASSWORD.test(String(value));
 }
 
-// The environment without credential variables. `removed` has the values that were
-// dropped, so the caller can hide them in text that the helper still gets.
+// The environment without credential variables. `removed` has the non-empty values that
+// were dropped, so the caller can hide them in text that the helper still gets.
 export function scrubbedEnv(env) {
   const kept = {};
   const removed = [];
   for (const [name, value] of Object.entries(env)) {
-    if (!isCredentialName(name)) kept[name] = value;
+    if (!isCredential(name, value)) kept[name] = value;
     else if (typeof value === 'string' && value !== '') removed.push(value);
   }
   return { env: kept, removed };
 }
 
+// The names of the variables that scrubbedEnv removes, so a warning can name them.
+export function credentialNames(env) {
+  return new Set(Object.entries(env).filter(([name, value]) => isCredential(name, value)).map(([name]) => name));
+}
+
 export function redactValues(text, values) {
-  return values.reduce((out, value) => out.replaceAll(value, 'REDACTED'), text);
+  return values.filter((value) => value !== '').reduce((out, value) => out.replaceAll(value, 'REDACTED'), text);
 }
