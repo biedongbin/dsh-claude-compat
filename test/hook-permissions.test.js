@@ -105,11 +105,22 @@ test('PermissionRequest: an if rule reads the recorded input', async () => {
   assert.equal(await h.dispatch('approval/request', [approval(agent, { callId: 'n' })], async () => 'rejected'), 'rejected');
 });
 
-test('PermissionRequest: updatedInput is warned, because DSH tool input cannot change', async () => {
+test('PermissionRequest: an allow with updatedInput is ignored, so the normal answerers decide', async () => {
   const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: decide({ behavior: 'allow', updatedInput: { command: 'x' } }) }] }] });
   const { value, warnings } = await withWarnings(() => h.dispatch('approval/request', [approval(fakeAgent())], async () => 'rejected'));
-  assert.equal(value, 'allowed-once');
+  assert.equal(value, 'rejected');
   assert.match(warnings.join('\n'), /cannot be changed/);
+});
+
+test('PermissionRequest: the input of a call is found by session and call id, not by call id alone', async () => {
+  const file = join(tempDir('dcc-callkey-'), 'stdin.jsonl');
+  const h = harness({ PermissionRequest: [{ ...ASK, hooks: [{ command: `cat >> "${file}"; echo >> "${file}"` }] }] });
+  const [main, other] = [fakeAgent('s-main'), fakeAgent('s-other')];
+  await h.dispatch('tools/pre-execute', [exec(main, { callId: 'call_0', arguments: { command: 'main-input' } })], allowTool);
+  await h.dispatch('tools/pre-execute', [exec(other, { callId: 'call_0', arguments: { command: 'other-input' } })], allowTool);
+  await h.dispatch('approval/request', [approval(main, { callId: 'call_0' })], async () => 'rejected');
+  const inputs = readFileSync(file, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool_input.command);
+  assert.deepEqual(inputs, ['main-input']);
 });
 
 // ─── PermissionDenied ────────────────────────────────────────────────────────

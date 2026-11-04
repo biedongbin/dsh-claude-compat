@@ -173,7 +173,7 @@ A hook's `if` rule is a filter that decides whether the hook runs, as in Claude 
 |---|---|---|
 | SessionStart / SessionEnd | `agent/created` / `agent/disposed` | Main sessions only. SessionEnd default timeout is 1.5 s. |
 | UserPromptSubmit | `agent/pre-step` | A block rejects the prompt. Context that this plugin injected is not a prompt. |
-| PreToolUse | `tools/pre-execute` | `deny`, `ask` and a block map to DSH decisions. `updatedInput` is ignored with a warning. |
+| PreToolUse | `tools/pre-execute` | `deny`, `ask` and a block map to DSH decisions. `updatedInput` makes DSH ask the user, with a warning, because DSH cannot change the input. A hook `allow` does not skip the approval of DSH, and it is logged once. |
 | PermissionRequest / PermissionDenied | `approval/request` | `allow` and `deny` answer the request. When several hooks answer, a `deny` wins over an `allow`, so a failed `onFailure: "block"` hook always denies. PermissionDenied runs when DSH rejects an approval. |
 | PostToolUse / PostToolUseFailure | `tools/post-execute` | `updatedToolOutput`, block feedback and context are applied. |
 | PostToolBatch | first `agent/pre-step` after the results | A block rejects the step. |
@@ -208,7 +208,7 @@ These events run, but with less power than in Claude Code:
 | Behavior | Difference |
 |---|---|
 | `PreCompact`, `PostCompact`, `CwdChanged`, `MessageDisplay`, `UserPromptExpansion`, `ConfigChange` | Observe only. DSH reports them after the fact, so a hook cannot block or change them. |
-| `PreToolUse` and `PermissionRequest` `updatedInput` | Ignored with a warning. DSH cannot rewrite a tool call. |
+| `PreToolUse` and `PermissionRequest` `updatedInput` | DSH cannot rewrite a tool call. PreToolUse asks the user, and a PermissionRequest `allow` with `updatedInput` is ignored, so the normal answerers decide. Both log a warning. |
 | `MessageDisplay` `displayContent` | Ignored with a warning. DSH cannot change displayed text. |
 | `SubagentStop` | A block cannot keep the subagent running. |
 | `SubagentStart` and `SubagentStop` `agent_type` | Always `general-purpose`. DSH has no named subagent types. |

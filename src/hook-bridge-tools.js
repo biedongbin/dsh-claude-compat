@@ -22,7 +22,18 @@ function preToolDecision(outcome) {
   return undefined;
 }
 
-async function onPreTool(engine, support, exec, next) {
+// An `allow` does not skip the approval of DSH. It is logged once per plugin load, because every
+// call would repeat it.
+function createAllowWarning() {
+  let warned = false;
+  return () => {
+    if (warned) return;
+    warned = true;
+    console.warn('dsh-claude-compat: a PreToolUse hook answered allow; DSH still asks for approval by its own rules, so allow has no effect');
+  };
+}
+
+async function onPreTool(engine, support, warnAllow, exec, next) {
   if (support.isHookCall(exec)) return next();
   const outcome = await engine.fire('pre-tool-use', 'PreToolUse', {
     subject: exec.name,
@@ -34,11 +45,17 @@ async function onPreTool(engine, support, exec, next) {
       tool_use_id: exec.callId,
     }),
   });
-  if (outcome.updatedInput !== undefined) {
-    console.warn(`dsh-claude-compat: PreToolUse hook asked to change the input of ${exec.name}; DSH tool input cannot be changed, ignored`);
-  }
   support.inject(exec.agent, outcome);
-  return preToolDecision(outcome) ?? next();
+  const decision = preToolDecision(outcome);
+  if (decision !== undefined) return decision;
+  if (outcome.updatedInput !== undefined) {
+    // The hook meant the call to run with another input. DSH cannot change the input, and the
+    // original input is what the hook wanted to remove, so the user decides.
+    console.warn(`dsh-claude-compat: PreToolUse hook asked to change the input of ${exec.name}; DSH tool input cannot be changed, so the call needs approval`);
+    return { kind: 'ask', reason: 'A PreToolUse hook asked to change the input of this call, and DSH cannot do that.' };
+  }
+  if (outcome.permission === 'allow') warnAllow();
+  return next();
 }
 
 // The tool's value when it has one, else its text.
@@ -68,6 +85,16 @@ function replacement(outcome, contexts) {
     : { ...base, value: output };
 }
 
+// What a post-tool hook asks for and DSH cannot do is logged, so the hook author sees it.
+function warnIgnoredPostResult(claudeName, failed, outcome) {
+  if (outcome.stopped) {
+    console.warn(`dsh-claude-compat: ${claudeName} hook asked to stop the run; DSH cannot stop it after a tool ran, ignored`);
+  }
+  if (failed && (outcome.blocked || outcome.updatedToolOutput !== undefined)) {
+    console.warn('dsh-claude-compat: PostToolUseFailure hook asked to block or replace the result; only its context is used, ignored');
+  }
+}
+
 // A PostToolUse block or a replaced output is a final decision, so it does not call next(): a
 // later listener would only see the output that the hook has just replaced.
 async function onPostTool(engine, support, exec, result, next) {
@@ -88,6 +115,7 @@ async function onPostTool(engine, support, exec, result, next) {
     }),
   });
   const contexts = support.contextMessages(outcome);
+  warnIgnoredPostResult(claudeName, failed, outcome);
   if (!failed && outcome.blocked) {
     return {
       kind: 'block',
@@ -109,7 +137,8 @@ async function onPostTool(engine, support, exec, result, next) {
  */
 export function registerToolHooks(ctx, engine, support) {
   if (engine.has('pre-tool-use')) {
-    ctx.on('tools/pre-execute', (exec, next) => onPreTool(engine, support, exec, next));
+    const warnAllow = createAllowWarning();
+    ctx.on('tools/pre-execute', (exec, next) => onPreTool(engine, support, warnAllow, exec, next));
   }
   if (engine.has('post-tool-use') || engine.has('post-tool-use-failure')) {
     ctx.on('tools/post-execute', (exec, result, next) => onPostTool(engine, support, exec, result, next));

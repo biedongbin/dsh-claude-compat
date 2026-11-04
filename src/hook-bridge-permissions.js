@@ -11,18 +11,19 @@ import { failureText, responseOf } from './hook-bridge-tools.js';
 
 // DSH has no event that groups parallel calls. The log of calls whose input an
 // approval request may need is bounded, because a call that never finishes
-// leaves its entry behind.
+// leaves its entry behind. A provider may reuse a call id in another session, so the key has both.
 const MAX_TRACKED_CALLS = 1000;
 
 function createCallLog() {
   const calls = new Map();
+  const keyOf = (agent, callId) => `${sessionIdOf(agent)}\u0000${callId}`;
   return {
     record(exec) {
       if (calls.size >= MAX_TRACKED_CALLS) calls.delete(calls.keys().next().value);
-      calls.set(exec.callId, { name: exec.name, input: exec.arguments ?? {} });
+      calls.set(keyOf(exec.agent, exec.callId), { name: exec.name, input: exec.arguments ?? {} });
     },
-    get: (callId) => calls.get(callId),
-    forget: (callId) => calls.delete(callId),
+    get: (agent, callId) => calls.get(keyOf(agent, callId)),
+    forget: (exec) => calls.delete(keyOf(exec.agent, exec.callId)),
   };
 }
 
@@ -40,7 +41,7 @@ function permissionDecision(outcome) {
 async function onApproval(engine, support, calls, req, next) {
   // The call of a hook asks nobody for permission through the hooks again.
   if (support.isHookCall({ callId: req.callId })) return next();
-  const recorded = calls.get(req.callId);
+  const recorded = calls.get(req.agent, req.callId);
   if (recorded === undefined) {
     console.warn(`dsh-claude-compat: no input is known for the approval of ${req.toolName}; PermissionRequest hooks get an empty tool_input`);
   }
@@ -59,9 +60,12 @@ async function onApproval(engine, support, calls, req, next) {
     tool: { name: req.toolName, input: call.input },
     payload: support.payload('PermissionRequest', req.agent, fields),
   });
-  const decision = permissionDecision(outcome);
-  if (decision?.updatedInput !== undefined) {
-    console.warn(`dsh-claude-compat: PermissionRequest hook asked to change the input of ${req.toolName}; DSH tool input cannot be changed, ignored`);
+  let decision = permissionDecision(outcome);
+  // An allow with a changed input means "run this other input". DSH cannot change the input, and
+  // approving the original input would run what the hook meant to remove, so the normal answerers decide.
+  if (decision?.behavior === 'allow' && decision.updatedInput !== undefined) {
+    console.warn(`dsh-claude-compat: PermissionRequest hook allowed ${req.toolName} with a changed input; DSH tool input cannot be changed, so the allow is ignored`);
+    decision = undefined;
   }
   if (decision?.behavior === 'allow') return 'allowed-once';
   if (decision?.behavior === 'deny') {
@@ -146,7 +150,7 @@ export function registerPermissionHooks(ctx, engine, support) {
   }
   if (wantsApproval || wantsBatch) {
     ctx.on('tools/post-execute', async (exec, result, next) => {
-      calls.forget(exec.callId);
+      calls.forget(exec);
       if (wantsBatch && !support.isHookCall(exec)) recordResult(batches, exec, result);
       return next();
     });

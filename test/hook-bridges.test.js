@@ -115,13 +115,33 @@ test('PreToolUse: an if rule runs the hook only for matching calls', async () =>
   assert.equal((await pre(preCall('Bash', { command: 'npm test' }), allow)).kind, 'allow');
 });
 
-test('PreToolUse: updatedInput is warned, because DSH tool input cannot change', async () => {
+test('PreToolUse: updatedInput asks the user, because DSH cannot change the input', async () => {
   const listeners = listenersFor({
-    PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { updatedInput: { a: 1 } } }) }] }],
+    PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { permissionDecision: 'allow', updatedInput: { a: 1 } } }) }] }],
   });
   const { value, warnings } = await withWarnings(() => listeners.get('tools/pre-execute')(preCall('Read', {}), allow));
-  assert.equal(value.kind, 'allow');
+  assert.equal(value.kind, 'ask');
+  assert.match(value.reason, /change the input/);
   assert.match(warnings[0], /DSH tool input cannot be changed/);
+});
+
+test('PreToolUse: an allow answer is logged once, because DSH still asks', async () => {
+  const listeners = listenersFor({
+    PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { permissionDecision: 'allow' } }) }] }],
+  });
+  const { warnings } = await withWarnings(async () => {
+    await listeners.get('tools/pre-execute')(preCall('Read', {}), allow);
+    await listeners.get('tools/pre-execute')(preCall('Read', {}), allow);
+  });
+  assert.equal(warnings.filter((line) => /answered allow/.test(line)).length, 1);
+});
+
+test('PostToolUse: a stop request is logged, because DSH cannot stop the run after a tool ran', async () => {
+  const listeners = listenersFor({
+    PostToolUse: [{ matcher: '.*', hooks: [{ command: say({ continue: false, stopReason: 'halt' }) }] }],
+  });
+  const { warnings } = await withWarnings(() => listeners.get('tools/post-execute')(preCall('Read', {}), { content: [] }, async () => ({ kind: 'accept' })));
+  assert.match(warnings.join('\n'), /PostToolUse hook asked to stop the run/);
 });
 
 test('PreToolUse: additionalContext is injected into the calling agent', async () => {

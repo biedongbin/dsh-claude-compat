@@ -171,7 +171,7 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 |---|---|---|
 | SessionStart / SessionEnd | `agent/created` / `agent/disposed` | 仅主会话。SessionEnd 默认超时 1.5 秒。 |
 | UserPromptSubmit | `agent/pre-step` | 拦截会拒绝该提示。本插件自己注入的上下文不算提示。 |
-| PreToolUse | `tools/pre-execute` | `deny`、`ask` 与拦截映射为 DSH 决策。`updatedInput` 被忽略并给出警告。 |
+| PreToolUse | `tools/pre-execute` | `deny`、`ask` 与拦截映射为 DSH 决策。`updatedInput` 会让 DSH 询问用户并给出警告，因为 DSH 无法改写输入。hook 的 `allow` 不会跳过 DSH 的审批，且只记录一次日志。 |
 | PermissionRequest / PermissionDenied | `approval/request` | `allow` 与 `deny` 直接回答请求。多个 hook 同时回答时，`deny` 优先于 `allow`，因此失败的 `onFailure: "block"` hook 一定会拒绝。DSH 拒绝审批时运行 PermissionDenied。 |
 | PostToolUse / PostToolUseFailure | `tools/post-execute` | 生效 `updatedToolOutput`、拦截反馈与上下文。 |
 | PostToolBatch | 结果之后的第一个 `agent/pre-step` | 拦截会拒绝该步骤。 |
@@ -206,7 +206,7 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 | 行为 | 差异 |
 |---|---|
 | `PreCompact`、`PostCompact`、`CwdChanged`、`MessageDisplay`、`UserPromptExpansion`、`ConfigChange` | 仅观察。DSH 事后才通知，hook 无法阻止或修改。 |
-| `PreToolUse` 与 `PermissionRequest` 的 `updatedInput` | 被忽略并给出警告。DSH 无法改写工具调用。 |
+| `PreToolUse` 与 `PermissionRequest` 的 `updatedInput` | DSH 无法改写工具调用。PreToolUse 会询问用户；带 `updatedInput` 的 PermissionRequest `allow` 被忽略，交给常规审批者决定。两者都会给出警告。 |
 | `MessageDisplay` 的 `displayContent` | 被忽略并给出警告。DSH 无法修改显示的文本。 |
 | `SubagentStop` | 拦截不能让子 agent 继续运行。 |
 | `SubagentStart` 与 `SubagentStop` 的 `agent_type` | 固定为 `general-purpose`。DSH 没有命名的子 agent 类型。 |
