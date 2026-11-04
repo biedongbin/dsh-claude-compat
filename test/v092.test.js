@@ -59,13 +59,13 @@ test('cc-plugin command: no args → help text (no claude CLI needed)', async ()
   assert.match(out.text, /Claude Code Plugin Manager/);
 });
 
-test('cc-export command: list without a project root', async () => {
+test('cc-export command: list in a markerless dir uses the cwd (no git required)', async () => {
   const { ctx, defs } = fakeCommandHost();
   registerManagerCommands(ctx, {}, () => undefined);
   const empty = mkdtempSync(join(tmpdir(), 'dcc-cmd-export-'));
   const out = await defs.get('cc-export').handler({ rawInput: 'list', ...agentIn(empty) });
   assert.equal(out.kind, 'success');
-  assert.match(out.text, /No project root found/);
+  assert.match(out.text, /No DSH skills in .*\.dsh\/skills/);
 });
 
 test('apply(): wires commands next to the provider; manager skills leave the user menu', async () => {

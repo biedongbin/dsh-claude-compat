@@ -4,6 +4,11 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [Unreleased]
+
+### 修复
+- **项目不是 git 仓库时，项目级 `.claude/skills` 与 `.claude/rules` 被静默跳过**（[#10](https://github.com/biedongbin/dsh-claude-compat/issues/10)）。`findProjectRoot`/`findProjectRootSync` 逐级走到文件系统根，未找到 `.git` 便返回 `undefined`；两处调用点（skills 的 `list()`、rules 的 `buildRulesText()`）都以 `undefined` 为条件直接跳过，且无任何日志。现改为：祖先链上没有任何 `projectRootMarkers` 标记时，回退到会话 cwd 作为项目根——与 DSH `dsh-skill-filesystem` 的根规则一致（"nearest ancestor containing `.git`; without one, the current cwd is used"），也与 Claude Code 在任何目录都读取 `.claude/` 的行为对齐。同一回退同时覆盖项目 hooks（`loadHookSettings`）与项目 `.mcp.json`。由 `test/v100.test.js` 覆盖。
+
 ## [1.0.0] — 2026-10-30
 
 ### 新增

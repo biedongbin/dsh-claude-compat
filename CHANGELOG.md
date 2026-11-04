@@ -4,6 +4,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **Project `.claude/skills` and `.claude/rules` were silently skipped when the project was not a git repo** ([#10](https://github.com/biedongbin/dsh-claude-compat/issues/10)). `findProjectRoot`/`findProjectRootSync` walked to the filesystem root, found no `.git`, and returned `undefined`; both call sites (`list()` for skills, `buildRulesText()` for rules) guard on `undefined` and skip without a word. Root discovery now falls back to the session cwd when no `projectRootMarkers` entry is found, which is DSH's own skill-filesystem rule ("nearest ancestor containing `.git`; without one, the current cwd is used") and matches Claude Code, which reads `.claude/` from any directory. The same fallback applies to project hooks (`loadHookSettings`) and project `.mcp.json`. Covered by `test/v100.test.js`.
+
 ## [1.0.0] — 2026-10-30
 
 ### Added

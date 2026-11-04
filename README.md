@@ -124,7 +124,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `aliasDescriptionPrefix` | `true` | When an alias is used, put the original name in front of the description: `san-nao: 三脑 — …` |
 | `rulesMaxBytes` | `65536` | Hard cap on total injected project rules text |
 | `userRulesMaxBytes` | `65536` | Hard cap on total injected `~/.claude/rules` text |
-| `projectRootMarkers` | `[".git"]` | Ancestor markers for project-root discovery |
+| `projectRootMarkers` | `[".git"]` | Ancestor markers for project-root discovery; with no marker anywhere, the session cwd itself is the project root |
 | `skillRank` | `50` | Provider rank for project `.claude` skills (wins every DSH-native collision) |
 | `skillSource` | `project-claude` | Source tag for project catalog entries |
 | `userSkillRank` | `700` | Provider rank for `~/.claude` skills (loses to DSH-native `600`) |

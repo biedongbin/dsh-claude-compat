@@ -24,6 +24,11 @@ export function resolveUserClaudeDir(dir) {
   return resolve(dir);
 }
 
+// No marker on the whole ancestor chain → fall back to cwd, matching DSH's own
+// skill-filesystem root rule ("nearest ancestor containing `.git`; without one,
+// the current cwd is used"). Returning undefined here silently dropped a
+// non-git project's .claude/skills and .claude/rules (issue #10); Claude Code
+// reads .claude/ from a plain directory just the same.
 export async function findProjectRoot(cwd, markers = ['.git']) {
   let current = resolve(cwd);
   while (true) {
@@ -31,7 +36,7 @@ export async function findProjectRoot(cwd, markers = ['.git']) {
       if (await pathExists(join(current, marker))) return current;
     }
     const parent = dirname(current);
-    if (parent === current) return undefined;
+    if (parent === current) return resolve(cwd);
     current = parent;
   }
 }
@@ -43,7 +48,7 @@ export function findProjectRootSync(cwd, markers = ['.git']) {
       if (existsSync(join(current, marker))) return current;
     }
     const parent = dirname(current);
-    if (parent === current) return undefined;
+    if (parent === current) return resolve(cwd);
     current = parent;
   }
 }
