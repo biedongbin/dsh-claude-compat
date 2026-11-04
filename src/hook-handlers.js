@@ -70,6 +70,9 @@ export function runHookCommand(hook, stdin, { timeoutMs = 60_000 } = {}) {
       killHook(child);
       finish(1, true, `timed out after ${timeoutMs}ms`);
     }, timeoutMs);
+    // One decoder per stream: a character split across two data events stays whole.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { stdout = appendCapped(stdout, chunk); });
     child.stderr.on('data', (chunk) => { stderr = appendCapped(stderr, chunk); });
     child.on('error', (error) => finish(1, true, `failed to start: ${error.code ?? error.message}`));

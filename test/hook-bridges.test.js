@@ -27,6 +27,27 @@ const allow = async () => ({ kind: 'allow' });
 const accept = async () => ({ kind: 'accept' });
 const preCall = (name, input, agent) => ({ name, arguments: input, callId: 'call-1', agent });
 
+// ─── DSH names for built-in tools ───────────────────────────────────────────
+
+test('a native DSH tool name matches a Claude matcher and an if rule, and the payload says Bash', async () => {
+  for (const matcher of ['Bash', 'Edit|Bash', '.*', '^Bash$']) {
+    const listeners = listenersFor({
+      PreToolUse: [{ matcher, hooks: [{ type: 'command', if: 'Bash(git *)', command: 'exit 2' }] }],
+    });
+    const pre = listeners.get('tools/pre-execute');
+    assert.equal((await pre(preCall('bash', { command: 'git status' }), allow)).kind, 'deny', matcher);
+    assert.equal((await pre(preCall('bash', { command: 'npm test' }), allow)).kind, 'allow', matcher);
+  }
+});
+
+test('the PreToolUse payload names a native tool the way Claude Code does', async () => {
+  const dir = tempDir('dcc-native-name-');
+  const file = join(dir, 'stdin.json');
+  const listeners = listenersFor({ PreToolUse: [{ hooks: [{ command: `cat > "${file}"` }] }] });
+  await listeners.get('tools/pre-execute')(preCall('bash', { command: 'git status' }), allow);
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).tool_name, 'Bash');
+});
+
 // ─── PreToolUse ──────────────────────────────────────────────────────────────
 
 test('PreToolUse: no hook objection delegates to next(), so later listeners still run', async () => {

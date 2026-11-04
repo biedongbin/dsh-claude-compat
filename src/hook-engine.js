@@ -6,7 +6,7 @@
 import { NO_ONFAILURE_EVENTS } from './hook-events.js';
 import { runHandler } from './hook-handlers.js';
 import { interpretRun, mergeOutcomes } from './hook-output.js';
-import { matchIfRule } from './hook-spec.js';
+import { claudeToolName, matchIfRule } from './hook-spec.js';
 
 // A matcher with only these characters is an exact name, or a list of exact names.
 // StopFailure and FileChanged use the narrower set: no hyphen, space or comma.
@@ -89,9 +89,17 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
     return matchers.get(key);
   }
 
+  // DSH names its built-in tools in lower case (`bash`) and Claude Code hooks use `Bash`, so the
+  // matcher of a tool event may match either name.
+  function subjectMatches(hook, spec) {
+    const subject = spec.subject ?? '';
+    const matches = matcherFor(hook);
+    return matches(subject) || (spec.tool !== undefined && matches(claudeToolName(subject)));
+  }
+
   function eligible(event, spec) {
     return hooks.filter((hook) => {
-      if (hook.event !== event || !matcherFor(hook)(spec.subject ?? '')) return false;
+      if (hook.event !== event || !subjectMatches(hook, spec)) return false;
       if (hook.ifRule === undefined) return true;
       return spec.tool !== undefined && matchIfRule(hook.ifRule, spec.tool.name, spec.tool.input);
     });

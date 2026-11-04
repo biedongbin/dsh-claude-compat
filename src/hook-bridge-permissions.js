@@ -5,6 +5,7 @@
 // answerers still run. PostToolBatch runs at the first `agent/pre-step` after a
 // group of tool results, which is the point before the next model call.
 
+import { claudeToolName } from './hook-spec.js';
 import { HOOK_CALL_PREFIX, sessionIdOf } from './hook-support.js';
 import { failureText, responseOf } from './hook-bridge-tools.js';
 
@@ -44,7 +45,7 @@ async function onApproval(engine, support, calls, req, next) {
     console.warn(`dsh-claude-compat: no input is known for the approval of ${req.toolName}; PermissionRequest hooks get an empty tool_input`);
   }
   const call = recorded ?? { name: req.toolName, input: {} };
-  const fields = { tool_name: req.toolName, tool_input: call.input, permission_suggestions: [] };
+  const fields = { tool_name: claudeToolName(req.toolName), tool_input: call.input, permission_suggestions: [] };
   const outcome = await engine.fire('permission-request', 'PermissionRequest', {
     subject: req.toolName,
     agent: req.agent,
@@ -75,7 +76,7 @@ async function onDenied(engine, support, req, fields) {
     rewake: support.rewake(req.agent),
     tool: { name: req.toolName, input: fields.tool_input },
     payload: support.payload('PermissionDenied', req.agent, {
-      tool_name: req.toolName,
+      tool_name: claudeToolName(req.toolName),
       tool_input: fields.tool_input,
       tool_use_id: req.callId,
       reason: req.reason ?? 'permission request rejected',
@@ -92,7 +93,7 @@ function recordResult(batches, exec, result) {
   const entries = batches.get(key) ?? [];
   if (entries.length >= MAX_TRACKED_CALLS) entries.shift();
   entries.push({
-    tool_name: exec.name,
+    tool_name: claudeToolName(exec.name),
     tool_input: exec.arguments ?? {},
     tool_use_id: exec.callId,
     tool_response: result.isError === true ? failureText(result) : responseOf(result),

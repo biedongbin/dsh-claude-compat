@@ -28,6 +28,23 @@ function isAlive(pid) {
 
 // ─── command ─────────────────────────────────────────────────────────────────
 
+test('a multibyte character split across data events stays whole on stdout and stderr', async () => {
+  const script = `
+    const euro = Buffer.from('€');
+    const kana = Buffer.from('あ');
+    process.stdout.write(euro.subarray(0, 1));
+    process.stderr.write(kana.subarray(0, 2));
+    setTimeout(() => {
+      process.stdout.write(euro.subarray(1));
+      process.stderr.write(kana.subarray(2));
+    }, 80);
+  `;
+  const run = await runHookCommand({ type: 'command', command: process.execPath, args: ['-e', script], projectDir: '/tmp' }, '');
+  assert.equal(run.failed, false);
+  assert.equal(run.stdout, '€');
+  assert.equal(run.stderr, 'あ');
+});
+
 test('shell form sees CLAUDE_PROJECT_DIR as data, so shell characters in the path do not run', async () => {
   const hostile = '/tmp/p; echo pwned; $(echo pwned)';
   const run = await runHookCommand(plain('printf %s "$CLAUDE_PROJECT_DIR"', { projectDir: hostile }), '', {});

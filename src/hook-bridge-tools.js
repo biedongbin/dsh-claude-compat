@@ -4,6 +4,7 @@
 // Both waterfalls delegate to `next()` when the hooks have no objection, so
 // later DSH listeners (permission policy, spill, guards) still run.
 
+import { claudeToolName } from './hook-spec.js';
 import { blocksToText } from './hook-support.js';
 
 const TOOL_ABORT_CODES = new Set(['ABORTED', 'ABORTED_BEFORE_DISPATCH']);
@@ -29,7 +30,7 @@ async function onPreTool(engine, support, exec, next) {
     rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload('PreToolUse', exec.agent, {
-      tool_name: exec.name,
+      tool_name: claudeToolName(exec.name),
       tool_input: exec.arguments ?? {},
       tool_use_id: exec.callId,
     }),
@@ -80,7 +81,7 @@ async function onPostTool(engine, support, exec, result, next) {
     rewake: support.rewake(exec.agent),
     tool: { name: exec.name, input: exec.arguments },
     payload: support.payload(claudeName, exec.agent, {
-      tool_name: exec.name,
+      tool_name: claudeToolName(exec.name),
       tool_input: exec.arguments ?? {},
       tool_use_id: exec.callId,
       ...failed ? failureFields(result) : { tool_response: responseOf(result) },
