@@ -15,7 +15,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
-import { matchIfRule, parseHookHandler } from './hook-spec.js';
+import { claudeToolName, matchIfRule, parseHookHandler } from './hook-spec.js';
 import {
   CLAUDE_COMPAT_SOURCE_KIND,
   findProjectRootSync,
@@ -51,7 +51,7 @@ function preToolPayload(exec) {
   return JSON.stringify({
     ...basePayload('PreToolUse'),
     session_id: String(exec.callId),
-    tool_name: exec.name,
+    tool_name: claudeToolName(exec.name),
     tool_input: exec.arguments ?? {},
   });
 }
@@ -59,7 +59,7 @@ function preToolPayload(exec) {
 function postToolPayload(exec, result) {
   return JSON.stringify({
     ...basePayload('PostToolUse'),
-    tool_name: exec.name,
+    tool_name: claudeToolName(exec.name),
     tool_input: exec.arguments ?? {},
     tool_response: result,
   });
@@ -238,10 +238,16 @@ function postDecision(run, hook) {
     : { kind: 'accept' };
 }
 
-// Hooks whose matcher and `if` rule both match this tool call.
+// Hooks whose matcher and `if` rule both match this tool call. DSH names its
+// built-in tools in lower case (`bash`), Claude Code hooks use `Bash`, so a
+// matcher may match either name.
 function eligibleFor(hooks, exec) {
-  return hooks.filter((h) => compileMatcher(h.matcher)(exec.name)
-    && (h.ifRule === undefined || matchIfRule(h.ifRule, exec.name, exec.arguments)));
+  const names = [exec.name, claudeToolName(exec.name)];
+  return hooks.filter((h) => {
+    const matches = compileMatcher(h.matcher);
+    return names.some((name) => matches(name))
+      && (h.ifRule === undefined || matchIfRule(h.ifRule, exec.name, exec.arguments));
+  });
 }
 
 // `async` hooks run in the background. They cannot change the decision, so

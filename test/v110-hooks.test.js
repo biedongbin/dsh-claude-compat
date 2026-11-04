@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { matchIfRule, parseHookHandler } from '../src/hook-spec.js';
+import { claudeToolName, matchIfRule, parseHookHandler } from '../src/hook-spec.js';
 import { registerHooks, runHookCommand } from '../src/hooks.js';
 
 const PROJECT = '/work/project';
@@ -157,6 +157,17 @@ test('Bash(pattern) matches the command with a * glob, anchored at both ends', (
   assert.equal(matchIfRule('Bash(git *)', 'Bash', { command: 'npm test' }), false);
   assert.equal(matchIfRule('Bash(git)', 'Bash', input), false);
   assert.equal(matchIfRule('Bash(git *)', 'Edit', input), false);
+});
+
+test('DSH built-in tool names match the Claude Code rule names', () => {
+  assert.equal(claudeToolName('bash'), 'Bash');
+  assert.equal(claudeToolName('mcp__srv__tool'), 'mcp__srv__tool');
+  assert.equal(matchIfRule('Bash(git *)', 'bash', { command: 'git status' }), true);
+  assert.equal(matchIfRule('Bash(git *)', 'bash', { command: 'npm test' }), false);
+  assert.equal(matchIfRule('Read(src/*)', 'read', { file_path: 'src/a.js' }), true);
+  assert.equal(matchIfRule('Edit(*.md)', 'edit', { file_path: 'README.md' }), true);
+  assert.equal(matchIfRule('Write(*.md)', 'write', { file_path: 'a.txt' }), false);
+  assert.equal(matchIfRule('Bash', 'read', {}), false);
 });
 
 test('a compound command matches when one subcommand matches', () => {
@@ -310,6 +321,25 @@ test('an if rule runs the hook only for matching calls', async () => {
   const pre = listeners.get('tools/pre-execute');
   assert.equal((await pre(preCall('Bash', { command: 'git status' }))).kind, 'deny');
   assert.equal((await pre(preCall('Bash', { command: 'npm test' }))).kind, 'allow');
+});
+
+test('native DSH names reach the hook through a Claude matcher, a wildcard, and an if rule', async () => {
+  for (const matcher of ['Bash', '.*', 'bash', 'Edit|Bash']) {
+    const listeners = listenersFor({
+      PreToolUse: [{ matcher, hooks: [{ type: 'command', if: 'Bash(git *)', command: 'exit 2' }] }],
+    });
+    const pre = listeners.get('tools/pre-execute');
+    assert.equal((await pre(preCall('bash', { command: 'git status' }))).kind, 'deny', matcher);
+    assert.equal((await pre(preCall('bash', { command: 'npm test' }))).kind, 'allow', matcher);
+  }
+});
+
+test('the hook payload names a native tool the way Claude Code does', async () => {
+  const dir = tempDir('dcc-native-name-');
+  const file = join(dir, 'stdin.json');
+  const listeners = listenersFor({ PreToolUse: [{ hooks: [{ command: `cat > "${file}"` }] }] });
+  await listeners.get('tools/pre-execute')(preCall('bash', { command: 'git status' }));
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).tool_name, 'Bash');
 });
 
 test('onFailure block turns a failed pre-tool hook into a deny with the reason', async () => {

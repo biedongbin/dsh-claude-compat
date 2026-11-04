@@ -19,6 +19,25 @@ const RULE_FIELD = new Map([
   ['NotebookEdit', 'notebook_path'],
 ]);
 
+// DSH names its built-in tools in lower case. Claude Code rules use the Claude
+// names, and the argument fields (`command`, `file_path`) are the same in both.
+// Built-in names from DSH tool-bash and tool-fs; checked against dsh-v0.2.2-alpha.2.
+const NATIVE_TOOL_NAMES = new Map([
+  ['bash', 'Bash'],
+  ['read', 'Read'],
+  ['edit', 'Edit'],
+  ['write', 'Write'],
+]);
+
+/**
+ * The Claude Code name of a DSH tool. A name that is not a DSH built-in stays as it is.
+ * @param {string} name
+ * @returns {string}
+ */
+export function claudeToolName(name) {
+  return NATIVE_TOOL_NAMES.get(name) ?? name;
+}
+
 // A permission rule is `Tool` or `Tool(pattern)`.
 const RULE_SHAPE = /^([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?$/s;
 
@@ -185,14 +204,15 @@ function subjectsOf(toolName, toolInput) {
  * `**` is treated like `*`; the gitignore-style `**` of file rules is not
  * implemented.
  * @param {string} rule for example "Bash(git *)"
- * @param {string} toolName
+ * @param {string} toolName a Claude Code name or a DSH built-in name such as `bash`
  * @param {unknown} toolInput
  * @returns {boolean}
  */
 export function matchIfRule(rule, toolName, toolInput) {
+  const tool = claudeToolName(toolName);
   const shape = RULE_SHAPE.exec(rule.trim());
-  if (shape === null || shape[1] !== toolName) return false;
+  if (shape === null || shape[1] !== tool) return false;
   if (shape[2] === undefined) return true;
   const regex = patternRegExp(shape[2]);
-  return subjectsOf(toolName, toolInput).some((subject) => regex.test(subject));
+  return subjectsOf(tool, toolInput).some((subject) => regex.test(subject));
 }
