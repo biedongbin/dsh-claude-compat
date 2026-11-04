@@ -98,6 +98,31 @@ test('FileChanged: a hook with the hook matcher reads the basename of the change
   await h.dispose();
 });
 
+test('FileChanged: a relative watchPaths entry is read against the session directory', async () => {
+  const cwd = tempDir('dcc-fc-');
+  const log = join(tempDir('dcc-log-'), 'lines');
+  const command = `cat >> "${log}"; echo >> "${log}"; printf '%s' '${JSON.stringify({ hookSpecificOutput: { watchPaths: ['sub/x.env'] } })}'`;
+  const h = harness({ FileChanged: [{ matcher: 'x.env', hooks: [{ command }] }] });
+  await created(h, fakeAgent('s1', cwd));
+  mkdirSync(join(cwd, 'sub'));
+  writeFileSync(join(cwd, 'x.env'), 'a');
+  assert.ok(await waitFor(() => readLines(log).length === 1));
+  await h.drain();
+  writeFileSync(join(cwd, 'sub', 'x.env'), 'b');
+  assert.ok(await waitFor(() => readLines(log).length === 2), 'the relative path is watched under the session directory');
+  await h.dispose();
+});
+
+test('FileChanged: a matcher that looks like a pattern is logged once', async () => {
+  const { warnings } = await withWarnings(async () => {
+    const h = harness({ FileChanged: [{ matcher: '^config\\..*$', hooks: [{ command: 'true' }] }] });
+    await created(h, fakeAgent('s-pattern', tempDir('dcc-fc-')));
+    await created(h, fakeAgent('s-pattern-2', tempDir('dcc-fc-')));
+    await h.dispose();
+  });
+  assert.equal(warnings.filter((w) => /looks like a pattern/.test(w)).length, 1);
+});
+
 test('FileChanged: watchPaths from the hook adds files to watch, and replaces the earlier list', async () => {
   const cwd = tempDir('dcc-fc-');
   const other = tempDir('dcc-other-');

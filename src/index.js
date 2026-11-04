@@ -500,7 +500,11 @@ function registerRulesSection(ctx, config, onLoaded) {
     const cwd = agent.session.header?.cwd ?? process.cwd();
     if (!cache.has(cwd)) {
       const { text, files } = buildRulesText(cwd, config, maxBytes);
-      if (text.length === 0) return decision;
+      // Rules are read once per directory for the life of the process, also when there are none.
+      if (text.length === 0) {
+        cache.set(cwd, { files, message: undefined });
+        return decision;
+      }
       // Claude Code's mechanism (leaked source, api.ts prependUserContext):
       // rules as ONE user-role <system-reminder> message at the very front
       // of the message array. Not in system prompt.
@@ -513,6 +517,7 @@ function registerRulesSection(ctx, config, onLoaded) {
       });
     }
     const { files, message } = cache.get(cwd);
+    if (message === undefined) return decision;
     onLoaded?.(agent, files);
     return {
       kind: 'enter',

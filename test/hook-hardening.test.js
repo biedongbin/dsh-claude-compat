@@ -144,6 +144,19 @@ test('todo_write arguments with no todos list are logged', async () => {
   assert.match(warnings.join('\n'), /todo_write arguments have no todos list/);
 });
 
+test('todo_write items with no text are skipped and counted in the log', async () => {
+  const h = harness({ TaskCreated: [{ hooks: [{ command: 'true' }] }] });
+  const todos = [{ content: 'ok', status: 'pending' }, { status: 'pending' }, null];
+  const { warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [{ name: 'todo_write', arguments: { todos }, callId: 'c', agent: fakeAgent() }], allow));
+  assert.match(warnings.join('\n'), /2 todo_write item\(s\) have no text/);
+});
+
+test('a custom runner that returns no streams does not break the event', async () => {
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'x' }] }] }, { runners: { command: async () => ({ exitCode: 2, failed: false }) } });
+  const { value } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', fakeAgent())], allow));
+  assert.equal(value.kind, 'deny');
+});
+
 test('a team/member event with no member does not throw, and a blocked teammate with no steer does not throw', async () => {
   const h = harness({ TeammateIdle: [{ hooks: [{ command: 'exit 2' }] }] });
   await h.dispatch('session/event', [{ id: 'lead', header: { id: 'lead' } }, { type: 'team/member', seq: 1, time: 0, data: {} }], () => {});

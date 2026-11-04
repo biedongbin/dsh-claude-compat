@@ -131,6 +131,21 @@ test('skill precedence: project .claude > DSH bundled (600) > ~/.claude', async 
   assert.equal(noCwd.find((s) => s.name === 'user-only').source, 'user-claude');
 });
 
+test('rules: a directory with no rules is read once, like one with rules', async () => {
+  const project = makeSandbox('dcc-rules-empty-');
+  mkdirSync(join(project, '.git'));
+  const ctx = await newHarness({ userClaudeDir: makeSandbox('dcc-rules-empty-user-') });
+  const step = () => ctx.waterfall(
+    'agent/pre-step',
+    { agent: { session: { header: { cwd: project }, surface: { nodes: [] }, eventAt: () => undefined } }, messages: [] },
+    async () => ({ kind: 'enter', messages: [] }),
+  );
+  assert.equal((await step()).messages.length, 0);
+  mkdirSync(join(project, '.claude', 'rules'), { recursive: true });
+  writeFileSync(join(project, '.claude', 'rules', 'late.md'), 'LATE RULE\n');
+  assert.equal((await step()).messages.length, 0, 'a rule added later waits for the next session, as a cached result does');
+});
+
 test('rules: project .claude/rules wins same-basename ~/.claude/rules in one envelope', async () => {
   const project = makeSandbox('dcc-rules-project-');
   mkdirSync(join(project, '.git'));

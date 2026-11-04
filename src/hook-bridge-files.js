@@ -13,12 +13,25 @@ import { createWatcher } from './hook-watch.js';
 // pattern names no file.
 const NO_FILE_MATCHERS = new Set(['', '*', '.*']);
 
+// A name with a regular-expression character is most likely a pattern. The watcher takes names.
+const PATTERN_CHARACTERS = /[*+?()[\]{}^$\\]/;
+const warnedPatterns = new Set();
+
 function matcherPaths(engine, cwd) {
   return engine.matchers('file-changed')
     .flatMap((matcher) => matcher.split('|').map((name) => name.trim()))
     .filter((name) => !NO_FILE_MATCHERS.has(name))
-    .map((name) => (isAbsolute(name) ? name : resolve(cwd, name)));
+    .map((name) => {
+      if (PATTERN_CHARACTERS.test(name) && !warnedPatterns.has(name)) {
+        warnedPatterns.add(name);
+        console.warn(`dsh-claude-compat: FileChanged matcher "${name}" looks like a pattern; the plugin watches the literal file name`);
+      }
+      return isAbsolute(name) ? name : resolve(cwd, name);
+    });
 }
+
+// A path from a hook's watchPaths may be relative. Claude Code reads it against the session directory.
+const dynamicPaths = (state) => state.dynamic.map((path) => (isAbsolute(path) ? path : resolve(state.cwd, path)));
 
 /**
  * Register the FileChanged watcher and install its controller on `support.files`.
@@ -35,12 +48,12 @@ export function registerFileHooks(ctx, engine, support, { intervalMs } = {}) {
     const state = states.get(key);
     state.matched = matcherPaths(engine, state.cwd);
     watcher.set(`matcher:${key}`, state.matched);
-    watcher.set(`dynamic:${key}`, state.dynamic);
+    watcher.set(`dynamic:${key}`, dynamicPaths(state));
   }
 
   async function onChange(path, event) {
     for (const [key, state] of states) {
-      if (!state.matched.includes(path) && !state.dynamic.includes(path)) continue;
+      if (!state.matched.includes(path) && !dynamicPaths(state).includes(path)) continue;
       support.track(engine.fire('file-changed', 'FileChanged', {
         subject: basename(path),
         payload: support.payload('FileChanged', state.agent, { file_path: path, event }),

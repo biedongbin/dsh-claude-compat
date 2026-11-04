@@ -40,6 +40,12 @@ export function parseVerdict(text) {
 
 const ALLOWED = { exitCode: 0, stdout: '', failed: false };
 
+// A block verdict that has no effect on this event. It is logged, so the author sees it.
+function ignored(event, why) {
+  console.warn(`dsh-claude-compat: a ${event} hook answered "not ok", which has no effect: ${why}`);
+  return ALLOWED;
+}
+
 /**
  * Turn a verdict into the run that a command hook would give for the same decision, so
  * the engine reads it with the rules of the event.
@@ -54,7 +60,7 @@ export function verdictToRun(event, verdict, hook) {
   // `impossible` lets the turn end on Stop and SubagentStop. Agent hooks do not have it.
   if ((event === 'stop' || event === 'subagent-stop') && hook.type === 'prompt' && verdict.impossible) return ALLOWED;
   // The denial already happened. A PermissionRequest block becomes a deny decision.
-  if (event === 'permission-denied') return ALLOWED;
+  if (event === 'permission-denied') return ignored(event, 'the denial already happened');
   if (event === 'permission-request') {
     const decision = { behavior: 'deny', message: reason };
     const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
@@ -66,6 +72,8 @@ export function verdictToRun(event, verdict, hook) {
   }
   // A teammate that is idle has already stopped. Only continueOnBlock (always on for agent
   // hooks) keeps it working.
-  if (event === 'teammate-idle' && hook.type === 'prompt' && !hook.continueOnBlock) return ALLOWED;
+  if (event === 'teammate-idle' && hook.type === 'prompt' && !hook.continueOnBlock) {
+    return ignored(event, 'the teammate already stopped; set continueOnBlock to keep it working');
+  }
   return { exitCode: 2, stdout: reason, failed: false };
 }

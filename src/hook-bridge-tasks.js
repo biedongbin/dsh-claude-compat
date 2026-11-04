@@ -15,7 +15,11 @@ function validTodos(exec) {
     console.warn('dsh-claude-compat: todo_write arguments have no todos list; TaskCreated and TaskCompleted hooks skipped');
     return undefined;
   }
-  return todos.filter((todo) => typeof todo?.content === 'string');
+  const valid = todos.filter((todo) => typeof todo?.content === 'string');
+  if (valid.length !== todos.length) {
+    console.warn(`dsh-claude-compat: ${todos.length - valid.length} todo_write item(s) have no text; TaskCreated and TaskCompleted skip them`);
+  }
+  return valid;
 }
 
 // Count how many times each text occurs, so a repeated text is matched one to one.

@@ -38,6 +38,23 @@ test('ok true needs no reason', () => {
 
 // ─── verdictToRun ────────────────────────────────────────────────────────────
 
+test('a not-ok verdict with no effect on its event is logged', () => {
+  const original = console.warn;
+  const lines = [];
+  console.warn = (...args) => lines.push(args.join(' '));
+  try {
+    verdictToRun('permission-denied', { ok: false, reason: 'x' }, { type: 'prompt' });
+    verdictToRun('teammate-idle', { ok: false, reason: 'x' }, { type: 'prompt' });
+    verdictToRun('teammate-idle', { ok: false, reason: 'x' }, { type: 'prompt', continueOnBlock: true });
+    verdictToRun('stop', { ok: true }, { type: 'prompt' });
+  } finally {
+    console.warn = original;
+  }
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /permission-denied hook answered "not ok".*already happened/);
+  assert.match(lines[1], /teammate-idle hook answered "not ok".*continueOnBlock/);
+});
+
 const block = (event, hook = { type: 'prompt' }, extra = {}) => verdictToRun(event, { ok: false, reason: 'because', ...extra }, hook);
 const outcomeOf = (event, run) => interpretRun(event, 'X', run);
 

@@ -119,12 +119,14 @@ export function createHookEngine({ hooks: initial, config, runners, isMuted, tra
   // A runner never rejects, but a bug in one must not take the DSH event down with it.
   async function runOne(hook, spec) {
     try {
-      return await runHandler(hook, JSON.stringify(spec.payload), {
+      const run = await runHandler(hook, JSON.stringify(spec.payload), {
         timeoutMs: timeoutFor(hook, spec),
         runners,
         event: hook.event,
         agent: spec.agent,
       });
+      // A runner may leave out the streams. The output rules read both as text.
+      return { stdout: '', stderr: '', ...run };
     } catch (error) {
       return { exitCode: 1, stdout: '', stderr: '', failed: true, reason: `hook runner error: ${error?.message ?? error}` };
     }
