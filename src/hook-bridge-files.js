@@ -17,7 +17,8 @@ const NO_FILE_MATCHERS = new Set(['', '*', '.*']);
 const PATTERN_CHARACTERS = /[*+?()[\]{}^$\\]/;
 const warnedPatterns = new Set();
 
-function matcherPaths(engine, cwd) {
+/** The file paths that the FileChanged matchers name, resolved against `cwd`. */
+export function matcherPaths(engine, cwd) {
   return engine.matchers('file-changed')
     .flatMap((matcher) => matcher.split('|').map((name) => name.trim()))
     .filter((name) => !NO_FILE_MATCHERS.has(name))

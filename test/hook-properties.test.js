@@ -3,9 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compileMatcher } from '../src/hook-engine.js';
-import { interpretRun } from '../src/hook-output.js';
-import { mcpToolName, substitute } from '../src/hook-runners-model.js';
+import { interpretRun, mergeOutcomes } from '../src/hook-output.js';
+import { buildPrompt, mcpToolName, substitute } from '../src/hook-runners-model.js';
 import { stopCap } from '../src/hook-bridge-agent.js';
+import { matcherPaths } from '../src/hook-bridge-files.js';
+import { splitLines } from '../src/hook-bridge-messages.js';
+import { completedTodos, createdTodos } from '../src/hook-bridge-tasks.js';
 import { matchIfRule, parseHookHandler } from '../src/hook-spec.js';
 import { parseVerdict } from '../src/hook-verdict.js';
 
@@ -188,5 +191,107 @@ test('property: an accepted prompt model has no empty or extra segment', () => {
     if (!result.ok) continue;
     const parts = model.trim().split('/');
     assert.ok(parts.length <= 2 && parts.every((part) => part !== '' && !/\s/.test(part)), JSON.stringify(model));
+  }
+});
+
+// ─── matcherPaths, splitLines, todos, mergeOutcomes, substitute, buildPrompt ─────────────────────
+
+test('property: matcherPaths returns one absolute path for each non-empty, non-match-all name', () => {
+  const random = rng(1201);
+  const noWarn = console.warn;
+  console.warn = () => {};
+  try {
+    for (let i = 0; i < RUNS; i += 1) {
+      const parts = Array.from({ length: Math.floor(random() * 5) }, () => textFrom(random, 'ab./ _-*', 8));
+      const matcher = parts.join(random() < 0.5 ? '|' : ' | ');
+      const paths = matcherPaths({ matchers: () => [matcher] }, '/session/dir');
+      const expected = matcher.split('|').map((name) => name.trim()).filter((name) => !['', '*', '.*'].includes(name));
+      assert.equal(paths.length, expected.length, JSON.stringify(matcher));
+      assert.ok(paths.every((path) => path.startsWith('/')), JSON.stringify(matcher));
+    }
+  } finally {
+    console.warn = noWarn;
+  }
+});
+
+test('property: splitLines gives back the text, with whole lines first and no newline in the rest', () => {
+  const random = rng(1202);
+  for (let i = 0; i < RUNS; i += 1) {
+    const text = textFrom(random, 'ab \n\n', 30);
+    const [lines, rest] = splitLines(text);
+    assert.equal(lines + rest, text, JSON.stringify(text));
+    assert.ok(lines === '' || lines.endsWith('\n'), JSON.stringify(text));
+    assert.ok(!rest.includes('\n'), JSON.stringify(text));
+  }
+});
+
+test('property: created and completed todos match the old list one to one by text', () => {
+  const random = rng(1203);
+  const statuses = ['pending', 'in_progress', 'completed'];
+  const list = () => Array.from({ length: Math.floor(random() * 6) }, () => ({
+    content: ['a', 'b', 'c'][Math.floor(random() * 3)],
+    status: statuses[Math.floor(random() * 3)],
+  }));
+  const tally = (todos) => todos.reduce((counts, todo) => counts.set(todo.content, (counts.get(todo.content) ?? 0) + 1), new Map());
+  for (let i = 0; i < RUNS; i += 1) {
+    const previous = list();
+    const next = list();
+    const created = createdTodos(previous, next);
+    assert.ok(created.every(({ todo, index }) => next[index] === todo), 'each index points at its todo in next');
+    const seen = tally(previous);
+    const newTexts = tally(next);
+    for (const [text, count] of seen) newTexts.set(text, Math.max(0, (newTexts.get(text) ?? 0) - count));
+    assert.deepEqual(tally(created.map(({ todo }) => todo)), new Map([...newTexts].filter(([, count]) => count > 0)));
+    const done = completedTodos(previous, next);
+    assert.ok(done.every(({ todo }) => todo.status === 'completed'));
+    assert.ok(done.length <= next.filter((todo) => todo.status === 'completed').length);
+  }
+});
+
+test('property: mergeOutcomes keeps the strongest permission in any order, ORs blocks, and skips failed runs', () => {
+  const random = rng(1204);
+  const decide = (permission) => interpretRun('pre-tool-use', 'PreToolUse', {
+    exitCode: 0, stdout: JSON.stringify({ hookSpecificOutput: { permissionDecision: permission } }), failed: false,
+  });
+  const rank = { deny: 4, defer: 3, ask: 2, allow: 1 };
+  const pool = () => [
+    ...Array.from({ length: 1 + Math.floor(random() * 4) }, () => decide(['allow', 'ask', 'defer', 'deny'][Math.floor(random() * 4)])),
+    ...Array.from({ length: Math.floor(random() * 2) }, () => interpretRun('pre-tool-use', 'PreToolUse', { exitCode: 2, stdout: '', stderr: 'no', failed: false })),
+  ];
+  const shuffle = (list) => list.map((item) => [random(), item]).sort((a, b) => a[0] - b[0]).map(([, item]) => item);
+  for (let i = 0; i < RUNS; i += 1) {
+    const outcomes = pool();
+    const merged = mergeOutcomes(outcomes);
+    const expected = outcomes.filter((outcome) => outcome.permission !== undefined)
+      .reduce((best, outcome) => ((rank[outcome.permission] > (rank[best] ?? 0)) ? outcome.permission : best), undefined);
+    assert.equal(merged.permission, expected);
+    assert.equal(mergeOutcomes(shuffle(outcomes)).permission, merged.permission, 'order does not change the permission');
+    assert.equal(merged.blocked, outcomes.some((outcome) => outcome.blocked));
+    const failed = interpretRun('pre-tool-use', 'PreToolUse', { exitCode: 1, stdout: '', failed: true, reason: 'exit 1' });
+    assert.deepEqual(mergeOutcomes([...outcomes, failed]).permission, merged.permission);
+    assert.equal(mergeOutcomes([...outcomes, failed]).blocked, merged.blocked);
+  }
+});
+
+test('property: substitute puts a field of the input at its placeholder, as data, and leaves no placeholder', () => {
+  const random = rng(1205);
+  for (let i = 0; i < RUNS; i += 1) {
+    const value = textFrom(random, 'ab$&{}1 \\', 10);
+    const input = { tool_input: { file_path: value, n: Math.floor(random() * 100) } };
+    const template = `x ${'${tool_input.file_path}'} y ${'${tool_input.n}'} z ${'${tool_input.missing}'}`;
+    assert.equal(substitute(template, input), `x ${value} y ${input.tool_input.n} z `, JSON.stringify(value));
+    assert.deepEqual(substitute({ a: [template] }, input), { a: [`x ${value} y ${input.tool_input.n} z `] });
+  }
+});
+
+test('property: buildPrompt always carries the payload verbatim, and appends it when there is no $ARGUMENTS', () => {
+  const random = rng(1206);
+  for (let i = 0; i < RUNS; i += 1) {
+    const prompt = textFrom(random, 'ab $&1\n', 12).replaceAll('$ARGUMENTS', '');
+    const payload = textFrom(random, 'ab$&1`{}\n ', 14);
+    assert.ok(buildPrompt(prompt, payload).includes(payload), JSON.stringify({ prompt, payload }));
+    if (!prompt.includes('$ARGUMENTS')) assert.equal(buildPrompt(prompt, payload), `${prompt}\n\n${payload}`);
+    const withToken = buildPrompt(`before $ARGUMENTS after`, payload);
+    assert.equal(withToken, `before ${payload} after`, JSON.stringify(payload));
   }
 });

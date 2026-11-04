@@ -161,6 +161,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 处理器类型有 `command`、`http`、`mcp_tool`、`prompt` 和 `agent`，各事件允许的类型与 Claude Code 一致。
 hook 失败（超时、无法启动、其他退出码）会记录原因并放行，除非 `onFailure` 为 `"block"`。
 matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名列表，否则按不锚定的正则表达式处理。
+hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code 一致。Bash 规则在任一子命令匹配时即匹配，因此 `if` 并不能证明整条命令安全：批准请求的 hook 必须自行检查命令。
 `session_id` 是 DSH 会话 id；在子 agent 内仍是主会话 id，并用 `agent_id` 与 `agent_type` 标识子 agent。
 `transcript_path` 为空，因为 DSH 没有 transcript 文件。
 
@@ -225,6 +226,7 @@ matcher 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 时是精确名
 
 - **Skill 命名**：DSH 要求 kebab-case。嵌套 skill 目录扁平化（`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`）；frontmatter 名字非法时回退目录名。
 - **MCP 生命周期**：`.mcp.json` 仅在 DSH 启动时（启动工区）读取一次，每个服务器随进程生命周期挂载 —— 非按会话。修改后需重启 DSH。
+- **项目级 hook**：插件没有工作区信任提示。`<project>/.claude/settings.json` 或 `<project>/.claude/settings.local.json` 中的 hook 会在 DSH 打开该项目时以你的权限运行，请只打开你信任的项目。PermissionRequest hook 还会收到 DSH 发起请求的 `reason`，因此可以区分沙箱升级与普通审批。
 - **Hooks 范围**：33 个 Claude Code hook 事件中有 26 个可运行，五种处理器类型都支持。每个事件对应的 DSH 扩展点以及无法运行的事件见 [Hooks](#hooks)。
 - **Rules 粒度**：每个新会话读取（按会话 cwd 缓存）。会话中改 rule，下一会话生效。
 - **Rules 内容**：rules 原文注入为模型指令。只提交你想让模型遵循的 rule —— 信任级别同 `CLAUDE.md`。

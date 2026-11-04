@@ -23,7 +23,7 @@ function freshMessage(previous, turn) {
 }
 
 // The part of `text` up to and including its last newline, and the rest.
-function splitLines(text) {
+export function splitLines(text) {
   const cut = text.lastIndexOf('\n') + 1;
   return [text.slice(0, cut), text.slice(cut)];
 }

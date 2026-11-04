@@ -163,6 +163,7 @@ Each hook runs with the Claude Code JSON input on stdin, and its exit code and J
 Handler types are `command`, `http`, `mcp_tool`, `prompt` and `agent`, on the events that Claude Code allows them on.
 A hook that fails (timeout, start error, other exit code) is logged with its reason and lets the action go on, unless `onFailure` is `"block"`.
 A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of names. Any other matcher is an unanchored regular expression.
+A hook's `if` rule is a filter that decides whether the hook runs, as in Claude Code. A Bash rule matches when any subcommand matches, so `if` does not prove that the whole command is safe: a hook that approves a request must check the command itself.
 `session_id` is the DSH session id. Inside a subagent it stays the main session id, and `agent_id` and `agent_type` name the subagent.
 `transcript_path` is empty, because DSH has no transcript file.
 
@@ -227,6 +228,7 @@ Handler details:
 
 - **Skill naming**: DSH requires kebab-case skill names. Nested skill directories are flattened (`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`); invalid frontmatter names fall back to the directory name.
 - **MCP lifecycle**: `.mcp.json` is read once at DSH startup from the launch workspace — not per session — and each server mounts for the process lifetime. Restart DSH to pick up edits.
+- **Project hooks**: the plugin has no workspace-trust prompt. A hook in `<project>/.claude/settings.json` or `<project>/.claude/settings.local.json` runs when DSH opens that project, with your permissions. Open only projects you trust. A PermissionRequest hook also gets the `reason` that DSH asks with, so it can tell a sandbox escalation from a plain approval.
 - **Hooks scope**: 26 of the 33 Claude Code hook events run, with all five handler types. See [Hooks](#hooks) for the DSH point behind each event and the events that cannot run.
 - **Rules granularity**: rules are read per new session (cached per session cwd). Editing a rule mid-session takes effect in the next session.
 - **Rules content**: rules are injected verbatim as instructions to the model. Only commit rules you want the model to follow — same trust level as `CLAUDE.md`.
