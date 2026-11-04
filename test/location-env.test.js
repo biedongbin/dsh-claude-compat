@@ -3,7 +3,7 @@
 // Property tests use a seeded generator, so a failure reproduces.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import {
@@ -412,4 +412,223 @@ test('runPluginCommand disk fallback reads the configured plugins root', async (
     config: { pluginsRoot: root, userClaudeDir: tmp('dcc-user-') },
   }));
   assert.match(text, /cfg-plugin@market/);
+});
+
+// ─── review fixes: warnings, traversal, validation scope ─────────────────────
+
+function writeManifest(dir, content) {
+  mkdirSync(join(dir, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(dir, '.claude-plugin', 'plugin.json'), content);
+}
+
+test('a malformed installed plugin.json warns and falls back to the key name', async () => {
+  const primary = tmp('dcc-primary-');
+  const installed = tmp('dcc-bad-installed-');
+  writeManifest(installed, '{ not json');
+  writeInstalled(primary, { 'broken@m': installed });
+  const warnings = await captureWarnings(() => withEnv({}, () => {
+    assert.equal(readInstalledClaudePlugins(primary)[0].name, 'broken');
+  }));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /cannot read plugin manifest.*Using "broken"/);
+});
+
+test('an inline plugin that replaces an installed plugin is reported once', async () => {
+  const primary = tmp('dcc-primary-');
+  const installed = tmp('dcc-installed-');
+  const inline = tmp('dcc-inline-');
+  writeManifest(installed, JSON.stringify({ name: 'dup' }));
+  writeManifest(inline, JSON.stringify({ name: 'dup' }));
+  writeInstalled(primary, { 'dup@m': installed });
+  const warnings = await captureWarnings(() => withEnv({ CLAUDE_CODE_PLUGIN_DIRS: inline }, () => {
+    readInstalledClaudePlugins(primary);
+    readInstalledClaudePlugins(primary);
+  }));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], new RegExp(`${inline}.*replaces installed plugin dup@m`));
+});
+
+test('an installed_plugins.json without a plugins object is reported', async () => {
+  const primary = tmp('dcc-primary-');
+  mkdirSync(primary, { recursive: true });
+  writeFileSync(join(primary, 'installed_plugins.json'), '["wrong shape"]');
+  const warnings = await captureWarnings(() => withEnv({}, () => {
+    assert.deepEqual(readInstalledClaudePlugins(primary), []);
+  }));
+  assert.match(warnings.join('\n'), /has no "plugins" object/);
+});
+
+test('a seed record cannot point the cache lookup outside <seed>/cache', async () => {
+  const seed = tmp('dcc-seed-escape-');
+  mkdirSync(join(seed, 'escape'), { recursive: true });
+  const record = (version) => [{ scope: 'user', installPath: '/recorded/path', version }];
+  writeFileSync(join(seed, 'installed_plugins.json'), JSON.stringify({
+    plugins: { 'p@m': record('../../../escape'), 'q@m': record('a/b'), 'r@m': record('..') },
+  }));
+  await withEnv({ CLAUDE_CODE_PLUGIN_SEED_DIR: seed }, async () => {
+    await captureWarnings(() => {
+      for (const plugin of readInstalledClaudePlugins(tmp('dcc-primary-'))) {
+        assert.equal(plugin.installPath, '/recorded/path', plugin.key);
+      }
+    });
+  });
+});
+
+test('a seed plugin missing at both paths is reported', async () => {
+  const seed = tmp('dcc-seed-missing-');
+  writeInstalled(seed, { 'gone@m': '/nowhere/dcc-gone' });
+  const warnings = await captureWarnings(() => withEnv({ CLAUDE_CODE_PLUGIN_SEED_DIR: seed }, () => {
+    readInstalledClaudePlugins(tmp('dcc-primary-'));
+  }));
+  assert.match(warnings.join('\n'), /seed plugin gone@m not found at .* or \/nowhere\/dcc-gone/);
+});
+
+test('a CLAUDE_CODE_PLUGIN_DIRS entry that cannot be read is skipped with a reason', async (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('needs POSIX permissions');
+  const parent = tmp('dcc-locked-');
+  const child = join(parent, 'plugin');
+  mkdirSync(child);
+  chmodSync(parent, 0o000);
+  try {
+    const warnings = await captureWarnings(() => withEnv({ CLAUDE_CODE_PLUGIN_DIRS: child }, () => {
+      assert.deepEqual(readInstalledClaudePlugins(tmp('dcc-primary-')), []);
+    }));
+    assert.match(warnings.join('\n'), /cannot be read, skipped.*EACCES/);
+  } finally {
+    chmodSync(parent, 0o700);
+  }
+});
+
+test('the seed variable is not validated when plugins are disabled', async () => {
+  await withEnv({ CLAUDE_CODE_PLUGIN_SEED_DIR: 'relative' }, () => {
+    assert.throws(() => validateClaudeLocationEnv({}), /CLAUDE_CODE_PLUGIN_SEED_DIR/);
+    validateClaudeLocationEnv({ enablePlugins: false });
+  });
+});
+
+// ─── properties: seeded generators, no extra dependency ──────────────────────
+
+test('property: envPluginDirs splits every non-blank entry into dirs or skipped, in order', async () => {
+  const next = rng(300);
+  const kinds = [
+    () => randomAbsolute(next),
+    () => `~/${randomSegment(next)}`,
+    () => '~',
+    () => randomSegment(next).replace(/^[.~]+/, 'r'),
+  ];
+  for (let run = 0; run < 200; run += 1) {
+    const entries = Array.from({ length: Math.floor(next() * 6) }, () => kinds[Math.floor(next() * kinds.length)]());
+    const raw = entries.flatMap((e) => (next() < 0.3 ? ['', e] : [e])).join(delimiter);
+    await withEnv({ CLAUDE_CODE_PLUGIN_DIRS: raw }, () => {
+      const { dirs, skipped } = envPluginDirs();
+      const expectedDirs = entries.filter((e) => e.startsWith('/') || e === '~' || e.startsWith('~/'));
+      const expectedSkipped = entries.filter((e) => !expectedDirs.includes(e));
+      assert.equal(dirs.length, expectedDirs.length, raw);
+      assert.deepEqual(skipped, expectedSkipped, raw);
+      assert.ok(dirs.every((d) => d.startsWith('/')), raw);
+    });
+  }
+});
+
+test('property: envPathList rejects a list that holds one relative entry, wherever it sits', async () => {
+  const next = rng(400);
+  for (let run = 0; run < 100; run += 1) {
+    const list = Array.from({ length: 1 + Math.floor(next() * 4) }, () => randomAbsolute(next));
+    list.splice(Math.floor(next() * (list.length + 1)), 0, `rel${randomSegment(next)}`);
+    await withEnv({ CLAUDE_CODE_PLUGIN_SEED_DIR: list.join(delimiter) }, () => {
+      assert.throws(() => envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR'), /CLAUDE_CODE_PLUGIN_SEED_DIR.*absolute/);
+    });
+  }
+});
+
+test('property: the derived project folder uses only dashes and alphanumerics', () => {
+  const next = rng(500);
+  const alphabet = 'abcXYZ019/._ ~日é-';
+  for (let run = 0; run < 300; run += 1) {
+    const length = 1 + Math.floor(next() * 260);
+    const cwd = `/${Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('')}`;
+    const folder = claudeProjectFolder(cwd);
+    assert.match(folder, /^[A-Za-z0-9-]+$/, cwd);
+    assert.equal(folder, claudeProjectFolder(cwd), 'deterministic');
+    const plain = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+    if (plain.length <= 200) assert.equal(folder, plain);
+    else {
+      assert.ok(folder.startsWith(plain.slice(0, 200)));
+      assert.match(folder.slice(200), /^-[0-9a-z]+$/);
+    }
+  }
+});
+
+test('property: the project dir name applies exactly when it matches the documented rule', async () => {
+  const next = rng(600);
+  const alphabet = 'abcXYZ019_-./ ';
+  const rule = /^[A-Za-z0-9_-]{1,64}$/;
+  const device = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+  for (let run = 0; run < 300; run += 1) {
+    const length = Math.floor(next() * 70);
+    let name = Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
+    if (next() < 0.1) name = ['con', 'LPT1', 'Nul'][Math.floor(next() * 3)];
+    const valid = rule.test(name) && !device.test(name);
+    await withEnv({ CLAUDE_CONFIG_DIR: '/cfg', CLAUDE_CODE_PROJECT_DIR_NAME: name }, () => {
+      const expected = valid ? name : '-a-b';
+      assert.equal(claudeProjectsDir('/a/b'), join('/cfg', 'projects', expected), JSON.stringify(name));
+    });
+  }
+});
+
+test('property: manifest names decide the plugin name, never a throw', async () => {
+  const next = rng(700);
+  const bodies = [
+    (n) => JSON.stringify({ name: n }),
+    () => JSON.stringify({ name: 42 }),
+    () => JSON.stringify({ name: '' }),
+    () => JSON.stringify({}),
+    () => JSON.stringify([1, 2]),
+    () => '{ broken',
+    () => 'null',
+  ];
+  await captureWarnings(async () => {
+    for (let run = 0; run < 60; run += 1) {
+      const dir = tmp('dcc-prop-manifest-');
+      const wanted = `n${randomSegment(next).replace(/[^A-Za-z0-9]/g, 'x')}`;
+      const pick = Math.floor(next() * bodies.length);
+      writeManifest(dir, bodies[pick](wanted));
+      await withEnv({ CLAUDE_CODE_PLUGIN_DIRS: dir }, () => {
+        const [plugin] = readInstalledClaudePlugins(tmp('dcc-primary-'));
+        const fallback = dir.split('/').at(-1);
+        assert.equal(plugin.name, pick === 0 ? wanted : fallback, bodies[pick](wanted));
+      });
+    }
+  });
+});
+
+test('property: inline plugins replace exactly the installed plugins with the same manifest name', async () => {
+  const next = rng(800);
+  await captureWarnings(async () => {
+    for (let run = 0; run < 40; run += 1) {
+      const primary = tmp('dcc-prop-primary-');
+      const names = ['a', 'b', 'c', 'd'].map((n) => `${n}${run}`);
+      const installed = {};
+      for (const name of names) {
+        const dir = tmp('dcc-prop-installed-');
+        writeManifest(dir, JSON.stringify({ name }));
+        installed[`${name}@m`] = dir;
+      }
+      writeInstalled(primary, installed);
+      const inlineNames = names.filter(() => next() < 0.5);
+      const inlineDirs = inlineNames.map((name) => {
+        const dir = tmp('dcc-prop-inline-');
+        writeManifest(dir, JSON.stringify({ name }));
+        return dir;
+      });
+      await withEnv({ CLAUDE_CODE_PLUGIN_DIRS: inlineDirs.join(delimiter) }, () => {
+        const keys = readInstalledClaudePlugins(primary).map((p) => p.key);
+        assert.equal(new Set(keys).size, keys.length, 'keys are unique');
+        for (const name of names) {
+          assert.equal(keys.includes(`${name}@m`), !inlineNames.includes(name), name);
+          assert.equal(keys.includes(`${name}@inline`), inlineNames.includes(name), name);
+        }
+      });
+    }
+  });
 });

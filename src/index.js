@@ -199,7 +199,11 @@ async function mountPluginMcp(ctx, config) {
     const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
     if (raw === undefined) continue;
     let manifest;
-    try { manifest = JSON.parse(raw); } catch { continue; }
+    try { manifest = JSON.parse(raw); }
+    catch (error) {
+      console.warn(`dsh-claude-compat: plugin ${plugin.key}: cannot parse plugin.json: ${error.message}`);
+      continue;
+    }
     const { servers, warns } = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,
     });

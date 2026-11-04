@@ -40,11 +40,15 @@ export function readInstalledClaudePlugins(pluginsRoot, userDir) {
     warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not absolute or "~"-prefixed, skipped: ${entry}`);
   }
   const inline = dirs.map(inlinePlugin).filter(Boolean);
-  const inlineNames = new Set(inline.map((plugin) => plugin.name));
+  const inlineByName = new Map(inline.map((plugin) => [plugin.name, plugin]));
   const byKey = new Map();
   for (const plugin of installed) {
-    if (inlineNames.has(manifestName(plugin)) || byKey.has(plugin.key)) continue;
-    byKey.set(plugin.key, plugin);
+    const replacement = inlineByName.get(manifestName(plugin));
+    if (replacement !== undefined) {
+      warnOnce(`${replacement.installPath} from CLAUDE_CODE_PLUGIN_DIRS replaces installed plugin ${plugin.key} (${plugin.installPath})`);
+      continue;
+    }
+    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
   }
   for (const plugin of inline) {
     if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
@@ -54,17 +58,19 @@ export function readInstalledClaudePlugins(pluginsRoot, userDir) {
 
 // The name that plugin conflicts compare: the manifest name, else the key name.
 function manifestName(plugin) {
-  return readManifestName(plugin.installPath) ?? plugin.name;
+  return readManifestName(plugin.installPath, (path, error) => {
+    warnOnce(`cannot read plugin manifest ${path}: ${error.message}. Using "${plugin.name}".`);
+  }) ?? plugin.name;
 }
 
+// A missing manifest is normal. Any other failure goes to `onError`.
 function readManifestName(dir, onError) {
   const path = join(dir, '.claude-plugin', 'plugin.json');
-  if (!existsSync(path)) return undefined;
   try {
     const manifest = JSON.parse(claReadSync(path));
     return typeof manifest?.name === 'string' && manifest.name !== '' ? manifest.name : undefined;
   } catch (error) {
-    onError?.(path, error);
+    if (error?.code !== 'ENOENT') onError?.(path, error);
     return undefined;
   }
 }
@@ -80,7 +86,15 @@ function warnOnce(message) {
 // One plugin directory loaded the way `--plugin-dir` loads it. The name comes
 // from the manifest, else the directory name.
 function inlinePlugin(dir) {
-  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+  let isDirectory = false;
+  try { isDirectory = statSync(dir).isDirectory(); }
+  catch (error) {
+    if (error?.code !== 'ENOENT') {
+      warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry cannot be read, skipped: ${dir} (${error.message})`);
+      return undefined;
+    }
+  }
+  if (!isDirectory) {
     warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not a directory, skipped: ${dir}`);
     return undefined;
   }
@@ -105,9 +119,11 @@ function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
     }
     return [];
   }
-  if (typeof parsed !== 'object' || parsed === null) return [];
-  const plugins = parsed.plugins;
-  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) return [];
+  const plugins = parsed?.plugins;
+  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) {
+    warnOnce(`${manifestPath} has no "plugins" object, skipped`);
+    return [];
+  }
   const byKey = new Map();
   for (const [key, entries] of Object.entries(plugins)) {
     if (!Array.isArray(entries)) continue;
@@ -121,7 +137,7 @@ function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
       key,
       name,
       marketplace,
-      installPath: seed ? seedInstallPath(root, record.installPath, { name, marketplace, version }) : record.installPath,
+      installPath: seed ? seedInstallPath(root, record.installPath, { key, name, marketplace, version }) : record.installPath,
       version,
     });
   }
@@ -130,9 +146,17 @@ function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
 
 // A seed can be mounted at another path than it was built at, so the recorded
 // absolute installPath may not exist. Look in the plugin cache of the seed root first.
-function seedInstallPath(root, recorded, { name, marketplace, version }) {
+function seedInstallPath(root, recorded, { key, name, marketplace, version }) {
+  // The record is untrusted input: one segment must never leave <root>/cache.
+  if (![marketplace, name, version].every(isPathSegment)) return recorded;
   const local = join(root, 'cache', marketplace, name, version);
-  return existsSync(local) ? local : recorded;
+  if (existsSync(local)) return local;
+  if (!existsSync(recorded)) warnOnce(`seed plugin ${key} not found at ${local} or ${recorded}`);
+  return recorded;
+}
+
+function isPathSegment(value) {
+  return value !== '' && value !== '.' && value !== '..' && !/[\\/]/.test(value);
 }
 
 // readFileSync kept local so readInstalledClaudePlugins stays sync-simple.

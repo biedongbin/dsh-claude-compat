@@ -35,9 +35,11 @@ function envAbsolutePath(name) {
 // A PATH-style list (`:` on Unix, `;` on Windows). Blank entries are dropped
 // and every entry must be absolute.
 export function envPathList(name) {
-  const value = process.env[name];
-  if (!value) return [];
-  return value.split(delimiter).filter(Boolean).map((entry) => requireAbsolute(name, entry));
+  return envEntries(name).map((entry) => requireAbsolute(name, entry));
+}
+
+function envEntries(name) {
+  return (process.env[name] ?? '').split(delimiter).filter(Boolean);
 }
 
 // Precedence: explicit plugin config, then CLAUDE_CONFIG_DIR, then ~/.claude.
@@ -101,8 +103,7 @@ export function claudeProjectsDir(cwd, userDir) {
 export function envPluginDirs() {
   const dirs = [];
   const skipped = [];
-  for (const entry of (process.env.CLAUDE_CODE_PLUGIN_DIRS ?? '').split(delimiter)) {
-    if (entry === '') continue;
+  for (const entry of envEntries('CLAUDE_CODE_PLUGIN_DIRS')) {
     if (entry === '~' || entry.startsWith('~/')) dirs.push(resolveUserClaudeDir(entry));
     else if (isAbsolute(entry)) dirs.push(entry);
     else skipped.push(entry);
@@ -113,10 +114,10 @@ export function envPluginDirs() {
 // Read the variables that the effective configuration still uses, so a bad value
 // fails at startup with one clear message. An explicit config value overrides its
 // variable, so a bad variable behind it is not an error.
-export function validateClaudeLocationEnv({ userClaudeDir, pluginsRoot } = {}) {
+export function validateClaudeLocationEnv({ userClaudeDir, pluginsRoot, enablePlugins } = {}) {
   resolveUserClaudeDir(userClaudeDir);
   resolveClaudePluginsRoot(pluginsRoot, userClaudeDir);
-  envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR');
+  if (enablePlugins !== false) envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR');
 }
 
 // No marker on the whole ancestor chain → fall back to cwd, matching DSH's own

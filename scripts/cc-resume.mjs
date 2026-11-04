@@ -29,7 +29,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { claudeProjectsDir, validateClaudeLocationEnv } from '../src/lib.js';
+import { claudeProjectsDir, resolveUserClaudeDir } from '../src/lib.js';
 import { join, basename } from 'node:path';
 import { zstdFramesSync } from './zstd-compat.mjs';
 
@@ -275,7 +275,7 @@ const flag = (name) => {
 // The plugin passes its configured userClaudeDir here, so list and import read the
 // same Claude directory as the skill catalog.
 const userDir = flag('user-claude-dir');
-try { validateClaudeLocationEnv({ userClaudeDir: userDir }); } catch (error) { console.error(error.message); process.exit(2); }
+try { resolveUserClaudeDir(userDir); } catch (error) { console.error(error.message); process.exit(2); }
 const cwd = flag('cwd') ?? process.cwd();
 
 if (cmd === 'list') {
