@@ -29,6 +29,12 @@ const NATIVE_TOOL_NAMES = new Map([
   ['read', 'Read'],
   ['edit', 'Edit'],
   ['write', 'Write'],
+  ['grep', 'Grep'],
+  ['glob', 'Glob'],
+  ['todo_write', 'TodoWrite'],
+  ['web_fetch', 'WebFetch'],
+  ['web_search', 'WebSearch'],
+  ['agent', 'Agent'],
 ]);
 
 /**
@@ -58,8 +64,9 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// A blank string is as empty as '': a command of spaces would run and do nothing.
 function nonEmptyString(value) {
-  return typeof value === 'string' && value !== '';
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 function isStringArray(value) {
@@ -187,6 +194,9 @@ function notesFor(raw, event) {
   } else if (raw.onFailure !== undefined && background) {
     notes.push('onFailure is ignored for async hooks');
   }
+  if (raw.type === 'agent' && raw.model !== undefined) {
+    notes.push('model applies to prompt hooks only; an agent hook runs on the session model');
+  }
   if (raw.once === true) notes.push('once is honored only in skill frontmatter; ignored');
   if (raw.continueOnBlock !== undefined && raw.type !== 'prompt') notes.push('continueOnBlock applies to prompt hooks only; ignored');
   return notes;
@@ -223,11 +233,11 @@ export function parseHookHandler(raw, { event, projectDir }) {
       url: raw.url,
       headers: raw.headers,
       allowedEnvVars: raw.allowedEnvVars,
-      server: raw.server,
-      tool: raw.tool,
+      server: raw.server?.trim(),
+      tool: raw.tool?.trim(),
       input: raw.input,
       prompt: raw.prompt,
-      model: raw.model,
+      model: raw.model?.trim(),
       continueOnBlock: raw.type === 'prompt' && raw.continueOnBlock === true,
       ifRule: raw.if,
       timeoutMs: raw.timeout === undefined ? undefined : Math.round(raw.timeout * 1000),

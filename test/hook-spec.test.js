@@ -1,7 +1,7 @@
 // Hook handler parsing and the `if` rule (src/hook-spec.js). Pure functions, no I/O.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchIfRule, parseHookHandler } from '../src/hook-spec.js';
+import { claudeToolName, matchIfRule, parseHookHandler } from '../src/hook-spec.js';
 
 const PROJECT = '/work/project';
 
@@ -295,4 +295,31 @@ test('continueOnBlock is kept for a prompt hook, and ignored with a note elsewhe
   assert.equal(agent.handler.continueOnBlock, false);
   assert.match(agent.notes[0], /continueOnBlock applies to prompt hooks only/);
   assert.equal(parse({ ...SAMPLE.prompt, continueOnBlock: 'yes' }, 'stop').ok, false);
+});
+
+// ─── blank fields, tool names, agent model ───────────────────────────────────
+
+test('a blank command, server, tool or prompt is refused like an empty one', () => {
+  assert.match(parse({ type: 'command', command: '   ' }).reason, /command is missing/);
+  assert.match(parse({ type: 'mcp_tool', server: ' ', tool: 'x' }).reason, /server is missing/);
+  assert.match(parse({ type: 'mcp_tool', server: 'fs', tool: '\t' }).reason, /tool is missing/);
+  assert.match(parse({ type: 'prompt', prompt: '  \n' }).reason, /prompt is missing/);
+});
+
+test('server, tool and model are stored trimmed, as they were checked', () => {
+  const mcp = parse({ type: 'mcp_tool', server: ' fs ', tool: ' read ' });
+  assert.deepEqual([mcp.handler.server, mcp.handler.tool], ['fs', 'read']);
+  assert.equal(parse({ type: 'prompt', prompt: 'ok?', model: ' openai/gpt-4 ' }).handler.model, 'openai/gpt-4');
+});
+
+test('every DSH built-in tool has its Claude name', () => {
+  const names = { grep: 'Grep', glob: 'Glob', todo_write: 'TodoWrite', web_fetch: 'WebFetch', web_search: 'WebSearch', agent: 'Agent' };
+  for (const [native, claude] of Object.entries(names)) assert.equal(claudeToolName(native), claude);
+  assert.equal(claudeToolName('mcp__fs__read'), 'mcp__fs__read');
+});
+
+test('a model on an agent hook is noted, because the verifier runs on the session model', () => {
+  const result = parse({ type: 'agent', prompt: 'ok?', model: 'openai/gpt-5' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.notes, ['model applies to prompt hooks only; an agent hook runs on the session model']);
 });
