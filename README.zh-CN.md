@@ -142,16 +142,17 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 
 插件读取 Claude Code 用来改变默认位置的同一组环境变量。
 显式配置项优先于环境变量，环境变量优先于 `~/.claude` 默认值。
-路径类变量必须是绝对路径。相对路径会使插件不激活，并输出一行指明变量名的错误。
+`CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 必须是绝对路径。相对路径会使插件不激活，并输出一行指明变量名的错误。
+插件只检查实际用到的变量：显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
 `userClaudeDir` 与 `pluginsRoot` 未设置时使用下表的变量。
 
 | 变量 | 作用 |
 | --- | --- |
 | `CLAUDE_CONFIG_DIR` | 替代 `~/.claude`：settings、rules、skills、commands、agents 与会话历史 |
 | `CLAUDE_CODE_PLUGIN_CACHE_DIR` | 替代插件根目录（`~/.claude/plugins`） |
-| `CLAUDE_CODE_PLUGIN_SEED_DIR` | 额外的只读插件根目录，Unix 用 `:` 分隔，Windows 用 `;`。同名时主根目录优先 |
-| `CLAUDE_CODE_PLUGIN_DIRS` | 本次会话加载的插件目录，分隔符相同。不是目录的条目会被跳过并给出警告 |
-| `CLAUDE_CODE_PROJECT_DIR_NAME` | `/cc-resume` 读取的 `projects/` 下的单个文件夹名，替代由工作目录推导的名称 |
+| `CLAUDE_CODE_PLUGIN_SEED_DIR` | 额外的只读插件根目录，Unix 用 `:` 分隔，Windows 用 `;`。同名时主根目录优先。插件文件从当前种子路径读取，因此种子可以挂载在与构建时不同的路径 |
+| `CLAUDE_CODE_PLUGIN_DIRS` | 本次会话加载的插件目录，分隔符相同。每个条目须为绝对路径或以 `~` 开头；其他条目以及不是目录的条目会被跳过并给出警告。此处的插件会整体替换同一清单名称的已安装插件 |
+| `CLAUDE_CODE_PROJECT_DIR_NAME` | `/cc-resume` 读取的 `projects/` 下的单个文件夹名，替代由工作目录推导的名称。仅在同时设置了 `CLAUDE_CONFIG_DIR` 时生效，且只接受 1 到 64 个字母、数字、连字符或下划线；其他值会被 Claude Code 忽略，插件也同样忽略 |
 
 ## 说明
 

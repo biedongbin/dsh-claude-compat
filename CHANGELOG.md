@@ -10,7 +10,11 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - **Claude Code location variables are honored.** `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, `CLAUDE_CODE_PLUGIN_SEED_DIR`, `CLAUDE_CODE_PLUGIN_DIRS`, and `CLAUDE_CODE_PROJECT_DIR_NAME` now move the paths the plugin reads, as Claude Code does. Skills, rules, hooks, plugin management, and `/cc-resume` all use one resolver in `src/lib.js`. Issue #1.
 
 ### Changed
-- A relative location variable stops activation with one error line that names the variable.
+- A relative `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `CLAUDE_CODE_PLUGIN_SEED_DIR` stops activation with one error line that names the variable. Startup checks only the variables that the effective configuration uses, so an explicit `userClaudeDir` or `pluginsRoot` hides a bad variable.
+- `CLAUDE_CODE_PLUGIN_DIRS` accepts absolute and `~` entries and skips other entries with a warning, as Claude Code does.
+- A plugin from `CLAUDE_CODE_PLUGIN_DIRS` replaces an installed plugin with the same manifest name, as a whole.
+- A plugin seed mounted at another path than its build path now loads: plugin files are read from the current seed root.
+- `CLAUDE_CODE_PROJECT_DIR_NAME` applies only with `CLAUDE_CONFIG_DIR`, and only for 1 to 64 letters, digits, hyphens, or underscores that are not a Windows device name. Other values are ignored, not an error.
 - `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.
 - `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
 

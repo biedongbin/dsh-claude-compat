@@ -143,17 +143,18 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 The plugin reads the same variables Claude Code uses to move its default locations.
 An explicit config key above wins over a variable.
 A variable wins over the `~/.claude` default.
-A path variable must hold an absolute path.
+`CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, and `CLAUDE_CODE_PLUGIN_SEED_DIR` must hold absolute paths.
 A relative value keeps the plugin from activating, and one error line names the variable.
+The plugin checks only the variables that it uses: an explicit `userClaudeDir` or `pluginsRoot` value hides a bad variable behind it.
 A relative value in a config key still resolves against the launch directory.
 
 | Variable | Effect |
 | --- | --- |
 | `CLAUDE_CONFIG_DIR` | Replaces `~/.claude`: settings, rules, skills, commands, agents, and session history |
 | `CLAUDE_CODE_PLUGIN_CACHE_DIR` | Replaces the plugins root (`~/.claude/plugins`) |
-| `CLAUDE_CODE_PLUGIN_SEED_DIR` | Extra read-only plugins roots, separated by `:` on Unix and `;` on Windows. The primary root wins a name collision |
-| `CLAUDE_CODE_PLUGIN_DIRS` | Plugin directories loaded for the session, same separators. An entry that is not a directory is skipped with a warning |
-| `CLAUDE_CODE_PROJECT_DIR_NAME` | One folder name under `projects/` that `/cc-resume` reads, in place of the name derived from the working directory |
+| `CLAUDE_CODE_PLUGIN_SEED_DIR` | Extra read-only plugins roots, separated by `:` on Unix and `;` on Windows. The primary root wins a name collision. Plugin files are read from the current seed path, so a seed can be mounted at another path |
+| `CLAUDE_CODE_PLUGIN_DIRS` | Plugin directories loaded for the session, same separators. Each entry is an absolute path or starts with `~`. Other entries and entries that are not directories are skipped with a warning. A plugin here replaces an installed plugin with the same manifest name |
+| `CLAUDE_CODE_PROJECT_DIR_NAME` | One folder name under `projects/` that `/cc-resume` reads, in place of the name derived from the working directory. It applies only when `CLAUDE_CONFIG_DIR` is also set, and only for 1 to 64 letters, digits, hyphens, or underscores. Claude Code ignores any other value, and so does the plugin |
 
 ## Notes
 

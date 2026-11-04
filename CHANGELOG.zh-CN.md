@@ -10,7 +10,11 @@
 - **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
 
 ### 变更
-- 路径类环境变量为相对路径时，插件不再激活，并输出一行指明变量名的错误。
+- `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 为相对路径时，插件不再激活，并输出一行指明变量名的错误。启动时只检查有效配置实际用到的变量，因此显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
+- `CLAUDE_CODE_PLUGIN_DIRS` 接受绝对路径和以 `~` 开头的条目，其他条目会被跳过并给出警告，与 Claude Code 一致。
+- `CLAUDE_CODE_PLUGIN_DIRS` 中的插件会整体替换同一清单名称的已安装插件。
+- 挂载路径与构建路径不同的插件种子现在可以加载：插件文件从当前种子根目录读取。
+- `CLAUDE_CODE_PROJECT_DIR_NAME` 仅在同时设置 `CLAUDE_CONFIG_DIR` 时生效，且只接受 1 到 64 个字母、数字、连字符或下划线（不能是 Windows 设备名）。其他值会被忽略，不会报错。
 - `/cc-plugin` 与插件目录现在遵循配置项 `userClaudeDir` 和 `pluginsRoot`。
 - `userClaudeDir` 与 `pluginsRoot` 不再有默认值。未设置时依次使用对应环境变量、`~/.claude`。显式配置值优先。
 
