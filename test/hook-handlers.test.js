@@ -134,8 +134,14 @@ test('http: a connection error is a failure with the error code', async () => {
 });
 
 test('http: a timeout is a failure that names the limit', async () => {
+  // AbortSignal.timeout() holds an unreferenced timer, and this fake request has no
+  // socket. A referenced timer keeps the event loop alive until the abort fires.
   const fetchImpl = (_url, init) => new Promise((_resolve, reject) => {
-    init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    const keepAlive = setInterval(() => {}, 1000);
+    init.signal.addEventListener('abort', () => {
+      clearInterval(keepAlive);
+      reject(init.signal.reason);
+    });
   });
   const run = await runHttpHook(httpHook(), '{}', { timeoutMs: 50, fetchImpl });
   assert.equal(run.failed, true);
