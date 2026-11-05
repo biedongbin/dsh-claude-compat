@@ -12,8 +12,8 @@
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 
-> **Reuse your entire Claude Code setup in DSH — zero migration.**
-> skills, commands, rules, agents, hooks, MCP — install and they just work. Nothing to reconfigure.
+> **Reuse your Claude Code configuration in DSH.**
+> Bridge skills, commands, rules, agents, hooks and MCP, with documented runtime limits and upgrade guidance.
 
 ---
 
@@ -21,14 +21,14 @@
 
 You've already built up a solid `.claude/` in Claude Code — skills, slash commands, rules, agents, hooks, MCP servers. Moving to **DSH (DeepSeek Harness)** shouldn't mean rebuilding all of it.
 
-**dsh-claude-compat is that bridge.** It carries your `.claude/` directories **verbatim into DSH** — everything works immediately. Install once, and both sides share one config: change it in one place, it updates in both.
+**dsh-claude-compat is that bridge.** It reads your project and user Claude configuration and exposes supported content through DSH's native services. Skills can be reloaded in the current session; MCP and hook configuration changes require a DSH restart.
 
 ```bash
 dsh plugin --profile web add dsh-claude-compat@latest
 dsh web
 ```
 
-Done. Your skills show up in the `/` menu, rules inject into every new session, and you can invoke agents with `/agent-name` — all inside DSH, exactly like Claude Code.
+Your skills show up in the `/` menu, rules inject into new sessions, and `/agent-name` loads the delegation instructions through DSH's native skill interface.
 
 **Or let DSH install it itself (recommended):** copy this line to DSH — it reads the skill, installs, and verifies:
 
@@ -37,6 +37,21 @@ Done. Your skills show up in the `/` menu, rules inject into every new session, 
 > ⭐ Find this useful? [Give it a star](https://github.com/biedongbin/dsh-claude-compat) — it keeps us improving and helps more people discover it.
 
 ---
+
+## 1.1.0 highlights and upgrade
+
+- **More configuration sources:** custom Claude roots, relocatable plugin seeds and inline plugins, plus managed/local/project/user MCP definitions and policy.
+- **Broader hook coverage:** 26 of 33 events and five handler types, with native tool-name mapping, failure blocking and bounded UTF-8 output.
+- **Reliable session paths:** `/cc-resume` uses Claude's directory encoder to find transcripts and DSH's different encoder to place imports, including spaces, Unicode and long paths.
+
+Before upgrading from 1.0.x:
+
+1. Give HTTP MCP entries an explicit `"type": "http"` (or `"streamable-http"`). URL-only, SSE and WebSocket entries are skipped with a warning.
+2. Keep `mcpTrustProjectConfig: false` unless you trust the project. Project helpers do not run and credential references stay literal by default; see [MCP servers](#mcp-servers).
+3. Review project hooks before enabling them: there is no workspace-trust prompt. Restart DSH after the update to reload MCP and hooks from the launch workspace.
+4. If a previous session import is absent from DSH, re-import the original Claude session. The corrected directory key applies to new imports; old misplaced logs are not automatically moved or deleted.
+
+Version 1.1.0 is validated against DSH 0.2.1-rc.5 with Desktop Node 24.21.0. Node 22 has a known URL-normalization property-test difference. See the [changelog](CHANGELOG.md) and [release preparation notes](docs/releases/1.1.0.md) for migration and verification details.
 
 ## What it brings over — at a glance
 
@@ -75,7 +90,7 @@ The same directories are also read from the **user-level** `~/.claude/` (skills,
 
 ## Built-in commands
 
-Installing this plugin adds three management skills to the catalog:
+Installing this plugin adds five native management commands:
 
 | Command | What it does |
 |---|---|
@@ -86,6 +101,12 @@ Installing this plugin adds three management skills to the catalog:
 | `/cc-resume` | List Claude Code conversation sessions for the current project (`~/.claude/projects/`) and import any of them into DSH with full user/assistant/tool history. Imported sessions appear in the DSH session list titled `cc: <preview>` and resume like native ones. `list` / `import <sessionId>` / `--limit-turns N` for huge sessions. |
 
 Typical loop: `/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → new skills visible immediately. Plugin-shipped MCP servers still require a DSH restart (process-lifetime mount).
+
+### Session import paths
+
+Claude transcripts and DSH logs use different project-directory encodings. The importer reads the configured Claude `projects/` folder and writes to `~/.dsh/sessions/<DSH-project-key>/session-cc-<id>/`; the same DSH key is used for the imported checkmark. Re-running an import refreshes that session in the correct destination.
+
+With an explicit `userClaudeDir` that differs from `CLAUDE_CONFIG_DIR` or the default, use `/cc-resume list` and `/cc-resume import <id>`. The default interactive picker's later skill handoff does not yet carry the explicit directory. Direct CLI usage can pass `--user-claude-dir <dir>` together with `--cwd <project>`.
 
 ## Requirements
 
@@ -115,7 +136,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 |---|---|---|
 | `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` + `.claude/agents` provider (project and `~/.claude`) |
 | `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
-| `enableMcp` | `true` | Translate `<projectRoot>/.mcp.json` into mounted MCP server plugins |
+| `enableMcp` | `true` | Load managed, local, project and user MCP definitions into native MCP client plugins; plugin definitions additionally require `enablePluginMcp` |
 | `mcpTrustProjectConfig` | `false` | Trust the project `.mcp.json`: its `headersHelper` runs (without the credential variables of the user), and its `${VAR}` may read credential variables. Off means the server mounts with its static headers and the literal text |
 | `mcpFailOnStartupError` | `false` | Forward to `dsh-mcp-client`: fail plugin startup when an MCP server fails to connect |
 | `enableHooks` | `true` | Run hooks from the `.claude/settings.json` files (see [Hooks](#hooks)) |
@@ -342,18 +363,13 @@ skillAliases:
 
 ## Troubleshooting
 
-### Known limitation: `/cc-resume` via the skill tool
+### Direct CLI usage
 
-In some DSH runtime configurations the `skill` tool resolves in an agent-scoped
-layer where globally registered providers are not visible — the invocation
-returns `skill "cc-resume" is unknown or no longer available` even though the
-catalog lists it. This is a DSH runtime layering behavior, not a plugin bug.
-The skill body only instructs the model to run the CLI, which is always
-available:
+If a custom host does not expose the native management commands, run the packaged CLI directly. Pass the project and custom Claude directory explicitly when needed:
 
 ```bash
-node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list
-node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId>
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list --cwd /path/to/project
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId> --cwd /path/to/project --user-claude-dir /path/to/claude-config
 ```
 
 **DSH won't start back up after a restart / port 3080 stuck.** Old process still holding the port (symptom: `EADDRINUSE` in logs). Use the bundled restart script — it waits for a clean stop, falls back to SIGKILL, and verifies the port before reporting success:
@@ -374,6 +390,7 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 ## Release notes
 
+- **[1.1.0 release preparation](docs/releases/1.1.0.md)** — upgrade notes, verification scope and manual npm publication.
 - **[Changelog](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md))** — release history from 0.1.0 to the latest version.
 
 ## Acknowledgments

@@ -4,53 +4,30 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] — 2026-11-05
+
+### Upgrade notes
+- **HTTP MCP entries require `"type": "http"`** (or `"streamable-http"`). A URL without a type, and unsupported `sse`/`ws` transports, are skipped with a warning. Migrate remote entries before upgrading.
+- **Project MCP credentials and helpers require explicit trust.** `mcpTrustProjectConfig` defaults to `false`: project `headersHelper` commands do not run and credential-shaped `${VAR}` references stay literal. Set it to `true` only for a project you trust; project helpers still receive a scrubbed environment.
+- **Restart DSH after updating.** MCP and project hooks are loaded from the launch workspace at startup. This release does not add per-session MCP discovery or native-realm integration.
+- **Re-import a Claude session if an earlier import is missing from DSH.** The corrected DSH directory key is used for new imports; existing logs in old directories are not moved or deleted automatically.
 
 ### Added
-- **MCP servers from every Claude Code source.** The plugin reads `managed-mcp.json` (exclusive control), `managedMcpServers`, and the local and user `mcpServers` in `.claude.json`, in Claude Code's precedence. It also honors `${VAR}` expansion, `timeout`, `headersHelper`, `disabledMcpjsonServers`, `disabledMcpServers`, and the `allowedMcpServers` and `deniedMcpServers` policy. A broken managed file or a malformed managed policy fails closed, and every skipped entry or policy item gets a warning. The README lists the features DSH cannot run.
-- **Claude Code location variables are honored.** `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, `CLAUDE_CODE_PLUGIN_SEED_DIR`, `CLAUDE_CODE_PLUGIN_DIRS`, and `CLAUDE_CODE_PROJECT_DIR_NAME` now move the paths the plugin reads, as Claude Code does. Skills, rules, hooks, plugin management, and `/cc-resume` all use one resolver in `src/lib.js`. Issue #1.
-- **Hook handler fields.** Command hooks accept `args` (run without a shell), `if` (a permission rule such as `Bash(git *)`, for tool events), `timeout` (seconds), `async` (tool events; cannot change the decision) and `onFailure: "block"`. `${CLAUDE_PROJECT_DIR}` is expanded in commands and arguments, and set in the hook environment. Tool hook stdin carries `hook_event_name` and `cwd`. Hook entries of other handler types (`http`, `prompt`, `agent`, `mcp_tool`) are skipped with a warning. Issue #2 covers the events and handlers still missing.
-- **26 of the 33 Claude Code hook events.** On top of PreToolUse, PostToolUse and UserPromptSubmit, the plugin now runs SessionStart (on `agent/created`, the real start point), SessionEnd, PostToolUseFailure, PermissionRequest, PermissionDenied, PostToolBatch, TaskCreated, TaskCompleted, Stop, StopFailure, SubagentStart, SubagentStop, Notification, MessageDisplay, UserPromptExpansion, CwdChanged, PreCompact, PostCompact, PostModelSwitch, TeammateIdle, InstructionsLoaded, FileChanged and ConfigChange. The Hooks section of the README lists the DSH extension point behind each event, the seven events that cannot run, and every place where an event has less power than in Claude Code. Hooks also load from `.claude/settings.local.json`.
-- **Hook handler types `http`, `mcp_tool`, `prompt` and `agent`.** `http` posts the input as JSON, with headers that read only the variables in `allowedEnvVars`. `mcp_tool` calls an MCP tool through the DSH tool service. `prompt` asks the session model one question. `agent` starts a DSH subagent and reads its structured answer. Each type runs only on the events that Claude Code allows it on. `asyncRewake` steers the agent when a background hook exits with code 2.
+- **Claude Code location configuration** ([#6](https://github.com/biedongbin/dsh-claude-compat/pull/6)): honor `CLAUDE_CONFIG_DIR`, plugin cache/seed/inline directories and `CLAUDE_CODE_PROJECT_DIR_NAME`, with explicit config taking priority. Relocated seeds and whole-plugin inline overrides are supported.
+- **Hook handler fields and lifecycle coverage** ([#7](https://github.com/biedongbin/dsh-claude-compat/pull/7), [#8](https://github.com/biedongbin/dsh-claude-compat/pull/8)): bridge 26 of 33 events with `command`, `http`, `mcp_tool`, `prompt` and `agent` handlers; support conditional execution, per-hook timeouts, asynchronous hooks, failure blocking and `asyncRewake`. The README lists event-specific limits and unsupported events.
+- **Additional MCP sources and policy** ([#9](https://github.com/biedongbin/dsh-claude-compat/pull/9)): read managed, local, project, user and opt-in plugin definitions; apply source precedence, disabled lists, allow/deny policy, environment references, per-call timeouts and mount-time `headersHelper` output. Invalid managed policy fails closed.
 
 ### Fixed
-- **Imported sessions use DSH's native project directory key** ([#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)). Spaces, non-ASCII characters, repeated separators, root and long paths now resolve to the directory DSH reads; CLI regression tests cover listing, import and imported-status detection.
-- **A project `.mcp.json` cannot read credential variables through `${VAR}`.** A repository could send `${GITHUB_TOKEN}` to a server that it names. The variable stays literal and the log names it, unless `mcpTrustProjectConfig` is `true`. The helper scrub also covers `PASS`, `CRED`, `COOKIE`, `DSN` and URLs with a password.
-- **`${CLAUDE_PLUGIN_ROOT}` is a variable value.** A `${...}` inside the install path was expanded a second time, and a path with `$&` could act as a pattern. A server named `__proto__` in a plugin was dropped without a word. A repeated name is now reported.
-- **Plugin MCP files are checked.** A path in `mcpServers` must stay inside the plugin. A broken link, an unreadable file, a bad wrapper and a bad JSON file are reported with their cause. A plugin with no `plugin.json` still loads its root `.mcp.json`.
-- **A managed `disabledMcpjsonServers` that is not a list keeps every MCP server off.** Disabled and hidden entries now log their name and source. One entry that throws no longer stops the others, and a plugin step that fails no longer hides the warnings or the servers of the user.
-- **The plugin manager no longer throws on a JSON file that holds `null`, a list or a bad `plugins` value.**
-- **A `timeout` above the Node timer limit is cut to it.** A failing `headersHelper` names its exit status and first stderr line, and not its command line.
-- **A project `headersHelper` runs without credential variables, and only when trusted.** A helper from a project `.mcp.json` runs only when `mcpTrustProjectConfig` is `true`, and it does not get variables such as `*_TOKEN`, `*_KEY` or `ANTHROPIC_CUSTOM_HEADERS`. The server URL hides their values. With the option off, the server mounts with its static headers. Helpers from the user, local and managed sources keep the user environment.
-- **`managedMcpServers` entries are checked.** An entry must be a fixed `https://` server with no `command`, `args`, `env`, `headersHelper` or `${VAR}`. A broken entry is skipped, and it no longer skips the allowlist. `managed-mcp.json` is not held to this rule.
-- **One malformed MCP entry no longer stops the loader.** An entry such as `"bad": null` is skipped with a warning, and the other servers still load.
-- **Matchers follow the Claude Code rules.** A matcher of letters, digits, `_`, `-`, space, `,` and `|` is an exact list of names, and any other matcher is an unanchored regular expression, so `.*opus.*` and `mcp__memory__.*` now match as they do in Claude Code. A pattern that does not parse is reported once, when the hooks load.
-  A `*` that is not part of `.*` still works as the wildcard of earlier versions, so a guard such as `mcp__*__delete` keeps matching.
-  Stop, UserPromptSubmit and the other events with no subject ignore the matcher, as in Claude Code.
-- **A hook cannot approve an input that it meant to change.** A PreToolUse hook that returns `updatedInput` now makes DSH ask the user, and a PermissionRequest `allow` with `updatedInput` is ignored, because DSH cannot change a tool input and the original input is what the hook wanted to remove.
-- **Hook values that were lost are logged.** The log now names an HTTP header that uses an unlisted or unset variable, an `mcp_tool` placeholder that matches no field, a rules file that is unreadable or over the size cap, and a PreToolUse `allow` or a PostToolUse stop request that DSH cannot apply.
-- **Verifier subagents are bounded.** The stop of an `agent` hook subagent no longer holds the DSH event, and the subagents that it starts are muted too. Hook output is cut on a whole character, and a blank command, server, tool or prompt is refused.
-- **SessionStart hooks never ran.** The plugin listened to `agent/session-start`, which DSH does not have. It now uses `agent/created`, and filters by the start source (`startup`, `resume`, `clear`, `compact`).
-- **Tool hooks sent the tool call id as `session_id`.** The input now carries the DSH session id. Inside a subagent it carries the main session id, plus `agent_id` and `agent_type`.
-- **Session and turn hooks ran for subagent sessions, and rules or hook context counted as a prompt.** SessionStart, SessionEnd, UserPromptSubmit, Stop and the other main-session hooks now skip subagent sessions. A message that this plugin injected no longer runs UserPromptSubmit hooks.
+- **Claude session discovery for punctuation, spaces, non-ASCII and long paths** ([#11](https://github.com/biedongbin/dsh-claude-compat/issues/11)). Reuse the existing Claude directory encoder, including its full-path hash, and preserve custom Claude configuration roots for explicit list/import commands.
+- **DSH session import directories** ([#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)). Import and imported-status detection share DSH's native key: collapsed separators, UTF-16 `~XXXX` escaping, root handling and a 251-character slug. Real CLI regressions cover both discovery and the resulting compressed session file.
+- **Hook runtime contracts.** Use native tool names and single-call MCP execution with the viewing Agent scope; observe model switches on `agent/request`; update FileChanged watchers on cwd changes even without a CwdChanged hook; preserve failure-blocking PermissionRequest decisions.
+- **Hook output and lifecycle handling.** Decode split UTF-8 characters correctly, bound output and verifier cleanup, retain guards in verifier descendants, and report ignored or malformed results. SessionStart uses `agent/created`, payloads carry the session id, and injected context does not trigger user-prompt hooks.
+- **MCP source isolation and diagnostics.** Skip malformed entries individually, validate managed definitions before policy exemptions, constrain plugin file references, expand plugin roots once, and protect project helper credentials. Plugin-manager malformed JSON and large timeout values now have explicit handling.
 
-### Changed
-- MCP servers load outside a project too, because `.claude.json` and managed files apply everywhere. A `url` entry with no `type` is skipped, as Claude Code skips it. `sse` and `ws` entries are skipped with a warning.
-- A relative `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `CLAUDE_CODE_PLUGIN_SEED_DIR` stops activation with one error line that names the variable. Startup checks only the variables that the effective configuration uses, so an explicit `userClaudeDir` or `pluginsRoot` hides a bad variable.
-- `CLAUDE_CODE_PLUGIN_DIRS` accepts absolute and `~` entries and skips other entries with a warning, as Claude Code does.
-- A plugin from `CLAUDE_CODE_PLUGIN_DIRS` replaces an installed plugin with the same manifest name, as a whole. The plugin logs one warning for each replacement.
-- The plugin now logs a warning for an unreadable `plugin.json`, an `installed_plugins.json` without a `plugins` object, and a seed plugin that is missing. A seed record can no longer point the cache lookup outside `<seed>/cache`.
-- `/cc-resume` list and import read the configured `userClaudeDir`, as the skill catalog does. The `--user-claude-dir` flag carries it to the script.
-- A relative `CLAUDE_CODE_PLUGIN_SEED_DIR` no longer stops activation when `enablePlugins` is `false`.
-- A plugin seed mounted at another path than its build path now loads: plugin files are read from the current seed root.
-- `CLAUDE_CODE_PROJECT_DIR_NAME` applies only with `CLAUDE_CONFIG_DIR`, and only for 1 to 64 letters, digits, hyphens, or underscores that are not a Windows device name. Other values are ignored, not an error.
-- `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.
-- `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
-
-### Fixed
-- Hook matchers, `if` rules, and the hook payload now use the Claude Code names for DSH built-in tools (`bash` is `Bash`, and likewise `read`, `edit`, `write`). Before, `if: "Bash(git *)"` never matched a native call.
-- Hook stdout and stderr keep a multibyte character whole when it arrives in two chunks.
-- `/cc-resume` now derives the Claude project folder as Claude Code does: every character that is not a letter or digit becomes `-`, and a name over 200 characters is cut and gets a hash of the path. A working directory with `.`, `_`, or a space in it no longer maps to a missing folder. Issue #11.
+### Verification and remaining limits
+- Release verification targets DSH 0.2.1-rc.5 with Desktop Node 24.21.0. Node 22 has a known URL-normalization property-test difference; do not treat that runtime as fully verified.
+- With a custom `userClaudeDir`, use explicit `/cc-resume list` and `/cc-resume import <id>` commands. The default interactive picker's later skill handoff does not yet carry that directory.
+- Complete AgentLoop contract tests require the optional matching testkit. See [release preparation notes](docs/releases/1.1.0.md) for the verification scope and manual publication steps.
 
 ## [1.0.1] — 2026-11-04
 
