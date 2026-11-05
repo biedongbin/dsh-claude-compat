@@ -2,8 +2,10 @@
 // `if` permission-rule filter. Pure functions (no I/O) so the rules can be
 // tested without a running DSH.
 
-const TOOL_EVENTS = new Set(['pre-tool-use', 'post-tool-use']);
+import { IF_EVENTS, NO_ONFAILURE_EVENTS, handlerTypesFor } from './hook-events.js';
+
 const ON_FAILURE = new Set(['continue', 'block']);
+const HANDLER_TYPES = new Set(['command', 'http', 'mcp_tool', 'prompt', 'agent']);
 
 // Node clamps a setTimeout delay above this to 1 ms, so a larger timeout would
 // kill the hook at once.
@@ -27,6 +29,12 @@ const NATIVE_TOOL_NAMES = new Map([
   ['read', 'Read'],
   ['edit', 'Edit'],
   ['write', 'Write'],
+  ['grep', 'Grep'],
+  ['glob', 'Glob'],
+  ['todo_write', 'TodoWrite'],
+  ['web_fetch', 'WebFetch'],
+  ['web_search', 'WebSearch'],
+  ['agent', 'Agent'],
 ]);
 
 /**
@@ -56,15 +64,65 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function commandProblem(raw) {
-  return typeof raw.command === 'string' && raw.command !== '' ? undefined : 'command is missing';
+// A blank string is as empty as '': a command of spaces would run and do nothing.
+function nonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
-function argsProblem(raw) {
-  if (raw.args === undefined) return undefined;
-  const valid = Array.isArray(raw.args) && raw.args.every((item) => typeof item === 'string');
-  return valid ? undefined : 'args must be an array of strings';
+function isStringArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
+
+// ----- per-type required fields ---------------------------------------------
+
+function commandProblem(raw) {
+  if (!nonEmptyString(raw.command)) return 'command is missing';
+  if (raw.args !== undefined && !isStringArray(raw.args)) return 'args must be an array of strings';
+  if (raw.shell !== undefined && raw.shell !== 'bash') {
+    return `shell "${raw.shell}" is not supported; use "bash" or leave shell out`;
+  }
+  return undefined;
+}
+
+function httpProblem(raw) {
+  if (!nonEmptyString(raw.url)) return 'url is missing';
+  if (!/^https?:\/\//i.test(raw.url)) return 'url must start with http:// or https://';
+  if (raw.headers !== undefined) {
+    const valid = isPlainObject(raw.headers) && Object.values(raw.headers).every((v) => typeof v === 'string');
+    if (!valid) return 'headers must be an object of strings';
+  }
+  if (raw.allowedEnvVars !== undefined && !isStringArray(raw.allowedEnvVars)) {
+    return 'allowedEnvVars must be an array of strings';
+  }
+  return undefined;
+}
+
+function mcpToolProblem(raw) {
+  if (!nonEmptyString(raw.server)) return 'server is missing';
+  if (!nonEmptyString(raw.tool)) return 'tool is missing';
+  if (raw.input !== undefined && !isPlainObject(raw.input)) return 'input must be an object';
+  return undefined;
+}
+
+// `provider/model`, or a model name that the session provider serves. Neither part may be empty.
+const MODEL_FORMAT = /^(?:[^/\s]+\/)?[^/\s]+$/;
+
+function promptProblem(raw) {
+  if (!nonEmptyString(raw.prompt)) return 'prompt is missing';
+  if (raw.model !== undefined && !nonEmptyString(raw.model)) return 'model must be a non-empty string';
+  if (raw.model !== undefined && !MODEL_FORMAT.test(raw.model.trim())) return 'model must be "provider/model" or a model name';
+  return undefined;
+}
+
+const TYPE_CHECKS = {
+  command: commandProblem,
+  http: httpProblem,
+  mcp_tool: mcpToolProblem,
+  prompt: promptProblem,
+  agent: promptProblem,
+};
+
+// ----- common fields ----------------------------------------------------------
 
 function timeoutProblem(raw) {
   if (raw.timeout === undefined) return undefined;
@@ -78,9 +136,9 @@ function onFailureProblem(raw) {
   return 'onFailure must be "continue" or "block"';
 }
 
-function asyncProblem(raw) {
-  if (raw.async === undefined || typeof raw.async === 'boolean') return undefined;
-  return 'async must be true or false';
+function booleanProblem(raw, field) {
+  if (raw[field] === undefined || typeof raw[field] === 'boolean') return undefined;
+  return `${field} must be true or false`;
 }
 
 // A permission rule for `if`: a bare tool name, or Tool(pattern) for a tool
@@ -98,41 +156,55 @@ function ruleProblem(rule) {
 function ifProblem(raw, event) {
   if (raw.if === undefined) return undefined;
   if (typeof raw.if !== 'string') return 'if must be a string';
-  if (!TOOL_EVENTS.has(event)) return 'if applies only to tool events';
+  if (!IF_EVENTS.has(event)) return 'if applies only to tool events';
   return ruleProblem(raw.if);
 }
 
-function fieldProblem(raw, event) {
+function fieldProblem(raw, type, event) {
   const checks = [
-    commandProblem(raw),
-    argsProblem(raw),
+    TYPE_CHECKS[type](raw),
     timeoutProblem(raw),
     onFailureProblem(raw),
-    asyncProblem(raw),
+    booleanProblem(raw, 'async'),
+    booleanProblem(raw, 'asyncRewake'),
+    booleanProblem(raw, 'once'),
+    booleanProblem(raw, 'continueOnBlock'),
     ifProblem(raw, event),
   ];
   return checks.find((problem) => problem !== undefined);
 }
 
-// Notes name a field that is accepted but has no effect for this event.
+// Notes name a field that is accepted but has no effect.
+// Every field of a handler that this plugin reads, or that Claude Code documents and this plugin
+// ignores on purpose. Any other key is most likely a typo, such as `onfailure` or `timeOut`.
+const KNOWN_FIELDS = new Set([
+  'type', 'command', 'args', 'shell', 'url', 'headers', 'allowedEnvVars', 'server', 'tool', 'input',
+  'prompt', 'model', 'continueOnBlock', 'if', 'timeout', 'async', 'asyncRewake', 'onFailure',
+  'statusMessage', 'once',
+]);
+
 function notesFor(raw, event) {
   const notes = [];
-  const asyncTool = raw.async === true && TOOL_EVENTS.has(event);
-  if (raw.onFailure !== undefined && !TOOL_EVENTS.has(event)) {
-    notes.push('onFailure applies only to tool events; ignored');
-  } else if (raw.onFailure !== undefined && asyncTool) {
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_FIELDS.has(key)) notes.push(`unknown field "${key}" is ignored`);
+  }
+  const background = raw.async === true || raw.asyncRewake === true;
+  if (raw.onFailure !== undefined && NO_ONFAILURE_EVENTS.has(event)) {
+    notes.push(`onFailure has no effect on ${event}; ignored`);
+  } else if (raw.onFailure !== undefined && background) {
     notes.push('onFailure is ignored for async hooks');
   }
-  if (raw.async === true && event === 'user-prompt-submit') {
-    notes.push('async applies to tool events; this hook runs in the foreground');
+  if (raw.type === 'agent' && raw.model !== undefined) {
+    notes.push('model applies to prompt hooks only; an agent hook runs on the session model');
   }
+  if (raw.once === true) notes.push('once is honored only in skill frontmatter; ignored');
+  if (raw.continueOnBlock !== undefined && raw.type !== 'prompt') notes.push('continueOnBlock applies to prompt hooks only; ignored');
   return notes;
 }
 
 /**
  * Parse one hook handler from a settings.json `hooks` entry.
- * Only `command` handlers run. Other handler types are reported, not dropped,
- * so a user can see which hook did not run and why.
+ * Handler types: command, http, mcp_tool, prompt, agent.
  *
  * A command with `args` runs the program directly, with no shell. Without
  * `args`, the command runs in /bin/sh, which reads `${CLAUDE_PROJECT_DIR}` from
@@ -145,19 +217,32 @@ function notesFor(raw, event) {
 export function parseHookHandler(raw, { event, projectDir }) {
   if (!isPlainObject(raw)) return unsupported('handler is not an object');
   const type = raw.type ?? 'command';
-  if (type !== 'command') return unsupported(`handler type "${type}" is not supported`);
-  const problem = fieldProblem(raw, event);
+  if (!HANDLER_TYPES.has(type)) return unsupported(`handler type "${type}" is not supported`);
+  if (!handlerTypesFor(event).has(type)) return unsupported(`handler type "${type}" is not supported on ${event}`);
+  const problem = fieldProblem(raw, type, event);
   if (problem !== undefined) return unsupported(problem);
-  const execForm = raw.args !== undefined;
+  const execForm = type === 'command' && raw.args !== undefined;
   const expand = (text) => text.replaceAll(PROJECT_DIR_TOKEN, () => projectDir);
   return {
     ok: true,
     handler: {
+      type,
       command: execForm ? expand(raw.command) : raw.command,
+      shell: raw.shell,
       args: execForm ? raw.args.map(expand) : undefined,
+      url: raw.url,
+      headers: raw.headers,
+      allowedEnvVars: raw.allowedEnvVars,
+      server: raw.server?.trim(),
+      tool: raw.tool?.trim(),
+      input: raw.input,
+      prompt: raw.prompt,
+      model: raw.model?.trim(),
+      continueOnBlock: raw.type === 'prompt' && raw.continueOnBlock === true,
       ifRule: raw.if,
       timeoutMs: raw.timeout === undefined ? undefined : Math.round(raw.timeout * 1000),
-      async: raw.async === true && TOOL_EVENTS.has(event),
+      async: raw.async === true || raw.asyncRewake === true,
+      asyncRewake: raw.asyncRewake === true,
       onFailure: raw.onFailure ?? 'continue',
       projectDir,
     },

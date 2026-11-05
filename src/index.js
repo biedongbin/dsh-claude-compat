@@ -174,11 +174,14 @@ export function apply(ctx, config = {}) {
       registerManagerCommands(ctx, config, () => provider);
     }
   }
+  // The rules section registers first, and the hooks after it, so the order of their
+  // pre-step listeners stays as it was. The rules section reports its files to the hooks.
+  let hooks;
   if (config.enableRules !== false) {
-    registerRulesSection(ctx, config);
+    registerRulesSection(ctx, config, (agent, files) => hooks?.instructionsLoaded(agent, files));
   }
   if (config.enableHooks !== false) {
-    registerHooks(ctx, config);
+    hooks = registerHooks(ctx, config);
   }
   if (config.enableMcp !== false) {
     // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
@@ -471,7 +474,7 @@ async function parseSkillCandidateFile(path, providerName, source, rank, flatNam
 
 // ─── rules section ───────────────────────────────────────────────────────────
 
-function registerRulesSection(ctx, config) {
+function registerRulesSection(ctx, config, onLoaded) {
   const maxBytes = config.rulesMaxBytes ?? 65536;
   // Cache built messages per session cwd — building reads ~13 files, and
   // pre-step fires every step.
@@ -496,55 +499,70 @@ function registerRulesSection(ctx, config) {
     // source of truth as dsh-agent-instructions.
     const cwd = agent.session.header?.cwd ?? process.cwd();
     if (!cache.has(cwd)) {
-      const text = buildRulesText(cwd, config, maxBytes);
-      if (text.length === 0) return decision;
+      const { text, files } = buildRulesText(cwd, config, maxBytes);
+      // Rules are read once per directory for the life of the process, also when there are none.
       // Claude Code's mechanism (leaked source, api.ts prependUserContext):
       // rules as ONE user-role <system-reminder> message at the very front
       // of the message array. Not in system prompt.
-      cache.set(cwd, createUserMessage({
-        content: [{ type: 'text', text }],
-        source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'rules' },
-      }));
+      const message = text === ''
+        ? undefined
+        : createUserMessage({
+          content: [{ type: 'text', text }],
+          source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'rules' },
+        });
+      cache.set(cwd, { files, message });
     }
+    const { files, message } = cache.get(cwd);
+    if (message === undefined) return decision;
+    onLoaded?.(agent, files);
     return {
       kind: 'enter',
-      messages: decision.messages.toSpliced(0, 0, cache.get(cwd)),
+      messages: decision.messages.toSpliced(0, 0, message),
     };
   });
 }
 
 function buildRulesText(cwd, config, maxBytes) {
   const parts = [];
+  const loaded = [];
   const seen = new Set();
-  const pushRoot = (rootDir, cap) => {
+  const pushRoot = (rootDir, cap, scope) => {
     let remaining = cap;
     const files = listMdFilesSync(rootDir);
     for (const f of files) {
       const basename = f.split('/').pop();
       if (seen.has(basename)) continue; // higher-priority root already included
       let raw;
-      try { raw = readFileSync(f, 'utf8'); } catch { continue; }
+      try { raw = readFileSync(f, 'utf8'); } catch (error) {
+        console.warn(`dsh-claude-compat: cannot read rules file ${f} (${error?.code ?? error?.message}); skipped`);
+        continue;
+      }
       const chunk = `## ${basename}\n\n${raw.trim()}\n`;
-      if (chunk.length > remaining) break;
+      if (chunk.length > remaining) {
+        console.warn(`dsh-claude-compat: rules file ${f} does not fit the rules size cap; it and the later ${scope.toLowerCase()} rules are skipped`);
+        break;
+      }
       remaining -= chunk.length;
       seen.add(basename);
       parts.push(chunk);
+      loaded.push({ path: f, scope });
     }
   };
   // Project .claude/rules first: wins same-name collisions against ~/.claude.
   const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
   if (projectRoot !== undefined) {
-    pushRoot(join(projectRoot, '.claude', 'rules'), maxBytes);
+    pushRoot(join(projectRoot, '.claude', 'rules'), maxBytes, 'Project');
   }
-  pushRoot(join(resolveUserClaudeDir(config.userClaudeDir), 'rules'), config.userRulesMaxBytes ?? maxBytes);
-  if (parts.length === 0) return '';
+  pushRoot(join(resolveUserClaudeDir(config.userClaudeDir), 'rules'), config.userRulesMaxBytes ?? maxBytes, 'User');
+  if (parts.length === 0) return { text: '', files: loaded };
   // Exact envelope Claude Code uses in prependUserContext (api.ts):
   // user-role <system-reminder> with "# claudeMd" framing.
-  return `<system-reminder>
+  const text = `<system-reminder>
 As you answer the user's questions, you can use the following context:
 # claudeMd
 ${parts.join('\n')}
       </system-reminder>`;
+  return { text, files: loaded };
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────

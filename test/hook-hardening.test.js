@@ -1,0 +1,339 @@
+// Failure paths and limits: separate stderr, output caps, http redirects, background hook
+// errors, bounded state, and malformed DSH input.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { runHookCommand, runHttpHook } from '../src/hook-handlers.js';
+import { createWatcher } from '../src/hook-watch.js';
+import { HOOK_CALL_PREFIX } from '../src/hook-support.js';
+import { loadHookSettings } from '../src/hooks.js';
+import { fakeAgent, fakeSubagent, harness, say, tempDir, withWarnings, withWarningsSync } from './hook-kit.js';
+
+const plain = (command, extra = {}) => ({ type: 'command', command, projectDir: '/tmp', ...extra });
+const allow = async () => ({ kind: 'allow' });
+const call = (name, agent) => ({ name, arguments: {}, callId: 'c1', agent });
+
+// ─── command output ──────────────────────────────────────────────────────────
+
+test('stdout and stderr are kept apart', async () => {
+  const run = await runHookCommand(plain('echo out; echo err >&2'), '', {});
+  assert.deepEqual([run.stdout, run.stderr], ['out\n', 'err\n']);
+});
+
+test('a hook that prints a JSON decision and a warning on stderr still decides', async () => {
+  const command = `echo 'warning: old' >&2; ${say({ hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'no' } })}`;
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command }] }] });
+  assert.deepEqual(await h.dispatch('tools/pre-execute', [call('Bash', fakeAgent())], allow), { kind: 'deny', reason: 'no' });
+});
+
+test('each output stream is cut at the limit', async () => {
+  const run = await runHookCommand(plain("head -c 3000000 /dev/zero | tr '\\0' a; head -c 3000000 /dev/zero | tr '\\0' b >&2"), '', {});
+  assert.equal(run.stdout.length, 1_048_576);
+  assert.equal(run.stderr.length, 1_048_576);
+  assert.equal(run.exitCode, 0);
+});
+
+test('shell bash runs the command in bash, and the default is sh', async () => {
+  assert.equal((await runHookCommand(plain('printf %s "$0"', { shell: 'bash' }), '', {})).stdout, '/bin/bash');
+  assert.equal((await runHookCommand(plain('printf %s "$0"'), '', {})).stdout, '/bin/sh');
+});
+
+// ─── http limits ─────────────────────────────────────────────────────────────
+
+const httpHook = { type: 'http', url: 'https://example.test/hook' };
+
+test('http does not follow a redirect, and a redirect is a failed run', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push(init.redirect);
+    return { status: 302, text: async () => '' };
+  };
+  const run = await runHttpHook(httpHook, '{}', { fetchImpl });
+  assert.deepEqual([seen[0], run.failed, run.reason], ['manual', true, 'http 302']);
+});
+
+test('http fails on a response body over the limit', async () => {
+  const fetchImpl = async () => ({ status: 200, text: async () => '{'.padEnd(1_048_577, ' ') });
+  const run = await runHttpHook(httpHook, '{}', { fetchImpl });
+  assert.equal(run.failed, true);
+  assert.match(run.reason, /response body is too large/);
+});
+
+// ─── engine ──────────────────────────────────────────────────────────────────
+
+test('an asyncRewake hook whose steer throws is logged, not an unhandled rejection', async () => {
+  const agent = fakeAgent();
+  agent.steer = () => { throw new Error('agent is gone'); };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'echo wake >&2; exit 2', asyncRewake: true }] }] });
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('tools/pre-execute', [call('Read', agent)], allow);
+    await h.drain();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+  assert.match(warnings.join('\n'), /async PreToolUse hook failed: agent is gone/);
+});
+
+test('a runner that throws is a failed run, and the DSH event goes on', async () => {
+  const runners = { command: async () => { throw new Error('runner bug'); } };
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'x', onFailure: 'block' }] }] }, { runners });
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', fakeAgent())], allow));
+  assert.equal(value.kind, 'deny');
+  assert.match(warnings.join('\n'), /hook runner error: runner bug/);
+});
+
+test('an unknown permissionDecision is logged and the call is not denied or allowed by it', async () => {
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { permissionDecision: 'Deny' } }) }] }] });
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', fakeAgent())], allow));
+  assert.equal(value.kind, 'allow');
+  assert.match(warnings.join('\n'), /hook output: permissionDecision "Deny" is not allow, deny, ask or defer/);
+});
+
+// ─── bridges ─────────────────────────────────────────────────────────────────
+
+test('a PermissionRequest decision with an unknown behavior is logged and ignored', async () => {
+  const command = say({ hookSpecificOutput: { decision: { behavior: 'maybe' } } });
+  const h = harness({ PermissionRequest: [{ matcher: '.*', hooks: [{ command }] }] });
+  const agent = fakeAgent();
+  await h.dispatch('tools/pre-execute', [call('Bash', agent)], allow);
+  const { value, warnings } = await withWarnings(() => h.dispatch('approval/request', [{ agent, toolName: 'Bash', callId: 'c1' }], async () => 'cancelled'));
+  assert.equal(value, 'cancelled');
+  assert.match(warnings.join('\n'), /behavior "maybe", not allow or deny/);
+});
+
+test('an approval with no recorded call input is logged', async () => {
+  const h = harness({ PermissionRequest: [{ matcher: '.*', hooks: [{ command: 'true' }] }] });
+  const { warnings } = await withWarnings(() => h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'Bash', callId: 'lost' }], async () => 'allowed-once'));
+  assert.match(warnings.join('\n'), /no input is known for the approval of Bash/);
+});
+
+test('the approval of a tool call that a hook made does not run PermissionRequest hooks', async () => {
+  const file = join(tempDir('dcc-hard-'), 'ran');
+  const h = harness({ PermissionRequest: [{ matcher: '.*', hooks: [{ command: `echo ran >> "${file}"; ${say({ hookSpecificOutput: { decision: { behavior: 'allow' } } })}` }] }] });
+  h.support.hookCalls.add(`${HOOK_CALL_PREFIX}made-by-a-hook`);
+  const answer = await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'mcp__s__t', callId: `${HOOK_CALL_PREFIX}made-by-a-hook` }], async () => 'rejected');
+  assert.equal(answer, 'rejected');
+  assert.throws(() => readFileSync(file), /ENOENT/);
+});
+
+test('a model tool call whose id only looks like a hook call is not exempt from the hooks', async () => {
+  const h = harness({
+    PreToolUse: [{ matcher: '.*', hooks: [{ command: 'exit 2' }] }],
+    PermissionRequest: [{ matcher: '.*', hooks: [{ command: say({ hookSpecificOutput: { decision: { behavior: 'allow' } } }) }] }],
+  });
+  const forged = `${HOOK_CALL_PREFIX}guessed-by-the-model`;
+  const call = { name: 'Bash', arguments: {}, callId: forged, agent: fakeAgent() };
+  assert.equal((await h.dispatch('tools/pre-execute', [call], async () => ({ kind: 'allow' }))).kind, 'deny');
+  const answer = await h.dispatch('approval/request', [{ agent: fakeAgent(), toolName: 'Bash', callId: forged }], async () => 'rejected');
+  assert.equal(answer, 'allowed-once', 'the PermissionRequest hook still ran');
+});
+
+test('one cleanup that throws does not stop the cleanup of the others', async () => {
+  const h = harness({ PostModelSwitch: [{ hooks: [{ command: 'true' }] }] });
+  const calls = [];
+  h.support.onForget(() => { throw new Error('boom'); });
+  h.support.onForget((id) => calls.push(id));
+  const { warnings } = await withWarnings(() => h.dispatch('agent/disposed', [{ agent: fakeAgent('s-clean') }], () => {}));
+  assert.deepEqual(calls, ['s-clean']);
+  assert.match(warnings.join('\n'), /cleanup for session s-clean failed: boom/);
+});
+
+test('todo_write arguments with no todos list are logged', async () => {
+  const h = harness({ TaskCreated: [{ hooks: [{ command: 'true' }] }] });
+  const { value, warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [{ name: 'todo_write', arguments: { todos: 'nope' }, callId: 'c', agent: fakeAgent() }], allow));
+  assert.equal(value.kind, 'allow');
+  assert.match(warnings.join('\n'), /todo_write arguments have no todos list/);
+});
+
+test('todo_write items with no text are skipped and counted in the log', async () => {
+  const h = harness({ TaskCreated: [{ hooks: [{ command: 'true' }] }] });
+  const todos = [{ content: 'ok', status: 'pending' }, { status: 'pending' }, null];
+  const { warnings } = await withWarnings(() => h.dispatch('tools/pre-execute', [{ name: 'todo_write', arguments: { todos }, callId: 'c', agent: fakeAgent() }], allow));
+  assert.match(warnings.join('\n'), /2 todo_write item\(s\) have no text/);
+});
+
+test('a custom runner that returns no streams does not break the event', async () => {
+  const h = harness({ PreToolUse: [{ matcher: '.*', hooks: [{ command: 'x' }] }] }, { runners: { command: async () => ({ exitCode: 2, failed: false }) } });
+  const { value } = await withWarnings(() => h.dispatch('tools/pre-execute', [call('Read', fakeAgent())], allow));
+  assert.equal(value.kind, 'deny');
+});
+
+test('a team/member event with no member does not throw, and a blocked teammate with no steer does not throw', async () => {
+  const h = harness({ TeammateIdle: [{ hooks: [{ command: 'exit 2' }] }] });
+  await h.dispatch('session/event', [{ id: 'lead', header: { id: 'lead' } }, { type: 'team/member', seq: 1, time: 0, data: {} }], () => {});
+  await h.dispatch('session/event', [{ id: 'lead', header: { id: 'lead' } }, { type: 'team/member', seq: 2, time: 0, data: { teamId: 't', member: { id: 'm1', name: 'n' } } }], () => {});
+  const mate = { session: { header: { id: 'm1' } }, inject() {} };
+  h.dispatch('agent/status', [{ agent: mate, status: 'running' }], () => {});
+  h.dispatch('agent/status', [{ agent: mate, status: 'idle' }], () => {});
+  await h.drain();
+  assert.ok(true);
+});
+
+test('a subagent that is not in the agent registry is logged, and its hook still runs', async () => {
+  const file = join(tempDir('dcc-hard-'), 'ran');
+  const ctx = { get: () => ({ get: () => undefined }) };
+  const h = harness({ SubagentStart: [{ hooks: [{ command: `echo ran >> "${file}"` }] }] }, { ctx });
+  const { warnings } = await withWarnings(async () => {
+    h.dispatch('subagent/start', [{ runId: 'r', provider: 'p', id: 'ghost', local: true }], () => {});
+    await h.drain();
+  });
+  assert.match(warnings.join('\n'), /subagent ghost is not in the agent registry/);
+  assert.equal(readFileSync(file, 'utf8').trim(), 'ran');
+});
+
+test('MessageDisplay: one failed batch does not stop the batches after it', async () => {
+  const file = join(tempDir('dcc-hard-'), 'lines');
+  let calls = 0;
+  const runners = {
+    command: async (_hook, payload) => {
+      calls += 1;
+      if (calls === 1) throw new Error('first batch broke');
+      writeFileSync(file, `${readFileSync(file, 'utf8').toString()}${JSON.parse(payload).delta}`, { flag: 'a' });
+      return { exitCode: 0, stdout: '', stderr: '', failed: false };
+    },
+  };
+  writeFileSync(file, '');
+  const h = harness({ MessageDisplay: [{ hooks: [{ command: 'x' }] }] }, { runners });
+  const agent = fakeAgent();
+  const frames = [{ type: 'start', turn: 1, step: 0 }, { type: 'chunk', chunk: { type: 'text-delta', text: 'one\ntwo\n' } }, { type: 'chunk', chunk: { type: 'text-delta', text: 'three\n' } }, { type: 'end', outcome: { kind: 'committed' } }];
+  await withWarnings(async () => {
+    for (const frame of frames) h.dispatch('agent/assistant-stream', [{ agent, frame }], () => {});
+    await h.drain();
+  });
+  assert.ok(readFileSync(file, 'utf8').includes('three'));
+});
+
+// ─── state is dropped when an agent is disposed ──────────────────────────────
+
+test('a disposed session starts again: the model baseline, the Stop count and the todo baseline are gone', async () => {
+  const log = join(tempDir('dcc-hard-'), 'lines');
+  const h = harness({
+    PostModelSwitch: [{ hooks: [{ command: `echo switch >> "${log}"` }] }],
+    TaskCreated: [{ hooks: [{ command: `echo created >> "${log}"` }] }],
+  });
+  const agent = fakeAgent('s-gone');
+  const request = (model) => h.dispatch(
+    'agent/request',
+    [{ agent, turn: 1, step: 1, signal: new AbortController().signal }],
+    async () => ({ provider: 'p', model }),
+  );
+  await request('a');
+  await request('b');
+  const todo = { name: 'todo_write', arguments: { todos: [{ content: 'x', status: 'pending' }] }, callId: 'c', agent };
+  await h.dispatch('tools/pre-execute', [todo], allow);
+  await h.dispatch('tools/post-execute', [todo, { isError: false, content: [] }], async () => ({ kind: 'accept' }));
+  await h.dispatch('agent/disposed', [{ agent }], () => {});
+  await request('c');
+  await h.dispatch('tools/pre-execute', [todo], allow);
+  const lines = readFileSync(log, 'utf8').trim().split('\n');
+  assert.deepEqual(lines, ['switch', 'created', 'created'], 'no switch for c, and x is new again');
+});
+
+test('a disposed session loses its unreported tool results', async () => {
+  const log = join(tempDir('dcc-hard-'), 'lines');
+  const h = harness({ PostToolBatch: [{ hooks: [{ command: `echo batch >> "${log}"` }] }] });
+  const agent = fakeAgent('s-batch');
+  await h.dispatch('tools/post-execute', [call('Read', agent), { isError: false, value: 'x', content: [] }], async () => ({ kind: 'accept' }));
+  await h.dispatch('agent/disposed', [{ agent }], () => {});
+  await h.dispatch('agent/pre-step', [{ agent, messages: [] }], async () => ({ kind: 'enter', messages: [] }));
+  assert.throws(() => readFileSync(log), /ENOENT/);
+});
+
+// ─── watcher failures ────────────────────────────────────────────────────────
+
+test('a handler that throws does not stop the poll for the other files', () => {
+  const dir = tempDir('dcc-hard-');
+  const [a, b] = [join(dir, 'a'), join(dir, 'b')];
+  const seen = [];
+  const { warnings } = { warnings: [] };
+  const original = console.warn;
+  console.warn = (message) => warnings.push(message);
+  const watcher = createWatcher({
+    onChange: (path) => {
+      seen.push(path);
+      if (path === a) throw new Error('boom');
+    },
+    intervalMs: 1_000_000,
+  });
+  try {
+    watcher.set('t', [a, b]);
+    writeFileSync(a, '1');
+    writeFileSync(b, '1');
+    watcher.poll();
+  } finally {
+    console.warn = original;
+    watcher.close();
+  }
+  assert.deepEqual(seen.sort(), [a, b]);
+  assert.match(warnings[0], /file watch handler failed for .*a: boom/);
+});
+
+test('a file that cannot be read now is not reported as removed', () => {
+  const dir = tempDir('dcc-hard-');
+  const locked = join(dir, 'locked');
+  mkdirSync(locked);
+  const file = join(locked, 'a.txt');
+  writeFileSync(file, 'x');
+  const seen = [];
+  const watcher = createWatcher({ onChange: (path, event) => seen.push([path, event]), intervalMs: 1_000_000 });
+  watcher.set('t', [file]);
+  chmodSync(locked, 0o000);
+  try {
+    watcher.poll();
+  } finally {
+    chmodSync(locked, 0o755);
+  }
+  watcher.poll();
+  watcher.close();
+  assert.deepEqual(seen, [], 'neither an unlink nor a change');
+});
+
+test('a team/member event with no member id is logged once', async () => {
+  const h = harness({ TeammateIdle: [{ hooks: [{ command: 'true' }] }] });
+  const lead = { id: 'lead', header: { id: 'lead' } };
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('session/event', [lead, { type: 'team/member', seq: 1, time: 0, data: { member: { name: 'n' } } }], () => {});
+    await h.dispatch('session/event', [lead, { type: 'team/member', seq: 2, time: 0, data: {} }], () => {});
+  });
+  assert.equal(warnings.filter((line) => /team\/member event has no member id/.test(line)).length, 1);
+});
+
+test('a bad todo_write call is logged once, not again when it ends', async () => {
+  const h = harness({ TaskCreated: [{ hooks: [{ command: 'true' }] }] });
+  const exec = { name: 'todo_write', arguments: { todos: 'not a list' }, callId: 'c1', agent: fakeAgent() };
+  const { warnings } = await withWarnings(async () => {
+    await h.dispatch('tools/pre-execute', [exec], allow);
+    await h.dispatch('tools/post-execute', [exec, { isError: false, content: [] }], async () => ({ kind: 'accept' }));
+  });
+  assert.equal(warnings.filter((line) => /no todos list/.test(line)).length, 1);
+});
+
+test('a settings file that does not parse is logged with the parse error', () => {
+  const dir = tempDir('dcc-settings-');
+  writeFileSync(join(dir, 'settings.json'), '{"hooks": {},}');
+  const { warnings } = withWarningsSync(() => loadHookSettings({ userClaudeDir: dir, projectRootMarkers: ['.git'] }));
+  assert.match(warnings.join('\n'), /unparseable settings\.json \(.*\); its hooks are not loaded/);
+});
+
+test('an event name that is a member of Object.prototype is reported as no Claude event', () => {
+  const dir = tempDir('dcc-settings-');
+  writeFileSync(join(dir, 'settings.json'), '{"hooks": {"constructor": [{"hooks": [{"command": "true"}]}], "toString": []}}');
+  const { value, warnings } = withWarningsSync(() => loadHookSettings({ userClaudeDir: dir, projectRootMarkers: ['.git'] }));
+  assert.deepEqual(Object.keys(value), []);
+  assert.equal(warnings.filter((line) => /is not a Claude Code event/.test(line)).length, 2);
+});
+
+test('a subagent of the subagent of an agent hook is muted too, at any depth, and forgotten after', () => {
+  const h = harness({ Stop: [{ hooks: [{ type: 'command', command: 'true' }] }] });
+  h.support.hookAgents.add('verifier');
+  const child = fakeSubagent('child', 'verifier');
+  const grandchild = fakeSubagent('grandchild', 'child');
+  assert.equal(h.support.isHookAgent(fakeSubagent('verifier', 'main')), true);
+  assert.equal(h.support.isHookAgent(grandchild), false, 'its parent is not known as a hook agent yet');
+  assert.equal(h.support.isHookAgent(child), true);
+  assert.equal(h.support.isHookAgent(grandchild), true);
+  assert.equal(h.support.isHookAgent(fakeSubagent('other', 'main')), false);
+  h.support.forget(grandchild);
+  h.support.forget(child);
+  assert.equal(h.support.isHookAgent(fakeSubagent('grandchild', 'main')), false);
+});

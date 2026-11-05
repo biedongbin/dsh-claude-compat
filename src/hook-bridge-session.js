@@ -1,0 +1,78 @@
+// dsh-claude-compat: session lifecycle hooks: SessionStart, SessionEnd and
+// UserPromptSubmit.
+//
+// SessionStart runs on `agent/created`, the DSH point that announces a new agent
+// with its start source (startup, resume, clear, compact).
+
+import { blocksToText, isSubagent, withMessages } from './hook-support.js';
+import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
+
+// Claude Code lowers the default timeout of these events (docs, "Common handler fields").
+const PROMPT_DEFAULT_MS = 30_000;
+const SESSION_END_DEFAULT_MS = 1_500;
+
+async function onAgentCreated(engine, support, { agent, source }) {
+  if (isSubagent(agent)) return;
+  try {
+    const outcome = await engine.fire('session-start', 'SessionStart', {
+      subject: source,
+      agent,
+      payload: support.payload('SessionStart', agent, { source }),
+    });
+    support.inject(agent, outcome);
+    if (outcome.watchPathsGiven) support.files.setDynamic(agent, outcome.watchPaths);
+  } catch (error) {
+    console.warn(`dsh-claude-compat: SessionStart hooks failed: ${error?.message ?? error}`);
+  }
+}
+
+// SessionEnd runs after the agent is gone, so it cannot delay shutdown. The run
+// is tracked, and plugin disposal waits for it.
+function onAgentDisposed(engine, support, { agent }) {
+  if (isSubagent(agent)) return;
+  support.track(engine.fire('session-end', 'SessionEnd', {
+    subject: 'other',
+    defaultMs: SESSION_END_DEFAULT_MS,
+    payload: support.payload('SessionEnd', agent, { reason: 'other' }),
+  }));
+}
+
+// A step that carries user messages is a prompt. A blocking hook rejects the
+// step. The hook's context follows the user's messages. Context that this plugin
+// injected itself, such as hook context or a Stop hook steer, is not a prompt.
+async function onPreStep(engine, support, { agent, messages }, next) {
+  if (isSubagent(agent)) return next();
+  const typed = messages.filter((message) => message.source?.kind !== CLAUDE_COMPAT_SOURCE_KIND);
+  if (typed.length === 0) return next();
+  const prompt = blocksToText(typed.flatMap((message) => message.content));
+  const outcome = await engine.fire('user-prompt-submit', 'UserPromptSubmit', {
+    defaultMs: PROMPT_DEFAULT_MS,
+    agent,
+    payload: support.payload('UserPromptSubmit', agent, { prompt }),
+  });
+  if (outcome.blocked || outcome.stopped) {
+    console.warn(`dsh-claude-compat: UserPromptSubmit hook blocked the prompt: ${outcome.reason ?? outcome.stopReason ?? 'blocked'}`);
+    return { kind: 'reject' };
+  }
+  const downstream = await next();
+  const extra = support.contextMessages(outcome);
+  return withMessages(downstream, extra);
+}
+
+/**
+ * Register the lifecycle hooks that the configured settings use.
+ * @param {object} ctx DSH plugin context
+ * @param {object} engine hook engine
+ * @param {object} support shared helpers
+ */
+export function registerSessionHooks(ctx, engine, support) {
+  if (engine.has('session-start')) {
+    ctx.on('agent/created', (payload) => onAgentCreated(engine, support, payload));
+  }
+  if (engine.has('session-end')) {
+    ctx.on('agent/disposed', (payload) => onAgentDisposed(engine, support, payload));
+  }
+  if (engine.has('user-prompt-submit')) {
+    ctx.on('agent/pre-step', (payload, next) => onPreStep(engine, support, payload, next));
+  }
+}

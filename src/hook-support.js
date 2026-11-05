@@ -1,0 +1,160 @@
+// dsh-claude-compat: helpers shared by the hook bridges (src/hook-bridge-*.js).
+
+import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
+
+// The agent type that DSH subagents report. DSH does not name a type for a run.
+export const SUBAGENT_TYPE = 'general-purpose';
+
+// A tool call that a hook made has an id with this prefix, so a log line shows where it came from.
+// The prefix does not mark the call: the tool hooks skip the ids in `hookCalls`, because a provider
+// can send an id with any text.
+export const HOOK_CALL_PREFIX = 'dsh-claude-compat-hook-';
+
+/** The session id of an agent, or of an object that only holds a session. */
+export function sessionIdOf(agent) {
+  return agent?.session?.header?.id ?? agent?.session?.id ?? '';
+}
+
+/** True for an agent that DSH created to run a subagent. */
+export function isSubagent(agent) {
+  return agent?.session?.header?.origin === 'subagent';
+}
+
+/** Flatten content blocks to the text a hook payload carries. */
+export function blocksToText(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('');
+}
+
+/**
+ * Support object for one plugin activation.
+ * @param {object} ctx the DSH plugin context
+ * @returns {object} helpers: payload, contextMessage, inject, track, drain
+ */
+/**
+ * Add context messages to the messages that enter the next step. A decision that is not `enter`
+ * (a rejection) stays as it is.
+ * @param {{kind: string, messages?: object[]}} downstream decision of the next listener
+ * @param {object[]} extra context messages
+ * @returns {{kind: string, messages?: object[]}}
+ */
+export function withMessages(downstream, extra) {
+  if (extra.length === 0 || downstream.kind !== 'enter') return downstream;
+  return { ...downstream, messages: [...downstream.messages, ...extra] };
+}
+
+export function createSupport(ctx) {
+  const pending = new Set();
+  // Session ids of the subagents that agent hooks started. No hook runs inside them.
+  const hookAgents = new Set();
+  // Session ids of the subagents that those subagents started, at any depth. They are muted too.
+  const hookDescendants = new Set();
+  // Ids of the tool calls that mcp_tool hooks make right now. The id of a model tool call comes
+  // from the provider, so a prefix cannot tell the two apart: the plugin remembers its own ids.
+  const hookCalls = new Set();
+  const forgetters = [(id) => hookDescendants.delete(id)];
+
+  return {
+    hookAgents,
+    hookCalls,
+
+    /** Register a cleanup that runs with the session id when a session's agent is disposed. */
+    onForget(fn) {
+      forgetters.push(fn);
+    },
+
+    forget(agent) {
+      const id = sessionIdOf(agent);
+      // One failing cleanup must not leave the state of the others behind.
+      for (const fn of forgetters) {
+        try { fn(id); } catch (error) {
+          console.warn(`dsh-claude-compat: cleanup for session ${id} failed: ${error?.message ?? error}`);
+        }
+      }
+    },
+
+    isHookAgent(agent) {
+      const id = sessionIdOf(agent);
+      if (hookAgents.has(id) || hookDescendants.has(id)) return true;
+      const parent = agent?.session?.header?.parentSession;
+      if (parent === undefined || !(hookAgents.has(parent) || hookDescendants.has(parent))) return false;
+      hookDescendants.add(id);
+      return true;
+    },
+
+    isHookCall: (exec) => typeof exec?.callId === 'string' && hookCalls.has(exec.callId),
+
+    // File watching for FileChanged. registerFileHooks replaces this with the real controller.
+    files: { track() {}, release() {}, setDynamic() {}, cwdChanged() {} },
+
+    // The agent's current directory. The working-directory service is optional,
+    // so a deployment without it falls back to the session's start directory.
+    cwd(agent) {
+      const current = agent?.session === undefined ? undefined : ctx.workingDirectory?.get?.(agent.session);
+      return current ?? agent?.session?.header?.cwd ?? process.cwd();
+    },
+
+    /**
+     * Claude-shaped hook input: the common fields plus the event's own.
+     * `session_id` is the DSH session id (the main session's id inside a subagent). `transcript_path` stays empty because
+     * DSH exposes no transcript file path.
+     */
+    payload(claudeName, agent, fields = {}) {
+      // Inside a subagent, `session_id` stays the main session and `agent_id` names the subagent.
+      const subagent = isSubagent(agent);
+      const parent = agent?.session?.header?.parentSession;
+      return {
+        session_id: subagent && parent !== undefined ? parent : sessionIdOf(agent),
+        transcript_path: '',
+        cwd: this.cwd(agent),
+        hook_event_name: claudeName,
+        ...subagent ? { agent_id: sessionIdOf(agent), agent_type: SUBAGENT_TYPE } : {},
+        ...fields,
+      };
+    },
+
+    contextMessage(text) {
+      return createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: CLAUDE_COMPAT_SOURCE_KIND, form: 'hook-context' },
+      });
+    },
+
+    /** Messages for the `additionalContext` of an outcome. */
+    contextMessages(outcome) {
+      return outcome.contexts.map((text) => this.contextMessage(text));
+    },
+
+    /** Add the outcome's context to a running agent, so the model sees it on its next step. */
+    inject(agent, outcome) {
+      if (agent === undefined) return;
+      for (const message of this.contextMessages(outcome)) agent.inject(message);
+    },
+
+    /**
+     * Callback for `asyncRewake` hooks: an exit 2 steers the agent with the hook
+     * output as a system reminder. Undefined when there is no agent to wake.
+     */
+    rewake(agent) {
+      if (typeof agent?.steer !== 'function') return undefined;
+      return (text) => agent.steer(this.contextMessage(`<system-reminder>\n${text}\n</system-reminder>`));
+    },
+
+    /** Keep a background run alive until it settles, so disposal can wait for it. */
+    track(promise) {
+      const tracked = promise.catch((error) => {
+        console.warn(`dsh-claude-compat: hook run failed: ${error?.message ?? error}`);
+      }).finally(() => pending.delete(tracked));
+      pending.add(tracked);
+      return tracked;
+    },
+
+    drain() {
+      return Promise.allSettled([...pending]);
+    },
+  };
+}

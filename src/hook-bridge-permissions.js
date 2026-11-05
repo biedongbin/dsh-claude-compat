@@ -1,0 +1,161 @@
+// dsh-claude-compat: PermissionRequest, PermissionDenied and PostToolBatch.
+//
+// PermissionRequest runs on DSH's `approval/request` waterfall. A hook decision
+// answers the request. With no decision the bridge calls `next()`, so the normal
+// answerers still run. PostToolBatch runs at the first `agent/pre-step` after a
+// group of tool results, which is the point before the next model call.
+
+import { claudeToolName } from './hook-spec.js';
+import { sessionIdOf, withMessages } from './hook-support.js';
+import { failureText, responseOf } from './hook-bridge-tools.js';
+
+// DSH has no event that groups parallel calls. The log of calls whose input an
+// approval request may need is bounded, because a call that never finishes
+// leaves its entry behind. A provider may reuse a call id in another session, so the key has both.
+const MAX_TRACKED_CALLS = 1000;
+
+function createCallLog() {
+  const calls = new Map();
+  const keyOf = (agent, callId) => `${sessionIdOf(agent)}\u0000${callId}`;
+  return {
+    record(exec) {
+      if (calls.size >= MAX_TRACKED_CALLS) calls.delete(calls.keys().next().value);
+      calls.set(keyOf(exec.agent, exec.callId), { name: exec.name, input: exec.arguments ?? {} });
+    },
+    get: (agent, callId) => calls.get(keyOf(agent, callId)),
+    forget: (exec) => calls.delete(keyOf(exec.agent, exec.callId)),
+  };
+}
+
+// The `decision` object of a PermissionRequest hook, or undefined for no decision.
+// Exit code 2 is not honored on this event (Claude Code docs, "Exit code 2 behavior").
+function permissionDecision(outcome) {
+  const decision = outcome.specific.decision;
+  if (outcome.stopped) return { behavior: 'deny', message: outcome.stopReason };
+  if (typeof decision !== 'object' || decision === null) return undefined;
+  if (decision.behavior === 'allow' || decision.behavior === 'deny') return decision;
+  console.warn(`dsh-claude-compat: PermissionRequest hook gave behavior ${JSON.stringify(decision.behavior)}, not allow or deny; ignored`);
+  return undefined;
+}
+
+async function onApproval(engine, support, calls, req, next) {
+  // The call of a hook asks nobody for permission through the hooks again.
+  if (support.isHookCall({ callId: req.callId })) return next();
+  const recorded = calls.get(req.agent, req.callId);
+  if (recorded === undefined) {
+    console.warn(`dsh-claude-compat: no input is known for the approval of ${req.toolName}; PermissionRequest hooks get an empty tool_input`);
+  }
+  const call = recorded ?? { name: req.toolName, input: {} };
+  // `reason` is why DSH asks. A sandbox escalation puts its justification there, so a hook can
+  // tell it from a plain approval of the same tool.
+  const fields = {
+    tool_name: claudeToolName(req.toolName),
+    tool_input: call.input,
+    permission_suggestions: [],
+    ...typeof req.reason === 'string' && req.reason !== '' ? { reason: req.reason } : {},
+  };
+  const outcome = await engine.fire('permission-request', 'PermissionRequest', {
+    subject: req.toolName,
+    agent: req.agent,
+    tool: { name: req.toolName, input: call.input },
+    payload: support.payload('PermissionRequest', req.agent, fields),
+  });
+  let decision = permissionDecision(outcome);
+  // An allow with a changed input means "run this other input". DSH cannot change the input, and
+  // approving the original input would run what the hook meant to remove, so the normal answerers decide.
+  if (decision?.behavior === 'allow' && decision.updatedInput !== undefined) {
+    console.warn(`dsh-claude-compat: PermissionRequest hook allowed ${req.toolName} with a changed input; DSH tool input cannot be changed, so the allow is ignored`);
+    decision = undefined;
+  }
+  if (decision?.behavior === 'allow') return 'allowed-once';
+  if (decision?.behavior === 'deny') {
+    console.warn(`dsh-claude-compat: PermissionRequest hook denied ${req.toolName}${decision.message === undefined ? '' : `: ${decision.message}`}`);
+    return 'rejected';
+  }
+  const answer = await next();
+  if (answer === 'rejected') await onDenied(engine, support, req, fields);
+  return answer;
+}
+
+// A rejected approval is the closest DSH has to the denial that PermissionDenied
+// reports. `retry: true` becomes a note to the model, because DSH cannot rerun the call.
+async function onDenied(engine, support, req, fields) {
+  const outcome = await engine.fire('permission-denied', 'PermissionDenied', {
+    subject: req.toolName,
+    agent: req.agent,
+    tool: { name: req.toolName, input: fields.tool_input },
+    payload: support.payload('PermissionDenied', req.agent, {
+      tool_name: claudeToolName(req.toolName),
+      tool_input: fields.tool_input,
+      tool_use_id: req.callId,
+      reason: req.reason ?? 'permission request rejected',
+    }),
+  });
+  support.inject(req.agent, outcome);
+  if (outcome.retry) {
+    support.inject(req.agent, { contexts: [`The ${req.toolName} call was denied. A hook says you may retry it.`] });
+  }
+}
+
+function recordResult(batches, exec, result) {
+  const key = sessionIdOf(exec.agent);
+  const entries = batches.get(key) ?? [];
+  if (entries.length >= MAX_TRACKED_CALLS) entries.shift();
+  entries.push({
+    tool_name: claudeToolName(exec.name),
+    tool_input: exec.arguments ?? {},
+    tool_use_id: exec.callId,
+    tool_response: result.isError === true ? failureText(result) : responseOf(result),
+  });
+  batches.set(key, entries);
+}
+
+async function onPreStep(engine, support, batches, payload, next) {
+  const { agent } = payload;
+  const toolCalls = batches.get(sessionIdOf(agent));
+  if (toolCalls === undefined || toolCalls.length === 0) return next();
+  batches.delete(sessionIdOf(agent));
+  const outcome = await engine.fire('post-tool-batch', 'PostToolBatch', {
+    agent,
+    payload: support.payload('PostToolBatch', agent, { tool_calls: toolCalls }),
+  });
+  if (outcome.blocked || outcome.stopped) {
+    console.warn(`dsh-claude-compat: PostToolBatch hook stopped the loop: ${outcome.reason ?? outcome.stopReason ?? 'blocked'}`);
+    return { kind: 'reject' };
+  }
+  const downstream = await next();
+  const extra = support.contextMessages(outcome);
+  return withMessages(downstream, extra);
+}
+
+/**
+ * Register the permission and batch hooks that the configured settings use.
+ * @param {object} ctx DSH plugin context
+ * @param {object} engine hook engine
+ * @param {object} support shared helpers
+ */
+export function registerPermissionHooks(ctx, engine, support) {
+  const wantsApproval = engine.has('permission-request') || engine.has('permission-denied');
+  const wantsBatch = engine.has('post-tool-batch');
+  const calls = createCallLog();
+  const batches = new Map();
+  support.onForget((id) => batches.delete(id));
+  if (wantsApproval) {
+    // Record each call's input first, because an approval request carries only the call id.
+    ctx.on('tools/pre-execute', (exec, next) => {
+      if (!support.isHookCall(exec)) calls.record(exec);
+      return next();
+    });
+    ctx.on('approval/request', (req, next) => onApproval(engine, support, calls, req, next));
+  }
+  if (wantsApproval || wantsBatch) {
+    ctx.on('tools/post-execute', async (exec, result, next) => {
+      calls.forget(exec);
+      if (wantsBatch && !support.isHookCall(exec)) recordResult(batches, exec, result);
+      return next();
+    });
+  }
+  if (wantsBatch) {
+    ctx.on('agent/pre-step', (payload, next) => onPreStep(engine, support, batches, payload, next));
+  }
+}
