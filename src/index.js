@@ -67,6 +67,7 @@ import {
   parseFrontmatter,
   readTextSafe,
   resolveUserClaudeDir,
+  validateClaudeLocationEnv,
   stringField,
 } from './lib.js';
 
@@ -83,7 +84,8 @@ export const Config = z.object({
   skillSource: z.string().default('project-claude'),
   userSkillRank: z.number().default(700),
   userSkillSource: z.string().default('user-claude'),
-  userClaudeDir: z.string().default('~/.claude'),
+  // Unset by default so CLAUDE_CONFIG_DIR can apply (see resolveUserClaudeDir).
+  userClaudeDir: z.string(),
   rulesMaxBytes: z.number().default(65536),
   userRulesMaxBytes: z.number().default(65536),
   enableRules: z.boolean().default(true),
@@ -109,7 +111,8 @@ export const Config = z.object({
   enablePlugins: z.boolean().default(true),
   pluginSkillRank: z.number().default(750),
   pluginSkillSource: z.string().default('claude-plugin'),
-  pluginsRoot: z.string().default('~/.claude/plugins'),
+  // Unset by default so CLAUDE_CODE_PLUGIN_CACHE_DIR can apply.
+  pluginsRoot: z.string(),
   enablePluginMcp: z.boolean().default(false),
   // Print a one-shot "star it" nudge on the first activation (default true).
   enableStarNudge: z.boolean().default(true),
@@ -138,6 +141,14 @@ Notes:
 - \`/reload-cc-plugins\` and \`/reload-skills\` are aliases.`;
 
 export function apply(ctx, config = {}) {
+  // A bad location variable disables the plugin with one clear message, not a
+  // stack trace at the first catalog read.
+  try {
+    validateClaudeLocationEnv(config);
+  } catch (error) {
+    console.error(`dsh-claude-compat: not activated. ${error.message}`);
+    return;
+  }
   // One-shot "found this useful? star it" nudge, surfaced exactly where the
   // value lands: the first profile activation of this process.
   try {
@@ -184,11 +195,15 @@ export function apply(ctx, config = {}) {
 // Opt-in: translate every installed plugin's MCP config and mount alongside
 // the project .mcp.json servers (see src/mcp.js mountMcpConfigs).
 async function mountPluginMcp(ctx, config) {
-  for (const plugin of readInstalledClaudePlugins(config.pluginsRoot)) {
+  for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
     const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
     if (raw === undefined) continue;
     let manifest;
-    try { manifest = JSON.parse(raw); } catch { continue; }
+    try { manifest = JSON.parse(raw); }
+    catch (error) {
+      console.warn(`dsh-claude-compat: plugin ${plugin.key}: cannot parse plugin.json: ${error.message}`);
+      continue;
+    }
     const { servers, warns } = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,
     });
@@ -241,7 +256,7 @@ class ClaudeCompatSkillProvider {
       candidates.push(this.reloadSkillDef('reload-skills',
         'Hot-reload the skill catalog (alias of /reload-cc-plugins).'));
       candidates.push(this.managerSkillCandidate('cc-resume',
-        'List and import Claude Code sessions into DSH: browse ~/.claude/projects history and resume any conversation.',
+        'List and import Claude Code sessions into DSH: browse the projects folder of the Claude config dir (default ~/.claude/projects) and resume any conversation.',
         'User wants to resume, list, or import a Claude Code conversation/session into DSH. Usage: /cc-resume list, /cc-resume import <sessionId>.',
         (await import('./cc-resume-skill.mjs')).CC_RESUME_SKILL_BODY));
       candidates.push(this.managerSkillCandidate('cc-export',
@@ -253,7 +268,7 @@ class ClaudeCompatSkillProvider {
       const pluginCandidates = await discoverPluginContent(
         this.config.pluginsRoot, this.name, this.config.pluginSkillSource ?? 'claude-plugin',
         this.config.pluginSkillRank ?? 750,
-        { enableAgents: this.config.enableAgents, ...this.aliasOptions });
+        { enableAgents: this.config.enableAgents, userClaudeDir: this.config.userClaudeDir, ...this.aliasOptions });
       candidates.push(...pluginCandidates);
     }
     return candidates;

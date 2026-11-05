@@ -16,6 +16,7 @@ import {
   translatePluginMcp,
 } from '../src/plugins.js';
 import { apply, Config } from '../src/index.js';
+import { withEnv } from './env-helper.js';
 
 function makeSandbox(prefix) {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -23,7 +24,7 @@ function makeSandbox(prefix) {
 
 // ─── readInstalledClaudePlugins (real data) ──────────────────────────────────
 
-test('readInstalledClaudePlugins: real ~/.claude/plugins registry', () => {
+test('readInstalledClaudePlugins: real ~/.claude/plugins registry', () => withEnv({}, () => {
   const plugins = readInstalledClaudePlugins();
   assert.ok(plugins.length >= 2, `expected ≥2 plugins, got ${plugins.length}`);
   const omc = plugins.find((p) => p.name === 'oh-my-claudecode');
@@ -42,11 +43,11 @@ test('readInstalledClaudePlugins: real ~/.claude/plugins registry', () => {
   }
   // malformed / missing → []
   assert.deepEqual(readInstalledClaudePlugins('/nonexistent-dcc-plugins'), []);
-});
+}));
 
 // ─── discoverPluginContent (real omc install) ────────────────────────────────
 
-test('discoverPluginContent: real omc install yields skills/commands/agents', async () => {
+test('discoverPluginContent: real omc install yields skills/commands/agents', () => withEnv({}, async () => {
   const skillsOnly = await discoverPluginContent(undefined, 'claude-compat', 'claude-plugin', 750);
   const withAgents = await discoverPluginContent(undefined, 'claude-compat', 'claude-plugin', 750, { enableAgents: true });
 
@@ -78,7 +79,7 @@ test('discoverPluginContent: real omc install yields skills/commands/agents', as
   // enableAgents default (undefined) also includes agents (only ===false disables)
   const defaultAgents = skillsOnly.filter((c) => c.path.includes('/agents/') && c.path.includes('/omc/'));
   assert.ok(defaultAgents.length >= 15, 'agents discovered when enableAgents omitted');
-});
+}));
 
 // ─── manifest-less fallback (synthetic fixture) ──────────────────────────────
 

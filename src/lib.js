@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 
@@ -17,11 +17,107 @@ import { parse } from 'yaml';
 // carry the identical kind. Emission and dedup must both use this constant.
 export const CLAUDE_COMPAT_SOURCE_KIND = 'plugin:dsh-claude-compat';
 
+// Claude Code copies env values as written and never expands `~`, so a
+// relative value would resolve against the launch directory. Fail fast instead.
+function requireAbsolute(name, value) {
+  if (!isAbsolute(value)) {
+    throw new Error(`${name} must be an absolute path, got "${value}". Set it to a full path.`);
+  }
+  return value;
+}
+
+function envAbsolutePath(name) {
+  const value = process.env[name];
+  if (!value) return undefined;
+  return requireAbsolute(name, value);
+}
+
+// A PATH-style list (`:` on Unix, `;` on Windows). Blank entries are dropped
+// and every entry must be absolute.
+export function envPathList(name) {
+  return envEntries(name).map((entry) => requireAbsolute(name, entry));
+}
+
+function envEntries(name) {
+  return (process.env[name] ?? '').split(delimiter).filter(Boolean);
+}
+
+// Precedence: explicit plugin config, then CLAUDE_CONFIG_DIR, then ~/.claude.
+// An explicit relative value still resolves against the launch directory.
 export function resolveUserClaudeDir(dir) {
-  if (dir === undefined || dir === null || dir === '') return join(homedir(), '.claude');
+  if (dir === undefined || dir === null || dir === '') {
+    return envAbsolutePath('CLAUDE_CONFIG_DIR') ?? join(homedir(), '.claude');
+  }
   if (dir === '~') return homedir();
   if (dir.startsWith('~/')) return join(homedir(), dir.slice(2));
   return resolve(dir);
+}
+
+// Precedence: explicit config, then CLAUDE_CODE_PLUGIN_CACHE_DIR (the plugins
+// root, not only the cache), then <user dir>/plugins. `userDir` is the explicit
+// userClaudeDir config value, so a configured user dir also moves the plugins.
+export function resolveClaudePluginsRoot(dir, userDir) {
+  if (dir === undefined || dir === null || dir === '') {
+    return envAbsolutePath('CLAUDE_CODE_PLUGIN_CACHE_DIR') ?? join(resolveUserClaudeDir(userDir), 'plugins');
+  }
+  return resolveUserClaudeDir(dir);
+}
+
+// Claude Code honors CLAUDE_CODE_PROJECT_DIR_NAME only together with
+// CLAUDE_CONFIG_DIR, and only for 1-64 letters, digits, hyphens or underscores
+// that are not a Windows device name. Any other value is ignored, not an error.
+const PROJECT_DIR_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+
+function projectDirNameOverride() {
+  const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
+  if (!process.env.CLAUDE_CONFIG_DIR || !name) return undefined;
+  if (!PROJECT_DIR_NAME.test(name) || WINDOWS_DEVICE.test(name)) return undefined;
+  return name;
+}
+
+// Claude Code turns every character that is not a letter or digit into `-`. A name
+// over this length is cut and gets a hash of the full path, so two long paths differ.
+const MAX_PROJECT_FOLDER = 200;
+
+// 31-multiplier string hash over UTF-16 units, as Claude Code computes it.
+function pathHash(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = (hash << 5) - hash + text.charCodeAt(i) | 0;
+  return hash;
+}
+
+export function claudeProjectFolder(cwd) {
+  const name = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (name.length <= MAX_PROJECT_FOLDER) return name;
+  return `${name.slice(0, MAX_PROJECT_FOLDER)}-${Math.abs(pathHash(cwd)).toString(36)}`;
+}
+
+export function claudeProjectsDir(cwd, userDir) {
+  const folder = projectDirNameOverride() ?? claudeProjectFolder(cwd);
+  return join(resolveUserClaudeDir(userDir), 'projects', folder);
+}
+
+// CLAUDE_CODE_PLUGIN_DIRS: each entry is an absolute path or starts with `~`.
+// Claude Code skips any other entry, so this returns the skipped ones for a warning.
+export function envPluginDirs() {
+  const dirs = [];
+  const skipped = [];
+  for (const entry of envEntries('CLAUDE_CODE_PLUGIN_DIRS')) {
+    if (entry === '~' || entry.startsWith('~/')) dirs.push(resolveUserClaudeDir(entry));
+    else if (isAbsolute(entry)) dirs.push(entry);
+    else skipped.push(entry);
+  }
+  return { dirs, skipped };
+}
+
+// Read the variables that the effective configuration still uses, so a bad value
+// fails at startup with one clear message. An explicit config value overrides its
+// variable, so a bad variable behind it is not an error.
+export function validateClaudeLocationEnv({ userClaudeDir, pluginsRoot, enablePlugins } = {}) {
+  resolveUserClaudeDir(userClaudeDir);
+  resolveClaudePluginsRoot(pluginsRoot, userClaudeDir);
+  if (enablePlugins !== false) envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR');
 }
 
 // No marker on the whole ancestor chain → fall back to cwd, matching DSH's own

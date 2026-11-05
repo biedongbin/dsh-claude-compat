@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerManagerCommands } from '../src/commands.js';
 import { apply } from '../src/index.js';
+import { withEnv } from './env-helper.js';
 
 function fakeCommandHost() {
   const defs = new Map();
@@ -97,6 +98,7 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
   const prevHome = process.env.HOME;
   process.env.HOME = home;
   try {
+    await withEnv({}, async () => {
     const { ctx, defs } = fakeCommandHost();
     registerManagerCommands(ctx, {}, () => undefined);
     const steered = [];
@@ -120,6 +122,7 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
     });
     assert.equal(listing.kind, 'success');
     assert.match(listing.text, /1 Claude sessions/);
+    });
   } finally {
     process.env.HOME = prevHome;
   }

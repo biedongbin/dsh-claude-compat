@@ -4,6 +4,26 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Claude Code location variables are honored.** `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, `CLAUDE_CODE_PLUGIN_SEED_DIR`, `CLAUDE_CODE_PLUGIN_DIRS`, and `CLAUDE_CODE_PROJECT_DIR_NAME` now move the paths the plugin reads, as Claude Code does. Skills, rules, hooks, plugin management, and `/cc-resume` all use one resolver in `src/lib.js`. Issue #1.
+
+### Changed
+- A relative `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `CLAUDE_CODE_PLUGIN_SEED_DIR` stops activation with one error line that names the variable. Startup checks only the variables that the effective configuration uses, so an explicit `userClaudeDir` or `pluginsRoot` hides a bad variable.
+- `CLAUDE_CODE_PLUGIN_DIRS` accepts absolute and `~` entries and skips other entries with a warning, as Claude Code does.
+- A plugin from `CLAUDE_CODE_PLUGIN_DIRS` replaces an installed plugin with the same manifest name, as a whole. The plugin logs one warning for each replacement.
+- The plugin now logs a warning for an unreadable `plugin.json`, an `installed_plugins.json` without a `plugins` object, and a seed plugin that is missing. A seed record can no longer point the cache lookup outside `<seed>/cache`.
+- `/cc-resume` list and import read the configured `userClaudeDir`, as the skill catalog does. The `--user-claude-dir` flag carries it to the script.
+- A relative `CLAUDE_CODE_PLUGIN_SEED_DIR` no longer stops activation when `enablePlugins` is `false`.
+- A plugin seed mounted at another path than its build path now loads: plugin files are read from the current seed root.
+- `CLAUDE_CODE_PROJECT_DIR_NAME` applies only with `CLAUDE_CONFIG_DIR`, and only for 1 to 64 letters, digits, hyphens, or underscores that are not a Windows device name. Other values are ignored, not an error.
+- `/cc-plugin` and the plugin catalog now follow the configured `userClaudeDir` and `pluginsRoot`.
+- `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
+
+### Fixed
+- `/cc-resume` now derives the Claude project folder as Claude Code does: every character that is not a letter or digit becomes `-`, and a name over 200 characters is cut and gets a hash of the path. A working directory with `.`, `_`, or a space in it no longer maps to a missing folder. Issue #11.
+
 ## [1.0.1] — 2026-11-04
 
 ### Fixed

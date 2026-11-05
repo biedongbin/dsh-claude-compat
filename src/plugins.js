@@ -11,45 +11,152 @@
 // opted in (mounting third-party MCP servers is a bigger trust step than
 // listing skills).
 
-import { readFileSync as rfs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync as rfs, statSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import {
   pathExists,
   readTextSafe,
-  resolveUserClaudeDir,
+  envPathList,
+  envPluginDirs,
+  resolveClaudePluginsRoot,
   parseFrontmatter,
   stringField,
 } from './lib.js';
 import { translateMcpServers } from './mcp.js';
 import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
-// Parse installed_plugins.json → [{ key, name, marketplace, installPath,
-// version }] for scope==='user' entries. Dedupe per key, keeping the last
-// entry (Claude Code appends reinstall records; last is freshest).
-export function readInstalledClaudePlugins(pluginsRoot) {
-  const root = resolveUserClaudeDir(pluginsRoot === undefined ? '~/.claude/plugins' : pluginsRoot);
+// Installed plugins from three places: the primary plugins root, the read-only
+// CLAUDE_CODE_PLUGIN_SEED_DIR roots (the first root that holds a plugin wins),
+// and the CLAUDE_CODE_PLUGIN_DIRS plugin directories. An inline plugin replaces
+// an installed plugin with the same manifest name, as a whole.
+export function readInstalledClaudePlugins(pluginsRoot, userDir) {
+  const primary = resolveClaudePluginsRoot(pluginsRoot, userDir);
+  const installed = [
+    ...readInstalledFile(primary, { missingIsFine: true }),
+    ...envPathList('CLAUDE_CODE_PLUGIN_SEED_DIR').flatMap((root) => readInstalledFile(root, { seed: true })),
+  ];
+  const { dirs, skipped } = envPluginDirs();
+  for (const entry of skipped) {
+    warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not absolute or "~"-prefixed, skipped: ${entry}`);
+  }
+  const inline = dirs.map(inlinePlugin).filter(Boolean);
+  const inlineByName = new Map(inline.map((plugin) => [plugin.name, plugin]));
+  const byKey = new Map();
+  for (const plugin of installed) {
+    const replacement = inlineByName.get(manifestName(plugin));
+    if (replacement !== undefined) {
+      warnOnce(`${replacement.installPath} from CLAUDE_CODE_PLUGIN_DIRS replaces installed plugin ${plugin.key} (${plugin.installPath})`);
+      continue;
+    }
+    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+  }
+  for (const plugin of inline) {
+    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+  }
+  return [...byKey.values()];
+}
+
+// The name that plugin conflicts compare: the manifest name, else the key name.
+function manifestName(plugin) {
+  return readManifestName(plugin.installPath, (path, error) => {
+    warnOnce(`cannot read plugin manifest ${path}: ${error.message}. Using "${plugin.name}".`);
+  }) ?? plugin.name;
+}
+
+// A missing manifest is normal. Any other failure goes to `onError`.
+function readManifestName(dir, onError) {
+  const path = join(dir, '.claude-plugin', 'plugin.json');
+  try {
+    const manifest = JSON.parse(claReadSync(path));
+    return typeof manifest?.name === 'string' && manifest.name !== '' ? manifest.name : undefined;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') onError?.(path, error);
+    return undefined;
+  }
+}
+
+// Environment-supplied paths are read on every catalog read; warn once each.
+const warned = new Set();
+function warnOnce(message) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.warn(`dsh-claude-compat: ${message}`);
+}
+
+// One plugin directory loaded the way `--plugin-dir` loads it. The name comes
+// from the manifest, else the directory name.
+function inlinePlugin(dir) {
+  let isDirectory = false;
+  try { isDirectory = statSync(dir).isDirectory(); }
+  catch (error) {
+    if (error?.code !== 'ENOENT') {
+      warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry cannot be read, skipped: ${dir} (${error.message})`);
+      return undefined;
+    }
+  }
+  if (!isDirectory) {
+    warnOnce(`CLAUDE_CODE_PLUGIN_DIRS entry is not a directory, skipped: ${dir}`);
+    return undefined;
+  }
+  const fallback = basename(dir);
+  const name = readManifestName(dir, (path, error) => {
+    warnOnce(`cannot read plugin manifest ${path}: ${error.message}. Using "${fallback}".`);
+  }) ?? fallback;
+  return { key: `${name}@inline`, name, marketplace: 'inline', installPath: dir, version: 'inline' };
+}
+
+// Parse <root>/installed_plugins.json → plugin records for scope==='user'
+// entries. Dedupe per key, keeping the last entry (Claude Code appends
+// reinstall records; last is freshest). A missing file is normal for the
+// primary root only; any other failure is reported once.
+function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
   const manifestPath = join(root, 'installed_plugins.json');
   let parsed;
   try { parsed = JSON.parse(claReadSync(manifestPath)); }
-  catch { return []; }
-  if (typeof parsed !== 'object' || parsed === null) return [];
-  const plugins = parsed.plugins;
-  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) return [];
+  catch (error) {
+    if (!(missingIsFine && error?.code === 'ENOENT')) {
+      warnOnce(`cannot read ${manifestPath}: ${error.message}`);
+    }
+    return [];
+  }
+  const plugins = parsed?.plugins;
+  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) {
+    warnOnce(`${manifestPath} has no "plugins" object, skipped`);
+    return [];
+  }
   const byKey = new Map();
   for (const [key, entries] of Object.entries(plugins)) {
     if (!Array.isArray(entries)) continue;
     const record = entries.findLast((e) => e?.scope === 'user');
     if (record === undefined || typeof record.installPath !== 'string') continue;
     const at = key.lastIndexOf('@');
+    const name = at > 0 ? key.slice(0, at) : key;
+    const marketplace = at > 0 ? key.slice(at + 1) : '';
+    const version = typeof record.version === 'string' ? record.version : 'unknown';
     byKey.set(key, {
       key,
-      name: at > 0 ? key.slice(0, at) : key,
-      marketplace: at > 0 ? key.slice(at + 1) : '',
-      installPath: record.installPath,
-      version: typeof record.version === 'string' ? record.version : 'unknown',
+      name,
+      marketplace,
+      installPath: seed ? seedInstallPath(root, record.installPath, { key, name, marketplace, version }) : record.installPath,
+      version,
     });
   }
   return [...byKey.values()];
+}
+
+// A seed can be mounted at another path than it was built at, so the recorded
+// absolute installPath may not exist. Look in the plugin cache of the seed root first.
+function seedInstallPath(root, recorded, { key, name, marketplace, version }) {
+  // The record is untrusted input: one segment must never leave <root>/cache.
+  if (![marketplace, name, version].every(isPathSegment)) return recorded;
+  const local = join(root, 'cache', marketplace, name, version);
+  if (existsSync(local)) return local;
+  if (!existsSync(recorded)) warnOnce(`seed plugin ${key} not found at ${local} or ${recorded}`);
+  return recorded;
+}
+
+function isPathSegment(value) {
+  return value !== '' && value !== '.' && value !== '..' && !/[\\/]/.test(value);
 }
 
 // readFileSync kept local so readInstalledClaudePlugins stays sync-simple.
@@ -61,9 +168,9 @@ function claReadSync(p) { return rfs(p, 'utf8'); }
 // Claude Code's discoverCommands drops commands whose only description is the
 // empty string; plugin marketplaces ship many such stubs, so this wrapper
 // re-surfaces them with the filename stem as the description.
-export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal } = {}) {
+export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal, userClaudeDir } = {}) {
   const out = [];
-  const plugins = readInstalledClaudePlugins(pluginsRoot);
+  const plugins = readInstalledClaudePlugins(pluginsRoot, userClaudeDir);
   const { discoverSkills, discoverCommands } = await import('./index.js');
   const { discoverAgents } = await import('./agents.js');
   const aliasOptions = { aliases, tagOriginal };

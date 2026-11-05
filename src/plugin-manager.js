@@ -25,8 +25,8 @@
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync, cpSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { promisify } from 'node:util';
+import { resolveClaudePluginsRoot, resolveUserClaudeDir } from './lib.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -63,8 +63,13 @@ async function claudePlugin(args, timeoutMs = 120_000) {
     .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
 }
 
-function pluginsRoot() {
-  return join(homedir(), '.claude', 'plugins');
+// Plugin dir and settings path for the configured user dir (config keys win
+// over the environment, see src/lib.js).
+function locations(config = {}) {
+  return {
+    pluginsDir: resolveClaudePluginsRoot(config.pluginsRoot, config.userClaudeDir),
+    settingsPath: join(resolveUserClaudeDir(config.userClaudeDir), 'settings.json'),
+  };
 }
 
 function backupFile(path) {
@@ -104,7 +109,7 @@ export function parsePluginList(output) {
 }
 
 /** Pure: list plugin entries from installed_plugins.json + enabledPlugins map. */
-export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export function listFromDisk(pluginsDir, settingsPath) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { version: 2, plugins: {} });
   const settings = readJson(settingsPath, {});
   const enabledMap = settings.enabledPlugins ?? {};
@@ -127,7 +132,7 @@ export function listFromDisk(pluginsDir = pluginsRoot(), settingsPath = join(hom
 }
 
 /** Pure: search marketplace.json catalogs under marketplaces/ for a term. */
-export function searchMarketplaces(term, pluginsDir = pluginsRoot()) {
+export function searchMarketplaces(term, pluginsDir) {
   const marketRoot = join(pluginsDir, 'marketplaces');
   const needle = String(term ?? '').toLowerCase();
   const hits = [];
@@ -159,7 +164,7 @@ export function searchMarketplaces(term, pluginsDir = pluginsRoot()) {
  * already present under marketplaces/<name>; copy plugin source into cache and
  * register in installed_plugins.json + enabledPlugins.
  */
-export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export async function fallbackInstall(installId, pluginsDir, settingsPath) {
   const [pluginName, marketName] = String(installId).split('@');
   if (!marketName) return { ok: false, error: 'fallback install needs name@marketplace (marketplace repo must already be cloned)' };
   const marketJson = join(pluginsDir, 'marketplaces', marketName, '.claude-plugin', 'marketplace.json');
@@ -195,7 +200,7 @@ export async function fallbackInstall(installId, pluginsDir = pluginsRoot(), set
 }
 
 /** Fallback enable/disable: flip enabledPlugins in settings.json (backed up). */
-export function fallbackToggle(pluginRef, enable, pluginsDir = pluginsRoot(), settingsPath = join(homedir(), '.claude', 'settings.json')) {
+export function fallbackToggle(pluginRef, enable, pluginsDir, settingsPath) {
   const installed = readJson(join(pluginsDir, 'installed_plugins.json'), { plugins: {} });
   const keys = Object.keys(installed.plugins ?? {});
   const key = keys.find((k) => k === pluginRef || k.startsWith(`${pluginRef}@`));
@@ -214,6 +219,7 @@ export function fallbackToggle(pluginRef, enable, pluginsDir = pluginsRoot(), se
  */
 export async function runPluginCommand(input, deps = {}) {
   const claudeFn = deps.claude ?? claudePlugin;
+  const { pluginsDir, settingsPath } = locations(deps.config);
   const args = String(input ?? '').trim().split(/\s+/).filter(Boolean);
   if (args.length === 0 || args[0] === 'help') return HELP;
 
@@ -222,7 +228,7 @@ export async function runPluginCommand(input, deps = {}) {
   // `/plugin <name>[@market]` one-shot install.
   const isOneShot = !['install', 'uninstall', 'remove', 'enable', 'disable',
     'update', 'search', 'marketplace', 'list'].includes(cmd);
-  if (isOneShot) return doInstall(cmd, claudeFn);
+  if (isOneShot) return doInstall(cmd, claudeFn, pluginsDir, settingsPath);
 
   if (cmd === 'list') {
     const res = await claudeFn(['list']);
@@ -233,7 +239,7 @@ export async function runPluginCommand(input, deps = {}) {
         ...parsed.map((p) => `- **${p.name}@${p.marketplace}** v${p.version} [${p.scope}] ${p.enabled ? '✔ enabled' : '✘ disabled'}`),
         '', 'Enable/disable with `/plugin enable|disable <name>`; install with `/plugin <name>@<marketplace>`.'].join('\n');
     }
-    const parsed = listFromDisk();
+    const parsed = listFromDisk(pluginsDir, settingsPath);
     if (parsed.length === 0) return 'No plugins installed (CLI unavailable, disk scan found none).';
     return ['Installed plugins (disk scan; claude CLI unavailable):', '',
       ...parsed.map((p) => `- **${p.name}@${p.marketplace}** v${p.version} [${p.scope}] ${p.enabled ? '✔ enabled' : '✘ disabled'}`)].join('\n');
@@ -241,7 +247,7 @@ export async function runPluginCommand(input, deps = {}) {
 
   if (cmd === 'search') {
     if (rest.length === 0) return 'Usage: `/plugin search <term>`';
-    const hits = searchMarketplaces(rest.join(' '));
+    const hits = searchMarketplaces(rest.join(' '), pluginsDir);
     if (hits.length === 0) return `No marketplace plugin matches "${rest.join(' ')}".`;
     return [`Marketplace matches for "${rest.join(' ')}":`, '',
       ...hits.slice(0, 30).map((h) => `- **${h.installId}** v${h.version ?? '?'} — ${h.description.slice(0, 100)}`),
@@ -254,7 +260,7 @@ export async function runPluginCommand(input, deps = {}) {
     if (!subArgs) return 'Usage: `/plugin marketplace list|add|remove|update [...]`';
     const res = await claudeFn(subArgs, 300_000);
     if (res.ok) return `Marketplace ${sub} OK (engine: claude CLI):\n\n${res.stdout.trim()}`;
-    return `Marketplace ${sub} failed. Engine: claude CLI (unavailable or errored).\n\n${res.error}\n\nFallback for marketplace mutation is not implemented (manual: git clone into ~/.claude/plugins/marketplaces/<name> and register in known_marketplaces.json).`;
+    return `Marketplace ${sub} failed. Engine: claude CLI (unavailable or errored).\n\n${res.error}\n\nFallback for marketplace mutation is not implemented (manual: git clone into ${join(pluginsDir, 'marketplaces')}/<name> and register in known_marketplaces.json).`;
   }
 
   const passThrough = {
@@ -272,11 +278,11 @@ export async function runPluginCommand(input, deps = {}) {
   }
 
   if (passThrough) {
-    if (passThrough[0] === 'install') return doInstall(rest.join(' '), claudeFn);
+    if (passThrough[0] === 'install') return doInstall(rest.join(' '), claudeFn, pluginsDir, settingsPath);
     const res = await claudeFn(passThrough, 300_000);
     if (res.ok) return `\`${cmd} ${rest.join(' ')}\` OK (engine: claude CLI):\n\n${res.stdout.trim()}`;
     if ((cmd === 'enable' || cmd === 'disable') && /ENOENT|not found|spawn/i.test(res.error)) {
-      const fb = fallbackToggle(rest[0], cmd === 'enable');
+      const fb = fallbackToggle(rest[0], cmd === 'enable', pluginsDir, settingsPath);
       if (fb.ok) return `\`${cmd} ${rest[0]}\` OK (engine: fallback, settings.json backed up): ${fb.key} → ${fb.enabled ? 'enabled' : 'disabled'}`;
       return `Both engines failed:\n- claude CLI: ${res.error}\n- fallback: ${fb.error}`;
     }
@@ -286,14 +292,14 @@ export async function runPluginCommand(input, deps = {}) {
   return HELP;
 }
 
-async function doInstall(installId, claudeFn) {
+async function doInstall(installId, claudeFn, pluginsDir, settingsPath) {
   if (!installId) return 'Usage: `/plugin <name>[@marketplace]`';
   const res = await claudeFn(['install', installId], 300_000);
   if (res.ok) {
     return [`Installed **${installId}** (engine: claude CLI).`, '', res.stdout.trim(),
       '', 'Skills/commands appear in the catalog on next reconcile; restart DSH if the plugin ships MCP servers.'].join('\n');
   }
-  const fb = await fallbackInstall(installId);
+  const fb = await fallbackInstall(installId, pluginsDir, settingsPath);
   if (fb.ok) {
     return [`Installed **${installId}** (engine: fallback; installed_plugins.json + settings.json backed up).`,
       '', `installPath: ${fb.installPath}`, '',
