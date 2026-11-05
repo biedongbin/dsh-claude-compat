@@ -93,7 +93,8 @@ export const Config = z.object({
   enableMcp: z.boolean().default(true),
   mcpFailOnStartupError: z.boolean().default(false),
   enableHooks: z.boolean().default(true),
-  hooksTimeoutMs: z.number().default(60000),
+  // Node delays above 2147483647 ms fire after 1 ms, so a larger value kills hooks at once.
+  hooksTimeoutMs: z.number().step(1).min(1).max(2147483647).default(60000),
   enableAgents: z.boolean().default(true),
   // Non-ASCII (e.g. Chinese) skill/command/agent names can never satisfy DSH's
   // kebab-case grammar, so they are dropped by the registry. `skillAliases`

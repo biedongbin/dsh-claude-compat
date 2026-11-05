@@ -278,7 +278,8 @@ export function translatePluginMcp(manifest, installPath, opts = {}) {
   if (typeof ref !== 'string') return { servers: [], warns: [] };
   const raw = readTextSafeSync(resolve(installPath, ref));
   if (raw === undefined) return { servers: [], warns: [`mcpServers file not readable: ${ref}`] };
-  const substituted = raw.replaceAll('${CLAUDE_PLUGIN_ROOT}', installPath);
+  // A replacer function keeps $&, $$ and $' in the install path literal.
+  const substituted = raw.replaceAll('${CLAUDE_PLUGIN_ROOT}', () => installPath);
   return translateMcpServers(substituted, opts);
 }
 

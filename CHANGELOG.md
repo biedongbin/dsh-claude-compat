@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
 
 ### Added
 - **Claude Code location variables are honored.** `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, `CLAUDE_CODE_PLUGIN_SEED_DIR`, `CLAUDE_CODE_PLUGIN_DIRS`, and `CLAUDE_CODE_PROJECT_DIR_NAME` now move the paths the plugin reads, as Claude Code does. Skills, rules, hooks, plugin management, and `/cc-resume` all use one resolver in `src/lib.js`. Issue #1.
+- **Hook handler fields.** Command hooks accept `args` (run without a shell), `if` (a permission rule such as `Bash(git *)`, for tool events), `timeout` (seconds), `async` (tool events; cannot change the decision) and `onFailure: "block"`. `${CLAUDE_PROJECT_DIR}` is expanded in commands and arguments, and set in the hook environment. Tool hook stdin carries `hook_event_name` and `cwd`. Hook entries of other handler types (`http`, `prompt`, `agent`, `mcp_tool`) are skipped with a warning. Issue #2 covers the events and handlers still missing.
 
 ### Changed
 - A relative `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `CLAUDE_CODE_PLUGIN_SEED_DIR` stops activation with one error line that names the variable. Startup checks only the variables that the effective configuration uses, so an explicit `userClaudeDir` or `pluginsRoot` hides a bad variable.
@@ -22,6 +23,8 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - `userClaudeDir` and `pluginsRoot` have no default value now. Unset means the matching variable, then `~/.claude`. An explicit value still wins.
 
 ### Fixed
+- Hook matchers, `if` rules, and the hook payload now use the Claude Code names for DSH built-in tools (`bash` is `Bash`, and likewise `read`, `edit`, `write`). Before, `if: "Bash(git *)"` never matched a native call.
+- Hook stdout and stderr keep a multibyte character whole when it arrives in two chunks.
 - `/cc-resume` now derives the Claude project folder as Claude Code does: every character that is not a letter or digit becomes `-`, and a name over 200 characters is cut and gets a hash of the path. A working directory with `.`, `_`, or a space in it no longer maps to a missing folder. Issue #11.
 
 ## [1.0.1] — 2026-11-04

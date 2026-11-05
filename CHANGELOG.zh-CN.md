@@ -8,6 +8,7 @@
 
 ### 新增
 - **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
+- **Hook 处理器字段。** 命令型 hook 支持 `args`（不经过 shell 直接执行）、`if`（权限规则，如 `Bash(git *)`，仅用于工具事件）、`timeout`（秒）、`async`（仅工具事件；不能改变决定）以及 `onFailure: "block"`。命令与参数中的 `${CLAUDE_PROJECT_DIR}` 会被展开，并设置到 hook 环境变量中。工具 hook 的 stdin 包含 `hook_event_name` 与 `cwd`。其他处理器类型（`http`、`prompt`、`agent`、`mcp_tool`）的条目会被跳过并给出警告。尚未支持的事件与处理器见 issue #2。
 
 ### 变更
 - `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 为相对路径时，插件不再激活，并输出一行指明变量名的错误。启动时只检查有效配置实际用到的变量，因此显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
@@ -22,6 +23,8 @@
 - `userClaudeDir` 与 `pluginsRoot` 不再有默认值。未设置时依次使用对应环境变量、`~/.claude`。显式配置值优先。
 
 ### 修复
+- Hook 的 matcher、`if` 规则和 hook 输入负载现在使用 Claude Code 对 DSH 内置工具的名称（`bash` 即 `Bash`，`read`、`edit`、`write` 同理）。此前 `if: "Bash(git *)"` 永远匹配不到原生调用。
+- Hook 的 stdout 与 stderr 在多字节字符被拆成两个数据块时保持字符完整。
 - `/cc-resume` 现在按 Claude Code 的方式推导 Claude 项目文件夹名：所有非字母、数字的字符都变为 `-`，超过 200 个字符的名称会被截断并附加路径哈希。工作目录含有 `.`、`_` 或空格时，不再对应到不存在的文件夹。Issue #11。
 
 ## [1.0.1] — 2026-11-04
