@@ -12,8 +12,8 @@
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License">
 </p>
 
-> **在 DSH 里，直接用回你整套 Claude Code 配置——零迁移。**
-> skills、命令、规则、agents、hooks、MCP，装上就能用，什么都不用重配。
+> **在 DSH 中复用 Claude Code 配置。**
+> 桥接 skills、命令、规则、agents、hooks 与 MCP，并明确说明运行时限制和升级步骤。
 
 ---
 
@@ -21,14 +21,14 @@
 
 你已经在 Claude Code 里攒了一整套趁手的 `.claude/`——skills、斜杠命令、rules、agents、hooks、MCP servers。换到 **DSH (DeepSeek Harness)** 时，你不想把这些全部重新搭一遍。
 
-**dsh-claude-compat 就是那座桥。** 它把你的 `.claude/` 目录**原样搬进 DSH**，所有能力即刻生效。装一次，两边的配置从此共用一份，改一处两边都变。
+**dsh-claude-compat 就是那座桥。** 它读取项目与用户级 Claude 配置，通过 DSH 原生服务暴露支持的内容。技能可在当前会话中重新加载；MCP 与 hook 配置变化需要重启 DSH。
 
 ```bash
 dsh plugin --profile web add dsh-claude-compat@latest
 dsh web
 ```
 
-搞定。你的 skills 出现在 `/` 菜单里，规则注入每个新会话，agent 能用 `/agent-name` 调起——全都在 DSH 里，跟 Claude Code 里一模一样。
+你的 skills 出现在 `/` 菜单里，规则注入新会话；`/agent-name` 通过 DSH 原生 skill 接口加载委派指令。
 
 **或用 DSH 自己装（推荐）**：复制下面这句给 DSH，它会读 skill、自动安装并验证：
 
@@ -37,6 +37,21 @@ dsh web
 > ⭐ 觉得好用？[点这里给个 star](https://github.com/biedongbin/dsh-claude-compat)——它让我们持续改进，也帮更多人找到这个插件。
 
 ---
+
+## 1.1.0 更新与升级
+
+- **更多配置来源**：支持自定义 Claude 根目录、可搬移插件种子、内联插件，以及 managed／本地／项目／用户 MCP 定义和策略。
+- **更完整的 hooks**：支持 33 个事件中的 26 个、五类处理器，补齐原生工具名映射、失败拦截和有上限的 UTF-8 输出。
+- **正确的会话路径**：`/cc-resume` 分别使用 Claude 编码查找源会话、使用 DSH 编码写入导入结果，覆盖空格、Unicode 与长路径。
+
+从 1.0.x 升级前：
+
+1. HTTP MCP 条目显式写 `"type": "http"`（或 `"streamable-http"`）。只有 URL、SSE 或 WebSocket 的条目会告警并跳过。
+2. 除非信任项目，否则保持 `mcpTrustProjectConfig: false`。默认不运行项目 helper，凭据变量保持字面文本；详见 [MCP 服务器](#mcp-服务器)。
+3. 启用前检查项目 hooks：插件没有工作区信任提示。更新后重启 DSH，从启动工作区重新加载 MCP 与 hooks。
+4. 旧导入在 DSH 中找不到时，重新导入原 Claude 会话。修正后的目录 key 用于新导入；不会自动移动或删除旧的错位日志。
+
+1.1.0 的验证环境为 DSH 0.2.1-rc.5 与 Desktop 自带 Node 24.21.0。Node 22 的 URL 归一化属性测试存在已知差异。迁移与验证详情见[更新日志](CHANGELOG.zh-CN.md)和[发布准备说明](docs/releases/1.1.0.md)。
 
 ## 一键带过来的东西
 
@@ -75,7 +90,7 @@ dsh web
 
 ## 内置命令
 
-安装本插件后 catalog 多出三个管理 skill：
+安装本插件后可使用五个原生管理命令：
 
 | 命令 | 作用 |
 |---|---|
@@ -86,6 +101,12 @@ dsh web
 | `/cc-resume` | 列出当前项目的 Claude Code 会话（`~/.claude/projects/`），并把任意一个导入 DSH —— 完整 user/assistant/工具历史。导入会话以 `cc: <预览>` 标题出现在 DSH 会话列表，可像原生会话一样恢复。`list` / `import <sessionId>` / `--limit-turns N`（大会话只导最近 N 轮）。 |
 
 典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
+
+### 会话导入路径
+
+Claude 源会话与 DSH 日志使用不同的项目目录编码。导入器读取配置的 Claude `projects/` 目录，写入 `~/.dsh/sessions/<DSH-project-key>/session-cc-<id>/`；已导入勾选状态使用同一个 DSH key。重复导入会在正确的目标目录刷新该会话。
+
+显式 `userClaudeDir` 与 `CLAUDE_CONFIG_DIR` 或默认目录不同时，请使用 `/cc-resume list` 和 `/cc-resume import <id>`。默认交互选择器后续的 skill 交接尚未携带显式目录。直接使用 CLI 时可同时传入 `--user-claude-dir <dir>` 与 `--cwd <project>`。
 
 ## 环境要求
 
@@ -115,7 +136,7 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 |---|---|---|
 | `enableSkills` | `true` | 注册 `.claude/skills` + `.claude/commands` + `.claude/agents` provider（项目与 `~/.claude` 均含） |
 | `enableRules` | `true` | 注入项目 + `~/.claude` 的 `rules/*.md` 到消息流 |
-| `enableMcp` | `true` | 把 `<projectRoot>/.mcp.json` 翻译为挂载的 MCP 服务器插件 |
+| `enableMcp` | `true` | 将 managed、本地、项目与用户 MCP 定义挂载为原生 MCP 客户端插件；插件定义另需 `enablePluginMcp` |
 | `mcpTrustProjectConfig` | `false` | 信任项目 `.mcp.json`：其 `headersHelper` 会运行（不带用户的凭据变量），其 `${VAR}` 可读取凭据变量。关闭时服务器只带静态 headers 与字面文本挂载 |
 | `mcpFailOnStartupError` | `false` | 转发给 `dsh-mcp-client`：MCP 服务器连接失败时让插件启动失败 |
 | `enableHooks` | `true` | 运行 `.claude/settings.json` 文件中的 hooks（见 [Hooks](#hooks)） |
@@ -130,11 +151,11 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 | `skillSource` | `project-claude` | 项目 catalog 条目来源标签 |
 | `userSkillRank` | `700` | `~/.claude` skills 的 provider 排名（输给 DSH 原生 `600`） |
 | `userSkillSource` | `user-claude` | `~/.claude` catalog 条目来源标签 |
-| `userClaudeDir` | `~/.claude` | 用户级 `.claude` 目录（`~` 展开为 home 目录） |
+| `userClaudeDir` | 未设置 | 用户级 `.claude` 目录（`~` 展开为 home 目录）。未设置时依次使用 `CLAUDE_CONFIG_DIR`、`~/.claude` |
 | `enablePlugins` | `true` | 暴露已安装 Claude Code 插件（`~/.claude/plugins`）的 skills/commands/agents |
 | `pluginSkillRank` | `750` | 插件内容的 provider 排名（长尾 —— 其他一切优先） |
 | `pluginSkillSource` | `claude-plugin` | 插件目录条目来源标签 |
-| `pluginsRoot` | `~/.claude/plugins` | 插件市场根目录（`installed_plugins.json` + `cache/`） |
+| `pluginsRoot` | 未设置 | 插件市场根目录（`installed_plugins.json` + `cache/`）。未设置时依次使用 `CLAUDE_CODE_PLUGIN_CACHE_DIR`、`<用户配置目录>/plugins` |
 | `enablePluginMcp` | `false` | 挂载插件声明的 MCP 服务器（需显式开启；要求 `enablePlugins` 与 `enableMcp`）。范围包含插件目录读取到的所有插件，其中有来自 `CLAUDE_CODE_PLUGIN_SEED_DIR` 和 `CLAUDE_CODE_PLUGIN_DIRS` 的插件 |
 | `enablePluginManager` | `true` | 注册 `/cc-plugin`、`/reload-cc-plugins`、`/reload-skills` 管理 skill |
 | `pluginManagerRank` | `40` | 内置管理 skill 的 rank（catalog 顶部） |
@@ -217,13 +238,13 @@ hook 的 `if` 规则是决定 hook 是否运行的过滤条件，与 Claude Code
 | `InstructionsLoaded` | 仅 `.claude/rules` 文件，`load_reason` 为 `session_start`。插件不加载其他指令文件，因此无法上报。 |
 | `transcript_path` | 始终为空，因为 DSH 没有 transcript 文件。 |
 | 重新加载 settings | hooks 在启动时加载。settings 文件变化只记录日志，需要重启。 |
-| `agent` 处理器 | DSH 无法把子 agent 限制为只读工具。该子 agent 内不运行任何 hook。 |
+| `agent` 处理器 | DSH 无法把子 agent 限制为只读工具。验证子 agent 内不运行 `agent` hook，其他 hooks 仍运行，因此拒绝守卫仍保护其工具调用。 |
 
 处理器细节：
 
 - `mcp_tool` 通过 DSH 工具服务调用 `mcp__<server>__<tool>`。`input` 字符串中的 `${path}` 取自 hook 输入。仍在连接的服务器视为 hook 失败。
 - `prompt` 向会话模型提一个不带工具的问题。`model` 写成 `provider/model`，或写成会话 provider 的模型名。`continueOnBlock` 与 `impossible` 遵循 Claude Code 规则。
-- `agent` 通过 `spawn` provider 启动 DSH 子 agent，并读取它的结构化回答。DSH 无法把它的工具限制为只读，所以提示词要求它不要修改任何文件。该子 agent 内不会运行任何 hook。
+- `agent` 通过 `spawn` provider 启动 DSH 子 agent，并读取它的结构化回答。DSH 无法把它的工具限制为只读，所以提示词要求它不要修改任何文件，写入仍受 DSH 审批约束。验证子 agent 及其后代不会再次运行 `agent` hook；其他 hooks 仍运行，以保留工具拒绝守卫。
 
 ## MCP 服务器
 
@@ -340,13 +361,13 @@ skillAliases:
 
 ## 故障排查
 
-### 已知限制：通过 skill 工具调用 `/cc-resume`
+### 直接使用 CLI
 
-部分 DSH 运行时配置下，`skill` 工具在 agent scoped 层解析，看不到全局层注册的 provider —— 即使 catalog 列表里有，调用仍返回 `skill "cc-resume" is unknown or no longer available`。这是 DSH 运行时分层行为，非插件缺陷。skill 本体只是指导模型跑 CLI，CLI 始终可用：
+自定义宿主未提供原生管理命令时，可直接调用安装包中的 CLI。需要时显式传入项目与自定义 Claude 配置目录：
 
 ```bash
-node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list
-node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId>
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list --cwd /path/to/project
+node node_modules/dsh-claude-compat/scripts/cc-resume.mjs import <sessionId> --cwd /path/to/project --user-claude-dir /path/to/claude-config
 ```
 
 **重启后 DSH 起不来 / 3080 端口卡死。** 旧进程占着端口（日志特征 `EADDRINUSE`）。用自带重启脚本 —— 干净等待停止、SIGKILL 兜底、探活端口后才报成功：
@@ -367,6 +388,7 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 
 ## Release notes
 
+- **[1.1.0 发布准备](docs/releases/1.1.0.md)** —— 升级须知、验证范围与手动 npm 发布步骤。
 - **[更新日志](CHANGELOG.zh-CN.md)（[English](CHANGELOG.md)）** — 0.1.0 至最新版本的完整发布历史。
 
 ## 社区鸣谢

@@ -4,53 +4,30 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
-## [Unreleased]
+## [1.1.0] — 2026-11-05
+
+### 升级须知
+- **HTTP MCP 条目必须写 `"type": "http"`**（或 `"streamable-http"`）。只有 URL 而没有类型，以及不支持的 `sse`/`ws` 传输，均会告警并跳过；升级前请调整远程服务器配置。
+- **项目 MCP 凭据与 helper 需要显式信任。** `mcpTrustProjectConfig` 默认为 `false`：不运行项目 `headersHelper`，凭据类 `${VAR}` 保持字面文本。仅对可信项目开启；开启后项目 helper 的继承环境仍会清理凭据。
+- **更新后重启 DSH。** MCP 与项目 hooks 在启动时从启动工作区加载；本版本不包含按会话发现 MCP 或 native-realm 集成。
+- **旧导入在 DSH 中找不到时，请重新导入原 Claude 会话。** 新导入使用修正后的 DSH 目录 key；不会自动移动或删除旧目录中的日志。
 
 ### 新增
-- **支持 Claude Code 所有来源的 MCP 服务器。** 插件现在按 Claude Code 的优先级读取 `managed-mcp.json`（独占控制）、`managedMcpServers`，以及 `.claude.json` 中的本地与用户 `mcpServers`。还支持 `${VAR}` 展开、`timeout`、`headersHelper`、`disabledMcpjsonServers`、`disabledMcpServers`，以及 `allowedMcpServers` 与 `deniedMcpServers` 策略。损坏的 managed 文件或格式错误的 managed 策略会关闭服务器，每个被跳过的条目或策略项都会给出告警。README 列出了 DSH 无法运行的功能。
-- **支持 Claude Code 的位置环境变量。** `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR`、`CLAUDE_CODE_PLUGIN_DIRS`、`CLAUDE_CODE_PROJECT_DIR_NAME` 现在会像在 Claude Code 中一样改变插件读取的路径。skills、rules、hooks、插件管理与 `/cc-resume` 共用 `src/lib.js` 中的同一组解析函数。
-- **Hook 处理器字段。** 命令型 hook 支持 `args`（不经过 shell 直接执行）、`if`（权限规则，如 `Bash(git *)`，仅用于工具事件）、`timeout`（秒）、`async`（仅工具事件；不能改变决定）以及 `onFailure: "block"`。命令与参数中的 `${CLAUDE_PROJECT_DIR}` 会被展开，并设置到 hook 环境变量中。工具 hook 的 stdin 包含 `hook_event_name` 与 `cwd`。其他处理器类型（`http`、`prompt`、`agent`、`mcp_tool`）的条目会被跳过并给出警告。尚未支持的事件与处理器见 issue #2。
-- **33 个 Claude Code hook 事件中的 26 个。** 除 PreToolUse、PostToolUse 和 UserPromptSubmit 外，插件现在还运行 SessionStart（挂在真正的启动点 `agent/created`）、SessionEnd、PostToolUseFailure、PermissionRequest、PermissionDenied、PostToolBatch、TaskCreated、TaskCompleted、Stop、StopFailure、SubagentStart、SubagentStop、Notification、MessageDisplay、UserPromptExpansion、CwdChanged、PreCompact、PostCompact、PostModelSwitch、TeammateIdle、InstructionsLoaded、FileChanged 与 ConfigChange。README 的 Hooks 一节列出了每个事件对应的 DSH 扩展点、无法运行的 7 个事件，以及所有能力比 Claude Code 弱的地方。hooks 也会从 `.claude/settings.local.json` 加载。
-- **处理器类型 `http`、`mcp_tool`、`prompt` 与 `agent`。** `http` 以 JSON 提交输入，请求头只读取 `allowedEnvVars` 中列出的变量。`mcp_tool` 通过 DSH 工具服务调用 MCP 工具。`prompt` 向会话模型提一个问题。`agent` 启动 DSH 子 agent 并读取它的结构化回答。每种类型只在 Claude Code 允许的事件上运行。后台 hook 以退出码 2 结束时，`asyncRewake` 会引导 agent 继续。
+- **Claude Code 位置配置**（[#6](https://github.com/biedongbin/dsh-claude-compat/pull/6)）：支持 `CLAUDE_CONFIG_DIR`、插件缓存／种子／内联目录与 `CLAUDE_CODE_PROJECT_DIR_NAME`，显式配置优先；支持种子搬移和内联插件整体覆盖。
+- **Hook 处理器字段与生命周期覆盖**（[#7](https://github.com/biedongbin/dsh-claude-compat/pull/7)、[#8](https://github.com/biedongbin/dsh-claude-compat/pull/8)）：桥接 33 个事件中的 26 个，支持 `command`、`http`、`mcp_tool`、`prompt`、`agent` 五类处理器、条件执行、单 hook 超时、异步运行、失败拦截与 `asyncRewake`。各事件限制及不支持项见 README。
+- **更多 MCP 来源与策略**（[#9](https://github.com/biedongbin/dsh-claude-compat/pull/9)）：读取 managed、本地、项目、用户及显式启用的插件定义；处理来源优先级、禁用名单、允许／拒绝策略、环境变量、调用超时和挂载时的 `headersHelper`。managed 策略无效时关闭服务器。
 
 ### 修复
-- **导入会话使用 DSH 原生项目目录 key**（[#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)）。空格、非 ASCII 字符、连续分隔符、根目录与长路径现在对应到 DSH 实际读取的目录；CLI 回归覆盖列表、导入及已导入状态检测。
-- **项目 `.mcp.json` 不能通过 `${VAR}` 读取凭据变量。** 仓库曾可以把 `${GITHUB_TOKEN}` 发送给它所指定的服务器。除非 `mcpTrustProjectConfig` 为 `true`，该变量保持字面文本，日志会指出它。helper 的清理现在也覆盖 `PASS`、`CRED`、`COOKIE`、`DSN` 与带密码的 URL。
-- **`${CLAUDE_PLUGIN_ROOT}` 是变量值。** 安装路径中的 `${...}` 曾被再次展开，含 `$&` 的路径可能被当作模式。插件中名为 `__proto__` 的服务器曾被无声丢弃。现在重复的名称会被报告。
-- **检查插件 MCP 文件。** `mcpServers` 中的路径必须位于插件内。损坏的链接、无法读取的文件、错误的包装与无效的 JSON 都会连同原因一起报告。没有 `plugin.json` 的插件仍会加载其根目录的 `.mcp.json`。
-- **managed 的 `disabledMcpjsonServers` 不是列表时，所有 MCP 服务器保持关闭。** 被禁用与被隐藏的条目现在会记录名称与来源。单个条目抛出异常不再中断其他条目，插件步骤失败也不再隐藏告警或用户的服务器。
-- **插件管理器遇到内容为 `null`、列表或错误 `plugins` 值的 JSON 文件时不再抛出异常。**
-- **超过 Node 定时器上限的 `timeout` 会被截断。** 失败的 `headersHelper` 会给出退出状态与 stderr 首行，而不是命令行。
-- **项目 `headersHelper` 不带凭据变量运行，且仅在受信任时运行。** 项目 `.mcp.json` 的 helper 仅在 `mcpTrustProjectConfig` 为 `true` 时运行，且拿不到 `*_TOKEN`、`*_KEY`、`ANTHROPIC_CUSTOM_HEADERS` 等变量，服务器 URL 中这些变量的值会被隐藏。该选项关闭时，服务器只带静态 headers 挂载。用户、本地与 managed 来源的 helper 保留用户环境。
-- **校验 `managedMcpServers` 条目。** 条目必须是固定的 `https://` 服务器，不能有 `command`、`args`、`env`、`headersHelper` 或 `${VAR}`。不合格的条目会被跳过，也不再跳过 allowlist。`managed-mcp.json` 不受此规则限制。
-- **单个格式错误的 MCP 条目不再中断加载。** 类似 `"bad": null` 的条目会被跳过并给出告警，其他服务器仍会加载。
-- **matcher 遵循 Claude Code 的规则。** 只含字母、数字、`_`、`-`、空格、`,` 和 `|` 的 matcher 是精确名列表，其他 matcher 是不锚定的正则表达式，因此 `.*opus.*` 与 `mcp__memory__.*` 现在和 Claude Code 一样能匹配。无法解析的正则会在 hook 加载时报告一次。
-  不属于 `.*` 的 `*` 仍像早期版本一样当作通配符，因此 `mcp__*__delete` 这类守卫继续有效。
-  Stop、UserPromptSubmit 等没有 subject 的事件和 Claude Code 一样忽略 matcher。
-- **hook 不能批准它本想修改的输入。** 返回 `updatedInput` 的 PreToolUse hook 现在会让 DSH 询问用户；带 `updatedInput` 的 PermissionRequest `allow` 被忽略，因为 DSH 无法修改工具输入，而原输入正是 hook 想去掉的内容。
-- **丢失的 hook 取值会写入日志。** 日志现在会指出使用了未列出或未设置变量的 HTTP 头、没有匹配任何字段的 `mcp_tool` 占位符、无法读取或超出大小上限的规则文件，以及 DSH 无法执行的 PreToolUse `allow` 或 PostToolUse 停止请求。
-- **验证子代理受到限制。** `agent` hook 子代理的停止不再占住 DSH 事件，它启动的子代理也会被静音。hook 输出按完整字符截断，空白的 command、server、tool 或 prompt 会被拒绝。
-- **SessionStart hooks 从未运行。** 插件监听的 `agent/session-start` 在 DSH 中不存在。现在改用 `agent/created`，并按启动来源（`startup`、`resume`、`clear`、`compact`）过滤。
-- **工具 hooks 把工具调用 id 当作 `session_id` 发送。** 输入现在携带 DSH 会话 id；在子 agent 内携带主会话 id，并附带 `agent_id` 与 `agent_type`。
-- **会话与回合 hooks 会对子 agent 会话运行，规则或 hook 上下文被当作用户提示。** SessionStart、SessionEnd、UserPromptSubmit、Stop 等主会话 hooks 现在会跳过子 agent 会话。本插件自己注入的消息不再触发 UserPromptSubmit hooks。
+- **标点、空格、非 ASCII 与长路径下的 Claude 会话发现**（[#11](https://github.com/biedongbin/dsh-claude-compat/issues/11)）。复用现有 Claude 目录编码及完整路径哈希，显式 list/import 命令保留自定义 Claude 配置根目录。
+- **DSH 会话导入目录**（[#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)）。导入与已导入状态检测共用 DSH 原生 key：折叠分隔符、按 UTF-16 码元作 `~XXXX` 转义、处理根目录并将 slug 限制为 251 字符。真实 CLI 回归同时检查源会话发现与生成的压缩日志位置。
+- **Hook 运行时接口。** 使用原生工具名、单次 MCP 执行协议及调用 Agent 的 scope；在 `agent/request` 观察模型切换；未配置 CwdChanged hook 时也更新文件监视目录；保留 PermissionRequest 的失败拦截结果。
+- **Hook 输出与生命周期。** 正确解码跨块 UTF-8、限制输出与验证子代理清理时间、保留验证子代理后代的守卫，并报告被忽略或无效的输出。SessionStart 改用 `agent/created`，负载传递会话 id，注入上下文不再触发用户提示 hook。
+- **MCP 来源隔离与诊断。** 逐条跳过畸形条目，在策略豁免前校验 managed 定义，限制插件文件引用，避免插件根目录二次展开，并清理项目 helper 凭据。插件管理器的畸形 JSON 与过大超时也有明确处理。
 
-### 变更
-- 项目之外也会加载 MCP 服务器，因为 `.claude.json` 与 managed 文件对所有目录生效。与 Claude Code 一致，只有 `url` 而无 `type` 的条目会被跳过。`sse` 与 `ws` 条目被跳过并给出告警。
-- `CLAUDE_CONFIG_DIR`、`CLAUDE_CODE_PLUGIN_CACHE_DIR`、`CLAUDE_CODE_PLUGIN_SEED_DIR` 为相对路径时，插件不再激活，并输出一行指明变量名的错误。启动时只检查有效配置实际用到的变量，因此显式配置的 `userClaudeDir` 或 `pluginsRoot` 会覆盖其对应变量，被覆盖的变量取值错误不会报错。
-- `CLAUDE_CODE_PLUGIN_DIRS` 接受绝对路径和以 `~` 开头的条目，其他条目会被跳过并给出警告，与 Claude Code 一致。
-- `CLAUDE_CODE_PLUGIN_DIRS` 中的插件会整体替换同一清单名称的已安装插件。每次替换会输出一条警告。
-- 插件现在会对以下情况输出警告：无法读取的 `plugin.json`、缺少 `plugins` 对象的 `installed_plugins.json`、缺失的种子插件。种子记录不能再让缓存查找跳出 `<seed>/cache`。
-- `/cc-resume` 的 list 与 import 现在读取配置的 `userClaudeDir`，与 skill 目录一致。`--user-claude-dir` 参数把它传给脚本。
-- `enablePlugins` 为 `false` 时，相对路径的 `CLAUDE_CODE_PLUGIN_SEED_DIR` 不再阻止激活。
-- 挂载路径与构建路径不同的插件种子现在可以加载：插件文件从当前种子根目录读取。
-- `CLAUDE_CODE_PROJECT_DIR_NAME` 仅在同时设置 `CLAUDE_CONFIG_DIR` 时生效，且只接受 1 到 64 个字母、数字、连字符或下划线（不能是 Windows 设备名）。其他值会被忽略，不会报错。
-- `/cc-plugin` 与插件目录现在遵循配置项 `userClaudeDir` 和 `pluginsRoot`。
-- `userClaudeDir` 与 `pluginsRoot` 不再有默认值。未设置时依次使用对应环境变量、`~/.claude`。显式配置值优先。
-
-### 修复
-- Hook 的 matcher、`if` 规则和 hook 输入负载现在使用 Claude Code 对 DSH 内置工具的名称（`bash` 即 `Bash`，`read`、`edit`、`write` 同理）。此前 `if: "Bash(git *)"` 永远匹配不到原生调用。
-- Hook 的 stdout 与 stderr 在多字节字符被拆成两个数据块时保持字符完整。
-- `/cc-resume` 现在按 Claude Code 的方式推导 Claude 项目文件夹名：所有非字母、数字的字符都变为 `-`，超过 200 个字符的名称会被截断并附加路径哈希。工作目录含有 `.`、`_` 或空格时，不再对应到不存在的文件夹。Issue #11。
+### 验证与剩余限制
+- 发布验证使用 DSH 0.2.1-rc.5 与 Desktop 自带 Node 24.21.0。Node 22 的 URL 归一化属性测试存在已知差异，不能视为该运行时已完整验证。
+- 自定义 `userClaudeDir` 时，请使用显式 `/cc-resume list` 与 `/cc-resume import <id>`。默认交互选择器后续的 skill 交接尚未携带该目录。
+- 完整 AgentLoop 契约测试需要匹配的可选 testkit；验证范围与手动发布步骤见[发布准备说明](docs/releases/1.1.0.md)。
 
 ## [1.0.1] — 2026-11-04
 
