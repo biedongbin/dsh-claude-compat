@@ -1,0 +1,555 @@
+// Failure paths of the MCP loader: broken files fail closed, a malformed field or
+// policy entry is reported and skipped, and plugin servers obey the same policy.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildPolicy, urlMatches } from '../src/mcp-policy.js';
+import { redactValues, scrubbedEnv } from '../src/mcp-vars.js';
+import { translatePluginMcp } from '../src/plugins.js';
+import { applyPolicy, extraServers, loadMcpServers, translateMcpServers, withoutDuplicateUrls } from '../src/mcp.js';
+
+function tempDir(prefix) {
+  mkdirSync(join(process.cwd(), '.tmp'), { recursive: true });
+  return mkdtempSync(join(process.cwd(), '.tmp', prefix));
+}
+
+function fixture() {
+  const root = tempDir('dcc-mcp-fail-');
+  const userDir = join(root, 'claude');
+  const project = join(root, 'proj');
+  const managedDir = join(root, 'managed');
+  for (const dir of [userDir, join(project, '.git'), join(project, '.claude'), managedDir]) mkdirSync(dir, { recursive: true });
+  return { userDir, project, managedDir, config: { projectRootMarkers: ['.git'], userClaudeDir: userDir } };
+}
+
+function write(path, value) {
+  writeFileSync(path, typeof value === 'string' ? value : JSON.stringify(value));
+}
+
+async function load(fx) {
+  return loadMcpServers(fx.config, { cwd: fx.project, managedDir: fx.managedDir });
+}
+
+const names = (result) => result.servers.map((s) => s.serverName).sort();
+const stdio = (command) => ({ type: 'stdio', command, args: [] });
+
+test('an unreadable managed-settings.json turns every MCP server off, and says so', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), '{ broken');
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  write(join(fx.project, '.mcp.json'), { mcpServers: { proj: stdio('p') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /managed-settings\.json: invalid JSON/);
+  assert.match(result.warns.join('\n'), /Every MCP server is off/);
+});
+
+test('an unreadable .claude.json is reported, and the project servers still load', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), '{ broken');
+  write(join(fx.project, '.mcp.json'), { mcpServers: { proj: stdio('p') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['proj']);
+  assert.match(result.warns.join('\n'), /\.claude\.json: invalid JSON/);
+  assert.match(result.warns.join('\n'), /user and local MCP servers/);
+});
+
+test('a malformed project .mcp.json is reported with what it stops', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), '[1, 2]');
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /project MCP servers are not read/);
+});
+
+test('a managed-mcp.json whose mcpServers is not a map fails closed', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-mcp.json'), { mcpServers: [] });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /mcpServers must be an object/);
+});
+
+test('a managed-mcp.json problem still lets managedMcpServers load', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-mcp.json'), '{ broken');
+  write(join(fx.managedDir, 'managed-settings.json'), { managedMcpServers: { corp: { type: 'http', url: 'https://c.example/mcp' } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['corp']);
+});
+
+test('a non-string arg skips the entry, because the argument list would be wrong', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { bad: { type: 'stdio', command: 'c', args: ['--port', 3000] } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /bad: args must be a list of strings, skipped/);
+});
+
+test('an object header value skips the entry and names the field', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', headers: { X: { y: 1 } } } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /api: headers must map names/);
+});
+
+test('a deniedMcpServers that is not a list is reported, and the rest of the policy still applies', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, 'settings.json'), { deniedMcpServers: { serverName: 'x' } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { x: stdio('x') } });
+  const result = await load(fx);
+  assert.match(result.warns.join('\n'), /deniedMcpServers must be a list/);
+});
+
+test('a malformed policy entry is reported and ignored, and a valid one still denies', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, 'settings.json'), { deniedMcpServers: [null, 'npx', { serverName: 'bad' }, { serverURL: 'x' }] });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { bad: stdio('b'), good: stdio('g') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['good']);
+  const warned = result.warns.join('\n');
+  assert.match(warned, /deniedMcpServers\[0\]: not an object/);
+  assert.match(warned, /deniedMcpServers\[1\]: not an object/);
+  assert.match(warned, /deniedMcpServers\[3\]: needs exactly one/);
+});
+
+test('an allowlist that is not a list allows nothing, and says so', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, 'settings.json'), { allowedMcpServers: { serverName: 'x' } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { x: stdio('x') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /allowedMcpServers must be a list/);
+});
+
+test('allowManagedMcpServersOnly that is not a boolean fails closed, and says so', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), { allowManagedMcpServersOnly: 'true' });
+  write(join(fx.userDir, 'settings.json'), { allowedMcpServers: [{ serverName: 'mine' }] });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /Managed policy is malformed/);
+});
+
+test('a headersHelper under an allowlist is refused, since the allowlist cannot see the helper', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectConfig = true;
+  write(join(fx.userDir, 'settings.json'), { allowedMcpServers: [{ serverUrl: 'https://a.example/*' }] });
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{}")'`,
+  } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /headersHelper is not run under an allowlist/);
+});
+
+test('an organization server may use a headersHelper under an allowlist', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-mcp.json'), { mcpServers: { corp: {
+    type: 'http', url: 'https://c.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{\\"X-A\\":\\"1\\"}")'`,
+  } } });
+  write(join(fx.managedDir, 'managed-settings.json'), { allowedMcpServers: [{ serverUrl: 'https://other.example/*' }] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['corp']);
+  assert.deepEqual(result.servers[0].headers, { 'X-A': '1' });
+});
+
+test('a headersHelper that prints a non-string value skips the server', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectConfig = true;
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headersHelper: `"${process.execPath}" -e 'process.stdout.write("{\\"X\\":{}}")'`,
+  } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /not a string, number or boolean/);
+});
+
+test('plugin servers obey the policy: a denied URL is skipped with a reason', () => {
+  const warns = [];
+  const policy = { allowed: undefined, denied: [{ serverUrl: 'https://evil.example/*' }] };
+  const kept = applyPolicy([
+    { serverName: 'bad', url: 'https://evil.example/mcp' },
+    { serverName: 'ok', url: 'https://good.example/mcp' },
+  ], policy, warns);
+  assert.deepEqual(kept.map((s) => s.serverName), ['ok']);
+  assert.match(warns.join('\n'), /bad: denied by policy, skipped/);
+});
+
+test('a plugin server that duplicates a URL is reported when it is dropped', () => {
+  const warns = [];
+  const kept = withoutDuplicateUrls([{ url: 'https://x.example/mcp' }], [{ serverName: 'dup', url: 'https://x.example/mcp' }], warns);
+  assert.deepEqual(kept, []);
+  assert.match(warns.join('\n'), /dup: plugin server uses a URL/);
+});
+
+test('a plugin entry with a headersHelper is skipped, because the helper would never run', () => {
+  const body = JSON.stringify({ mcpServers: { api: { type: 'http', url: 'https://p.example/mcp', headersHelper: 'x' } } });
+  const result = translateMcpServers(body);
+  assert.deepEqual(result.servers, []);
+  assert.match(result.warns.join('\n'), /headersHelper is not run for plugin servers, skipped/);
+});
+
+test('extraServers drops a denied plugin server and a plugin URL that a loaded server uses', () => {
+  const loaded = {
+    servers: [{ serverName: 'mine', url: 'https://m.example/mcp' }],
+    policy: { allowed: undefined, denied: [{ serverUrl: 'https://evil.example/*' }] },
+    warns: [],
+  };
+  const plugin = [
+    { serverName: 'bad', url: 'https://evil.example/mcp' },
+    { serverName: 'dup', url: 'https://m.example/mcp' },
+    { serverName: 'ok', url: 'https://p.example/mcp' },
+  ];
+  assert.deepEqual(extraServers(loaded, { servers: plugin, names: [] }).map((s) => s.serverName), ['ok']);
+  assert.equal(loaded.warns.length, 2);
+});
+
+test('a managed deniedMcpServers that is not a list fails closed: every server is off', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), { deniedMcpServers: { serverName: 'x' } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.equal(result.exclusive, true);
+  assert.match(result.warns.join('\n'), /Managed policy is malformed/);
+});
+
+test('a managed policy entry that is malformed fails closed too', async () => {
+  const fx = fixture();
+  write(join(fx.managedDir, 'managed-settings.json'), { deniedMcpServers: [null] });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  assert.deepEqual(names(await load(fx)), []);
+});
+
+test('a disabledMcpjsonServers that is not a list is reported, not ignored', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { keep: stdio('k') } });
+  write(join(fx.project, '.claude', 'settings.local.json'), { disabledMcpjsonServers: 'keep' });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['keep']);
+  assert.match(result.warns.join('\n'), /disabledMcpjsonServers must be a list/);
+});
+
+test('a mcpServers that is not an object in .claude.json is reported, not ignored', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { mcpServers: ['mine'] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /\.claude\.json mcpServers must be an object/);
+});
+
+test('a headersHelper that is not a string skips the server, instead of mounting it unauthenticated', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', headersHelper: 123 } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /headersHelper must be a non-empty string/);
+});
+
+test('a plugin deny rule matches the name the user wrote, not the sanitized one', () => {
+  const warns = [];
+  const policy = { allowed: undefined, denied: [{ serverName: 'corp.tool' }] };
+  const kept = applyPolicy([{ serverName: 'corp_tool', url: 'https://p.example/mcp' }], policy, warns, ['corp.tool']);
+  assert.deepEqual(kept, []);
+  assert.match(warns.join('\n'), /corp\.tool: denied by policy, skipped/);
+});
+
+test('an unset variable in a policy entry is reported, and the entry keeps the literal text', () => {
+  const policy = buildPolicy({ userSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_NOPE_X}/*' }] } } }, {});
+  assert.match(policy.warns.join('\n'), /\$\{DCC_NOPE_X\} is not set/);
+  assert.deepEqual(policy.denied, [{ serverUrl: 'https://${DCC_NOPE_X}/*' }]);
+});
+
+test('a host written with non-ASCII letters matches its ASCII form, as URL() writes it', () => {
+  assert.equal(urlMatches('https://bücher.example/*', 'https://xn--bcher-kva.example/x'), true);
+});
+
+test('a deny pattern with no port covers the default port only, as Claude Code documents', () => {
+  assert.equal(urlMatches('https://evil.example', 'https://evil.example:8443/x'), false);
+  assert.equal(urlMatches('https://evil.example', 'https://evil.example/x'), true);
+});
+
+test('two plugin servers that sanitize to one name: the denied one is skipped, and the other keeps its own name', () => {
+  const warns = [];
+  const policy = { allowed: undefined, denied: [{ serverName: 'a.b' }] };
+  const kept = applyPolicy(
+    [{ serverName: 'a_b', url: 'https://one.example/mcp' }, { serverName: 'a_b', url: 'https://two.example/mcp' }],
+    policy, warns, ['a.b', 'a_b'],
+  );
+  assert.deepEqual(kept.map((s) => s.url), ['https://two.example/mcp']);
+  assert.match(warns.join('\n'), /a\.b: denied by policy, skipped/);
+});
+
+test('a managed deny host that does not parse makes the managed policy fail closed', () => {
+  const docs = { managedSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://exa mple.com/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, true);
+  assert.match(policy.warns.join('\n'), /host that is not valid/);
+});
+
+test('a managed deny that names an unset variable makes the managed policy fail closed', () => {
+  const docs = { managedSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_UNSET_HOST}/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, true);
+  assert.match(policy.warns.join('\n'), /\$\{DCC_UNSET_HOST\} is not set/);
+});
+
+test('an unset variable in a user deny is reported, and does not fail the managed policy closed', () => {
+  const docs = { userSettings: { value: { deniedMcpServers: [{ serverUrl: 'https://${DCC_UNSET_HOST}/*' }] } } };
+  const policy = buildPolicy(docs, {});
+  assert.equal(policy.failClosed, false);
+  assert.match(policy.warns.join('\n'), /user settings deniedMcpServers: \$\{DCC_UNSET_HOST\}/);
+});
+
+test('a disable list element that is not a server name is reported with its position', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { keep: stdio('k') } });
+  write(join(fx.project, '.claude', 'settings.local.json'), { disabledMcpjsonServers: [{ name: 'keep' }] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['keep']);
+  assert.match(result.warns.join('\n'), /disabledMcpjsonServers\[0\] must be a server name/);
+});
+
+test('a plugin manifest with an inline mcpServers object mounts its servers, with the plugin root substituted', () => {
+  const result = translatePluginMcp({ mcpServers: { tool: { type: 'stdio', command: '${CLAUDE_PLUGIN_ROOT}/bin/run' } } }, '/opt/plug');
+  assert.equal(result.servers.length, 1);
+  assert.equal(result.servers[0].command, '/opt/plug/bin/run');
+});
+
+test('a plugin mcpServers that is neither a path nor an object is reported, not ignored', () => {
+  const result = translatePluginMcp({ mcpServers: 42 }, '/opt/plug');
+  assert.deepEqual(result.servers, []);
+  assert.match(result.warns.join('\n'), /must be a path or an object/);
+});
+
+test('a managed-mcp.json that is a symlink to a missing file fails closed, and says so', async () => {
+  const fx = fixture();
+  symlinkSync(join(fx.managedDir, 'no-such-file.json'), join(fx.managedDir, 'managed-mcp.json'));
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), []);
+  assert.match(result.warns.join('\n'), /symbolic link to a missing file/);
+});
+
+test('a percent escape of an unreserved character matches the plain character, both ways', () => {
+  assert.equal(urlMatches('https://evil.example/mcp', 'https://evil.example/%6Dcp'), true);
+  assert.equal(urlMatches('https://evil.example/%6Dcp', 'https://evil.example/mcp'), true);
+  assert.equal(urlMatches('https://evil.example/mcp', 'https://evil.example/mcp2'), false);
+});
+
+test('a projects value or project entry that is not an object is reported', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { projects: { [fx.project]: 'oops' }, mcpServers: { mine: stdio('m') } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['mine']);
+  assert.match(result.warns.join('\n'), /projects\[.*\] must be an object/);
+});
+
+test('a field that the transport never reads is reported as ignored', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', args: ['x'] } } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['api']);
+  assert.match(result.warns.join('\n'), /api: args is ignored for this transport/);
+});
+
+test('a plugin root .mcp.json loads, and a later declared server with the same name replaces it', () => {
+  const plugin = join(tempDir('dcc-plug-'), 'plug');
+  mkdirSync(plugin, { recursive: true });
+  writeFileSync(join(plugin, '.mcp.json'), JSON.stringify({ mcpServers: { a: { command: 'root-a' }, b: { command: 'root-b' } } }));
+  const result = translatePluginMcp({ mcpServers: { b: { command: 'declared-b' } } }, plugin);
+  const byName = Object.fromEntries(result.servers.map((s) => [s.serverName, s.command]));
+  assert.deepEqual(byName, { a: 'root-a', b: 'declared-b' });
+});
+
+test('a plugin mcpServers bundle or URL is reported as not supported', () => {
+  const result = translatePluginMcp({ mcpServers: ['./x.mcpb', 'https://e.example/s.dxt'] }, '/opt/plug');
+  assert.deepEqual(result.servers, []);
+  assert.match(result.warns.join('\n'), /bundles and URLs are not supported/);
+});
+
+test('a plugin path with $\' in it is substituted literally, not as a replacement pattern', () => {
+  const plugin = join(tempDir('dcc-plug-'), "p$'x");
+  mkdirSync(plugin, { recursive: true });
+  const result = translatePluginMcp({ mcpServers: { tool: { command: '${CLAUDE_PLUGIN_ROOT}/bin/run' } } }, plugin);
+  assert.equal(result.servers[0].command, `${plugin}/bin/run`);
+});
+
+// ─── review: entry isolation, managed settings contract, helper environment ───
+
+test('a null entry is skipped with a warning, and the valid servers still load, in any source', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), '{"mcpServers":{"good":{"type":"stdio","command":"g"},"bad":null,"list":[1],"text":"x"}}');
+  write(join(fx.userDir, '.claude.json'), '{"mcpServers":{"bad2":null,"mine":{"type":"stdio","command":"m"}}}');
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['good', 'mine']);
+  assert.equal(result.warns.filter((w) => /malformed entry, skipped/.test(w)).length, 4);
+});
+
+test('managedMcpServers entries must be fixed https servers, and managed-mcp.json is not held to that', async () => {
+  const fx = fixture();
+  const remote = { type: 'http', url: 'https://c.example/mcp' };
+  write(join(fx.managedDir, 'managed-settings.json'), { managedMcpServers: {
+    ok: remote,
+    cmd: { type: 'stdio', command: 'x' },
+    args: { ...remote, args: ['a'] },
+    env: { ...remote, env: { A: '1' } },
+    helper: { ...remote, headersHelper: 'run' },
+    vars: { type: 'http', url: 'https://c.example/${HOST}' },
+    inHeader: { ...remote, headers: { Authorization: 'Bearer ${TOKEN}' } },
+    plain: { type: 'http', url: 'http://c.example/mcp' },
+  } });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['ok']);
+  assert.equal(result.warns.filter((w) => /managedMcpServers entry is invalid/.test(w)).length, 7);
+  const file = fixture();
+  write(join(file.managedDir, 'managed-mcp.json'), { mcpServers: { local: stdio('tool') } });
+  assert.deepEqual(names(await load(file)), ['local']);
+});
+
+test('scrubbedEnv removes credential names, keeps Git config keys, and reports the removed values', () => {
+  const { env, removed } = scrubbedEnv({
+    PATH: '/bin', GIT_CONFIG_KEY_0: 'k', MY_REGISTRY_TOKEN: 't1', api_key: 'k1', Db_Password: 'p1',
+    AUTH_HEADER: 'a1', ANTHROPIC_CUSTOM_HEADERS: 'h1', EMPTY_SECRET: '', HOME: '/h',
+  });
+  assert.deepEqual(Object.keys(env).sort(), ['GIT_CONFIG_KEY_0', 'HOME', 'PATH']);
+  assert.deepEqual(removed.sort(), ['a1', 'h1', 'k1', 'p1', 't1']);
+  assert.equal(redactValues('https://x/?a=t1&b=p1', removed), 'https://x/?a=REDACTED&b=REDACTED');
+});
+
+const SHOW_ENV = `"${process.execPath}" -e 'const e=process.env;process.stdout.write(JSON.stringify({token:e.FAKE_REVIEW_TOKEN??"none",url:e.CLAUDE_CODE_MCP_SERVER_URL}))'`;
+
+async function withToken(run) {
+  process.env.FAKE_REVIEW_TOKEN = 'sekret-value';
+  try { return await run(); } finally { delete process.env.FAKE_REVIEW_TOKEN; }
+}
+
+test('a project headersHelper runs without credential variables, and the URL hides their values', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectConfig = true;
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp?k=${FAKE_REVIEW_TOKEN}', headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.deepEqual(result.servers[0].headers, { token: 'none', url: 'https://a.example/mcp?k=REDACTED' });
+});
+
+test('a user or local headersHelper keeps the environment of the user', async () => {
+  const fx = fixture();
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.equal(result.servers[0].headers.token, 'sekret-value');
+});
+
+test('a project headersHelper does not run until mcpTrustProjectConfig is true, and the server mounts', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: {
+    type: 'http', url: 'https://a.example/mcp', headers: { 'X-Static': '1' }, headersHelper: SHOW_ENV,
+  } } });
+  const result = await withToken(() => load(fx));
+  assert.deepEqual(names(result), ['api']);
+  assert.deepEqual(result.servers[0].headers, { 'X-Static': '1' });
+  assert.match(result.warns.join('\n'), /api: headersHelper of a project \.mcp\.json is not run, because mcpTrustProjectConfig is false/);
+});
+
+// ─── review: project variables, plugin files, source warnings, helper errors ───
+
+const HEADER_VAR = { type: 'http', url: 'https://a.example/mcp', headers: { Authorization: 'Bearer ${FAKE_REVIEW_TOKEN}', 'X-Dir': '${CLAUDE_PROJECT_DIR}' } };
+
+test('a project .mcp.json cannot read credential variables unless it is trusted, and the warning says why', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: HEADER_VAR } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { mine: HEADER_VAR } });
+  const result = await withToken(() => load(fx));
+  const project = result.servers.find((s) => s.serverName === 'api');
+  assert.equal(project.headers.Authorization, 'Bearer ${FAKE_REVIEW_TOKEN}');
+  assert.equal(project.headers['X-Dir'], fx.project);
+  assert.match(result.warns.join('\n'), /api: \$\{FAKE_REVIEW_TOKEN\} is a credential variable that a project \.mcp\.json may not read/);
+  assert.equal(result.servers.find((s) => s.serverName === 'mine').headers.Authorization, 'Bearer sekret-value');
+  fx.config.mcpTrustProjectConfig = true;
+  const trusted = await withToken(() => load(fx));
+  assert.equal(trusted.servers.find((s) => s.serverName === 'api').headers.Authorization, 'Bearer sekret-value');
+});
+
+test('a headersHelper failure names the exit status and the first stderr line, and never the command line', async () => {
+  const fx = fixture();
+  fx.config.mcpTrustProjectConfig = true;
+  const command = `"${process.execPath}" -e 'console.error("oops: no credential file\\nsecond line");process.exit(3);/*marker-argument*/'`;
+  write(join(fx.project, '.mcp.json'), { mcpServers: { api: { type: 'http', url: 'https://a.example/mcp', headersHelper: command } } });
+  const result = await load(fx);
+  const warning = result.warns.find((w) => /headersHelper/.test(w));
+  assert.match(warning, /command failed \(exit 3\): oops: no credential file, server skipped/);
+  assert.doesNotMatch(warning, /marker-argument|second line/);
+});
+
+test('a timeout above the Node timer limit is clamped with a warning', () => {
+  const body = JSON.stringify({ mcpServers: { a: { type: 'stdio', command: 'c', timeout: 9_999_999_999 }, b: { type: 'stdio', command: 'c', timeout: 5000 } } });
+  const { servers, warns } = translateMcpServers(body);
+  assert.deepEqual(servers.map((s) => s.toolCallTimeoutMs), [2_147_483_647, 5000]);
+  assert.match(warns.join('\n'), /a: timeout is above 2147483647 ms/);
+});
+
+test('a disabled or hidden entry is reported with its source, not dropped silently', async () => {
+  const fx = fixture();
+  write(join(fx.project, '.mcp.json'), { mcpServers: { off: stdio('p'), both: stdio('p') } });
+  write(join(fx.userDir, '.claude.json'), { mcpServers: { both: stdio('u') } });
+  write(join(fx.userDir, 'settings.json'), { disabledMcpjsonServers: ['off'] });
+  const result = await load(fx);
+  assert.deepEqual(names(result), ['both']);
+  assert.match(result.warns.join('\n'), /off: the \.mcp\.json mcpServers entry is turned off by a disable list, skipped/);
+  assert.match(result.warns.join('\n'), /both: the \.claude\.json mcpServers entry is hidden by a higher source with the same name, skipped/);
+});
+
+test('a managed disable list that is not a list of names turns every MCP server off', async () => {
+  for (const bad of ['evil', ['evil', 5], { evil: true }]) {
+    const fx = fixture();
+    write(join(fx.managedDir, 'managed-settings.json'), { disabledMcpjsonServers: bad });
+    write(join(fx.project, '.mcp.json'), { mcpServers: { evil: stdio('e') } });
+    const result = await load(fx);
+    assert.deepEqual(names(result), [], JSON.stringify(bad));
+    assert.equal(result.exclusive, true);
+    assert.match(result.warns.join('\n'), /managed settings: disabledMcpjsonServers must be a list of server names\. Every MCP server is off/);
+  }
+});
+
+function pluginDir(files) {
+  const dir = tempDir('dcc-plug-');
+  for (const [name, value] of Object.entries(files)) {
+    mkdirSync(join(dir, name, '..'), { recursive: true });
+    write(join(dir, name), value);
+  }
+  return dir;
+}
+
+test('plugin servers: a __proto__ name is kept, a repeated name is reported, and the root file loads once', () => {
+  const dir = pluginDir({
+    '.mcp.json': '{"mcpServers":{"__proto__":{"type":"stdio","command":"p"},"dup":{"type":"stdio","command":"one"}}}',
+    'extra.json': { dup: { type: 'stdio', command: 'two' } },
+  });
+  const { servers, names: given, warns } = translatePluginMcp({ mcpServers: ['./.mcp.json', './extra.json'] }, dir, {});
+  assert.deepEqual(given.sort(), ['__proto__', 'dup']);
+  assert.equal(servers.find((s) => s.command === 'two') !== undefined, true);
+  assert.deepEqual(warns, ['dup: replaces an earlier server of the same name in this plugin']);
+});
+
+test('plugin servers: a path outside the plugin, a bad wrapper, and a broken link are reported with their cause', () => {
+  const dir = pluginDir({ 'wrapped.json': '{"mcpServers":[]}', 'bad.json': '{ nope' });
+  symlinkSync(join(dir, 'missing.json'), join(dir, '.mcp.json'));
+  const manifest = { mcpServers: ['../outside.json', '/etc/hosts', './wrapped.json', './bad.json', './gone.json'] };
+  const { servers, warns } = translatePluginMcp(manifest, dir, {});
+  assert.deepEqual(servers, []);
+  const text = warns.join('\n');
+  assert.match(text, /mcpServers file not readable: \.mcp\.json \(ENOENT\)/);
+  assert.match(text, /mcpServers \.\.\/outside\.json: the path is outside the plugin folder, skipped/);
+  assert.match(text, /mcpServers \/etc\/hosts: the path is outside the plugin folder, skipped/);
+  assert.match(text, /mcpServers in \.\/wrapped\.json must be an object, the file is ignored/);
+  assert.match(text, /mcpServers file is not valid JSON: \.\/bad\.json \(/);
+  assert.match(text, /mcpServers file not readable: \.\/gone\.json \(ENOENT\)/);
+});

@@ -124,9 +124,10 @@ test('translatePluginMcp: manifest mcpServers path → server configs, ${CLAUDE_
   assert.equal(servers[0].command, 'node');
   assert.deepEqual(servers[0].args, [join(root, 'bridge/server.cjs')]);
 
-  // no mcpServers / unreadable → empty
-  assert.deepEqual(translatePluginMcp({ name: 'x' }, root), { servers: [], warns: [] });
-  const missing = translatePluginMcp({ name: 'x', mcpServers: './nope.json' }, root);
+  // no mcpServers / unreadable → empty (the folder has no root .mcp.json, which would load by itself)
+  const bare = makeSandbox('dcc-pmcp-bare-');
+  assert.deepEqual(translatePluginMcp({ name: 'x' }, bare), { servers: [], warns: [], names: [] });
+  const missing = translatePluginMcp({ name: 'x', mcpServers: './nope.json' }, bare);
   assert.equal(missing.servers.length, 0);
   assert.ok(missing.warns.length > 0);
 });

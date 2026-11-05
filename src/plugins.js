@@ -11,9 +11,10 @@
 // opted in (mounting third-party MCP servers is a bigger trust step than
 // listing skills).
 
-import { existsSync, readFileSync as rfs, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync as rfs, statSync } from 'node:fs';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import {
+  isObject,
   pathExists,
   readTextSafe,
   envPathList,
@@ -22,7 +23,7 @@ import {
   parseFrontmatter,
   stringField,
 } from './lib.js';
-import { translateMcpServers } from './mcp.js';
+import { translateServerEntries } from './mcp.js';
 import { resolveCandidateName, warnUnmapped } from './aliases.js';
 
 // Installed plugins from three places: the primary plugins root, the read-only
@@ -270,17 +271,88 @@ function manifestDirs(manifest, field, installPath) {
   return [];
 }
 
-// Translate a plugin's MCP config into dsh-mcp-client server configs. Returns
-// { servers, warns } (empty when no/invalid mcpServers field). Substitutes the
-// ${CLAUDE_PLUGIN_ROOT} placeholder Claude Code defines for plugin processes.
-export function translatePluginMcp(manifest, installPath, opts = {}) {
-  const ref = manifest?.mcpServers;
-  if (typeof ref !== 'string') return { servers: [], warns: [] };
-  const raw = readTextSafeSync(resolve(installPath, ref));
-  if (raw === undefined) return { servers: [], warns: [`mcpServers file not readable: ${ref}`] };
-  // A replacer function keeps $&, $$ and $' in the install path literal.
-  const substituted = raw.replaceAll('${CLAUDE_PLUGIN_ROOT}', () => installPath);
-  return translateMcpServers(substituted, opts);
+// The server map in a plugin's .json file. The file holds an `mcpServers` wrapper,
+// as .mcp.json does, or the server map itself. Returns undefined, with a warning,
+// when the file cannot be read or has the wrong shape.
+function mapFromFile(path, label, warns) {
+  let raw;
+  try { raw = rfs(path, 'utf8'); } catch (error) {
+    warns.push(`mcpServers file not readable: ${label} (${error?.code ?? error?.message})`);
+    return undefined;
+  }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (error) {
+    warns.push(`mcpServers file is not valid JSON: ${label} (${error.message})`);
+    return undefined;
+  }
+  if (!isObject(parsed)) {
+    warns.push(`mcpServers file root must be an object: ${label}`);
+    return undefined;
+  }
+  if (!Object.hasOwn(parsed, 'mcpServers')) return parsed;
+  if (!isObject(parsed.mcpServers)) {
+    warns.push(`mcpServers in ${label} must be an object, the file is ignored`);
+    return undefined;
+  }
+  return parsed.mcpServers;
 }
 
-function readTextSafeSync(p) { try { return rfs(p, 'utf8'); } catch { return undefined; } }
+// A path in a plugin manifest must stay inside the plugin folder.
+function insidePlugin(installPath, target) {
+  const rel = relative(installPath, target);
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+// One `mcpServers` shape as a server map. Bundles and URLs are not supported.
+function mapFromShape(shape, installPath, warns) {
+  if (isObject(shape)) return shape;
+  if (typeof shape !== 'string') {
+    warns.push('mcpServers entry must be a path or an object, ignored');
+    return undefined;
+  }
+  if (/\.(mcpb|dxt)$/.test(shape) || /^https?:\/\//.test(shape)) {
+    warns.push(`mcpServers ${shape}: MCP bundles and URLs are not supported, skipped`);
+    return undefined;
+  }
+  const target = resolve(installPath, shape);
+  if (!insidePlugin(installPath, target)) {
+    warns.push(`mcpServers ${shape}: the path is outside the plugin folder, skipped`);
+    return undefined;
+  }
+  return mapFromFile(target, shape, warns);
+}
+
+// A file that exists, including a link to a file that does not, so a broken link is reported.
+function present(path) {
+  try { lstatSync(path); return true; } catch { return false; }
+}
+
+// Translate a plugin's MCP config into dsh-mcp-client server configs. Claude Code
+// reads the plugin's own .mcp.json first, then each `mcpServers` shape in order,
+// and a later name replaces an earlier one. Returns { servers, warns, names }.
+// ${CLAUDE_PLUGIN_ROOT} is the install path, as Claude Code does it. It is a variable
+// value, so a `${...}` inside the path is not expanded again.
+export function translatePluginMcp(manifest, installPath, opts = {}) {
+  const warns = [];
+  const maps = [];
+  const rootFile = resolve(installPath, '.mcp.json');
+  if (present(rootFile)) maps.push(mapFromFile(rootFile, '.mcp.json', warns));
+  const declared = manifest?.mcpServers;
+  for (const shape of declared === undefined ? [] : [declared].flat()) {
+    // The manifest often names the root .mcp.json that was already read.
+    if (typeof shape === 'string' && resolve(installPath, shape) === rootFile) continue;
+    maps.push(mapFromShape(shape, installPath, warns));
+  }
+  // A Map keeps a server named `__proto__`, which a plain object would turn into a prototype.
+  const combined = new Map();
+  for (const map of maps.filter((m) => m !== undefined)) {
+    for (const [name, entry] of Object.entries(map)) {
+      if (combined.has(name)) warns.push(`${name}: replaces an earlier server of the same name in this plugin`);
+      combined.set(name, entry);
+    }
+  }
+  const vars = { ...process.env, CLAUDE_PLUGIN_ROOT: installPath };
+  const translated = translateServerEntries([...combined], { ...opts, vars });
+  return { ...translated, warns: [...warns, ...translated.warns] };
+}
+

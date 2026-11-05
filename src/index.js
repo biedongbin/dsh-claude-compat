@@ -21,8 +21,9 @@
 //   3. Hooks (Claude Code subset PreToolUse/PostToolUse/UserPromptSubmit) from
 //      .claude/settings.json — bridged onto tools/pre-execute,
 //      tools/post-execute and agent/pre-step (see src/hooks.js).
-//   4. MCP servers from <projectRoot>/.mcp.json — mounted as dsh-mcp-client
-//      plugin instances at startup from the launch workspace (see src/mcp.js).
+//   4. MCP servers from managed-mcp.json, .claude.json and <projectRoot>/.mcp.json
+//      — mounted as dsh-mcp-client plugin instances at startup from the launch
+//      workspace (see src/mcp.js and src/mcp-sources.js).
 //
 // Skill name flattening: .claude/skills/gitnexus/gitnexus-guide/SKILL.md →
 // "gitnexus-gitnexus-guide" (DSH skill names must be kebab-case; the shipped
@@ -44,7 +45,7 @@
 // next session.
 
 import { readFileSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
@@ -56,7 +57,7 @@ import {
   withOriginalName,
 } from './aliases.js';
 import { registerHooks } from './hooks.js';
-import { mountMcpServers, mountMcpConfigs } from './mcp.js';
+import { extraServers, loadMcpServers, mountMcpConfigs } from './mcp.js';
 import { registerManagerCommands } from './commands.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
@@ -92,6 +93,9 @@ export const Config = z.object({
   enableSkills: z.boolean().default(true),
   enableMcp: z.boolean().default(true),
   mcpFailOnStartupError: z.boolean().default(false),
+  // A project .mcp.json is not the user's own file: its headersHelper runs, and its ${VAR}
+  // reads credential variables, only when this is true.
+  mcpTrustProjectConfig: z.boolean().default(false),
   enableHooks: z.boolean().default(true),
   // Node delays above 2147483647 ms fire after 1 ms, so a larger value kills hooks at once.
   hooksTimeoutMs: z.number().step(1).min(1).max(2147483647).default(60000),
@@ -185,35 +189,58 @@ export function apply(ctx, config = {}) {
   }
   if (config.enableMcp !== false) {
     // Process-lifetime mount — deliberately NOT session-scoped (see src/mcp.js).
-    mountMcpServers(ctx, config).catch((error) => {
-      console.warn('dsh-claude-compat: MCP mount failed:', error?.message ?? error);
+    mountMcp(ctx, config).catch((error) => {
+      console.warn('dsh-claude-compat: MCP setup failed, so no MCP server from this step is mounted:', error?.message ?? error);
     });
-    if (config.enablePlugins !== false && config.enablePluginMcp === true) {
-      mountPluginMcp(ctx, config).catch((error) => {
-        console.warn('dsh-claude-compat: plugin MCP mount failed:', error?.message ?? error);
-      });
-    }
   }
 }
 
-// Opt-in: translate every installed plugin's MCP config and mount alongside
-// the project .mcp.json servers (see src/mcp.js mountMcpConfigs).
-async function mountPluginMcp(ctx, config) {
+// Load the project, user and managed servers, then the opt-in plugin servers,
+// and mount them together. A plugin server whose URL a higher source already
+// uses is dropped, and managed-mcp.json turns plugin servers off.
+async function mountMcp(ctx, config) {
+  const loaded = await loadMcpServers(config);
+  let extra = [];
+  try {
+    const pluginOn = config.enablePlugins !== false && config.enablePluginMcp === true && !loaded.exclusive;
+    const plugin = pluginOn ? await pluginMcpServers(config, loaded.warns) : { servers: [], names: [] };
+    extra = extraServers(loaded, plugin);
+  } catch (error) {
+    // The servers of the user still mount. Only the plugin servers are lost.
+    loaded.warns.push(`plugin MCP servers are not mounted: ${error?.message ?? error}`);
+  }
+  loaded.warns.forEach((w) => console.warn(`dsh-claude-compat: MCP: ${w}`));
+  await mountMcpConfigs(ctx, [...loaded.servers, ...extra]);
+}
+
+// Opt-in: translate every installed plugin's MCP config (see src/mcp.js). A
+// manifest that is missing is skipped. One that cannot be read, or is not valid
+// JSON, is reported with the reason. Returns { servers, names }, where names[i]
+// is the name the user wrote for servers[i].
+export async function pluginMcpServers(config, warns) {
+  const servers = [];
+  const names = [];
   for (const plugin of readInstalledClaudePlugins(config.pluginsRoot, config.userClaudeDir)) {
-    const raw = await readTextSafe(join(plugin.installPath, '.claude-plugin', 'plugin.json'));
-    if (raw === undefined) continue;
-    let manifest;
-    try { manifest = JSON.parse(raw); }
-    catch (error) {
-      console.warn(`dsh-claude-compat: plugin ${plugin.key}: cannot parse plugin.json: ${error.message}`);
-      continue;
+    const manifestPath = join(plugin.installPath, '.claude-plugin', 'plugin.json');
+    let manifest = {};
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch (error) {
+      // A plugin with no manifest can still have a .mcp.json at its root.
+      if (error?.code !== 'ENOENT') {
+        const why = error instanceof SyntaxError ? `is not valid JSON (${error.message})` : `cannot be read (${error?.code ?? error?.message})`;
+        warns.push(`plugin ${plugin.key}: plugin.json ${why}, its MCP servers are skipped`);
+        continue;
+      }
     }
-    const { servers, warns } = translatePluginMcp(manifest, plugin.installPath, {
+    const translated = translatePluginMcp(manifest, plugin.installPath, {
       failOnStartupError: config.mcpFailOnStartupError ?? false,
     });
-    warns.forEach((w) => console.warn(`dsh-claude-compat: plugin ${plugin.key}: ${w}`));
-    if (servers.length > 0) await mountMcpConfigs(ctx, servers);
+    warns.push(...translated.warns.map((w) => `plugin ${plugin.key}: ${w}`));
+    servers.push(...translated.servers);
+    names.push(...(translated.names ?? []));
   }
+  return { servers, names };
 }
 
 // ─── skill provider ──────────────────────────────────────────────────────────

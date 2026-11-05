@@ -24,7 +24,7 @@ test('translateMcpServers: stdio + http + skip rules', () => {
   const { servers, warns } = translateMcpServers(JSON.stringify({
     mcpServers: {
       'my-tools': { command: 'npx', args: ['-y', 'server'], env: { FOO: '1' } },
-      'remote-api': { url: 'https://example.com/mcp', headers: { Authorization: 'x' } },
+      'remote-api': { type: 'http', url: 'https://example.com/mcp', headers: { Authorization: 'x' } },
       'http-typed': { type: 'http', url: 'https://example.com/sse' },
       'se-typed': { type: 'sse', url: 'https://example.com/sse' },
       broken: { command: 42 },

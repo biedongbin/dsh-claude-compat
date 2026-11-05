@@ -46,8 +46,8 @@ Done. Your skills show up in the `/` menu, rules inject into every new session, 
 | `commands/*.md` | DSH skill (user-invocable) | `/command-name` in the slash menu |
 | `rules/*.md` | message-stream injection (same channel Claude uses) | auto-applies to every new session |
 | `agents/*.md` | delegation-shim skill | invoke `/agent-name` with its persona |
+| `.mcp.json`, `.claude.json`, `managed-mcp.json` | `dsh-mcp-client` instances | stdio / streamable-http auto-translated |
 | `.claude/settings.json` hooks | 26 of 33 events, `command`, `http`, `mcp_tool`, `prompt` and `agent` handlers | commands, permissions, blocks behave as before |
-| `<root>/.mcp.json` | `dsh-mcp-client` instances | stdio / streamable-http auto-translated |
 | `~/.claude/plugins` | DSH skill (managed via `/cc-plugin`) | installed plugin skills work too |
 
 Both the project `.claude/` and the user-level `~/.claude/` are read. Same-name entries dedupe by fixed priority: **project `.claude` > DSH native > `~/.claude`** — a project skill always wins over other copies, and a user skill never overrides a DSH-native one. `CLAUDE.md` / `AGENTS.md` are handled by DSH's built-in `dsh-agent-instructions` — **this plugin never touches them**.
@@ -60,8 +60,8 @@ Both the project `.claude/` and the user-level `~/.claude/` are read. Same-name 
 | `commands/*.md` | DSH skill provider | Same, plus user-invocable: `/command-name` works in the slash menu. |
 | `rules/*.md` | Message-stream injection | Rules are concatenated, wrapped in a `<system-reminder>` envelope, and prepended as a user-role message at the front of the message array once per session — the same channel Claude Code uses (`prependUserContext`), which models follow reliably. |
 | `agents/*.md` | DSH skill provider (delegation shim) | DSH has no markdown subagent format, so each agent file becomes a **skill** whose body leads with an explicit "delegate with this persona" instruction. Model- and user-invocable, so `/agent-name` works. Same-name agents dedupe by rank like skills. |
+| `managed-mcp.json`, `managedMcpServers`, `.claude.json`, `<projectRoot>/.mcp.json` | MCP servers | Claude Code-format MCP server definitions are read in Claude Code's precedence and mounted as `dsh-mcp-client` plugin instances at DSH startup from the launch workspace. `command` → stdio, `type: http` → streamable-http. Malformed entries or a missing `@deepseek-ai/dsh-mcp-client` degrade to a warning, never a crash. See [MCP servers](#mcp-servers). |
 | `.claude/settings.json` → `hooks` | Hooks | Claude Code hooks, bridged onto the DSH extension points. See [Hooks](#hooks). |
-| `<projectRoot>/.mcp.json` | MCP servers | Claude Code-format MCP server definitions are translated to `dsh-mcp-client` plugin instances at DSH startup from the launch workspace: `command` → stdio, `url` → streamable-http. Malformed entries or a missing `@deepseek-ai/dsh-mcp-client` degrade to a warning, never a crash. |
 | `~/.claude/plugins` (installed plugins) | DSH skill provider | Installed Claude Code plugin-marketplace plugins contribute their skills/commands/agents (via each install's `.claude-plugin/plugin.json` manifest, or a directory scan when manifest-less) at rank `750` — the long tail: project `.claude`, DSH native, and `~/.claude` all win collisions. Plugin MCP servers (`mcpServers` in the manifest) mount only when `enablePluginMcp` is opted in — mounting third-party MCP servers is a bigger trust step than listing skills. |
 
 The same directories are also read from the **user-level** `~/.claude/` (skills, commands, rules, agents, and `~/.claude/settings.json` hooks). Same-name skills/commands/rules/agents are deduped with a fixed priority:
@@ -116,6 +116,7 @@ Restart DSH (`dsh web`). Done — skills show up in `/`, rules are injected into
 | `enableSkills` | `true` | Register the `.claude/skills` + `.claude/commands` + `.claude/agents` provider (project and `~/.claude`) |
 | `enableRules` | `true` | Inject project + `~/.claude` `rules/*.md` into the message stream |
 | `enableMcp` | `true` | Translate `<projectRoot>/.mcp.json` into mounted MCP server plugins |
+| `mcpTrustProjectConfig` | `false` | Trust the project `.mcp.json`: its `headersHelper` runs (without the credential variables of the user), and its `${VAR}` may read credential variables. Off means the server mounts with its static headers and the literal text |
 | `mcpFailOnStartupError` | `false` | Forward to `dsh-mcp-client`: fail plugin startup when an MCP server fails to connect |
 | `enableHooks` | `true` | Run hooks from the `.claude/settings.json` files (see [Hooks](#hooks)) |
 | `hooksTimeoutMs` | `60000` | Default per-hook run timeout in ms, 1 to 2147483647. A handler's own `timeout`, in seconds, overrides it. Like Claude Code, the default is 1.5 s for SessionEnd, 30 s for UserPromptSubmit and PostModelSwitch, and 10 s for MessageDisplay. prompt hooks default to 30 s and agent hooks to 60 s |
@@ -226,10 +227,95 @@ Handler details:
 - `prompt` asks the session model one question, with no tools. `model` is `provider/model`, or a model of the session provider. `continueOnBlock` and `impossible` follow the Claude Code rules.
 - `agent` starts a DSH subagent through the `spawn` provider and reads its structured answer. DSH cannot limit its tools to read-only, so the prompt tells it to change no file, and DSH's normal approvals still guard any write. No `agent` hook runs inside that subagent, and every other hook does, so a PreToolUse deny guard also covers its tool calls.
 
+## MCP servers
+
+The plugin reads MCP servers from these sources, highest precedence first. A name in a higher source hides the same name below it, and the whole entry of the winning source is used. Plugin servers match by URL instead.
+
+| Source | Where it is read |
+|---|---|
+| Managed | `managed-mcp.json` in the system Claude folder. It takes exclusive control: only this file and `managedMcpServers` load. |
+| Managed settings | `managedMcpServers` in `managed-settings.json` in the system Claude folder. |
+| Local | `.claude.json`, under `projects["<launch folder>"].mcpServers`. |
+| Project | `<projectRoot>/.mcp.json`. |
+| User | `.claude.json`, top-level `mcpServers`. The file is in `CLAUDE_CONFIG_DIR` when it is set, and in the home folder otherwise. |
+| Plugin | The plugin's own `.mcp.json`, then each `mcpServers` shape in its `plugin.json` (a path, or an inline object). A later name replaces an earlier one. Only with `enablePluginMcp`. |
+
+The system Claude folder is `/Library/Application Support/ClaudeCode` on macOS, `/etc/claude-code` on Linux, and `C:\Program Files\ClaudeCode` on Windows.
+
+Failures fail closed where the policy is at stake:
+
+- An unreadable `managed-settings.json` keeps every MCP server off. A symbolic link to a missing file counts as unreadable.
+- An unreadable `managed-mcp.json` keeps the user, project and local servers off. `managedMcpServers` still loads.
+- A managed policy that is malformed keeps every MCP server off. That covers a policy list that is not a list, a malformed entry in it (including a host that does not parse), a variable that is not set, and an `allowManagedMcpServersOnly` that is not a boolean.
+- An unreadable user, project or local file is reported with what it stops. Its entries are not read.
+
+Every warning names the file or entry, and says what stays off.
+
+Policy comes from the settings files:
+
+- `deniedMcpServers` blocks a server by URL, command or name. The denylist always wins. Plugin servers obey it too.
+- A `serverUrl` pattern follows the managed-MCP rules for both lists: a host written out in full matches the default port of the scheme only.
+To deny a host on every port and scheme, write `*://host:*`.
+- `allowedMcpServers` allows only the matching servers. The lists merge from every settings file, unless managed settings set `allowManagedMcpServersOnly`. Servers from `managedMcpServers` and `managed-mcp.json` skip the allowlist.
+- A malformed policy entry in a user, project or local settings file is ignored with a warning. In managed settings it keeps every MCP server off. A policy list that is not a list allows nothing (for `allowedMcpServers`) or denies nothing (for `deniedMcpServers`), with a warning.
+- A URL pattern with no port covers the default port only (443 for `https`), as Claude Code documents. A pattern with `*` in the host, or `*` as the port, covers every port. A pattern path of `/` matches only the root path. Write `/*` to match every path. A `serverCommand` entry compares the command and its arguments. It does not compare `env` (as Claude Code documents), and it does not compare `cwd`.
+- A policy entry that names a variable which is not set keeps the literal text, and a warning names the variable and the entry. In managed settings, that entry makes the whole managed policy fail closed.
+- `disabledMcpjsonServers` in any settings file turns off project servers by name.
+- `disabledMcpServers` under this project in `.claude.json` turns off user and managed servers by name.
+- An entry in `managedMcpServers` must be a fixed `https://` remote server.
+It has no `command`, `args`, `env`, `headersHelper` or `${VAR}`, and an entry that breaks this is skipped with a warning.
+`managed-mcp.json` has its own contract and is not held to this rule.
+- An entry that is not an object, such as `"bad": null`, is skipped with a warning, and the other servers still load.
+- A disabled entry, and an entry that a higher source with the same name hides, are skipped with a warning that names the source.
+- A plugin folder with no `plugin.json` still loads the `.mcp.json` at its root.
+A path in `mcpServers` must stay inside the plugin folder, and `${CLAUDE_PLUGIN_ROOT}` is the install path.
+- A `timeout` above the largest Node timer delay is cut to that delay, with a warning.
+
+Entry handling:
+
+- `${VAR}` and `${VAR:-default}` expand in `command`, `args`, `env`, `url` and `headers`. An unset variable with no default keeps the literal text, and a warning names it.
+- `timeout` sets the per-call limit in milliseconds. A value under 1000 is ignored.
+- `headersHelper` runs at mount, with a 10-second limit. Its JSON output overrides the static `headers`. A helper that fails skips its server. Under an `allowedMcpServers` list, only organization servers may use a helper, because the list cannot see the helper command.
+- A `headersHelper` from a project `.mcp.json` is a command that the repository supplies.
+It runs only when `mcpTrustProjectConfig` is `true`, and then without the credential variables of the user.
+A variable name with `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CRED`, `COOKIE` or `DSN` in it is removed, except Git's `GIT_CONFIG_KEY_<n>`, and so are `ANTHROPIC_CUSTOM_HEADERS` and a variable whose value is a URL with a password.
+The values of removed variables are replaced with `REDACTED` in the `CLAUDE_CODE_MCP_SERVER_URL` that the helper receives.
+A trusted project helper is still a shell command, and it can read the files of the user.
+- `${VAR}` in a project `.mcp.json` does not read a credential variable (the same names) unless `mcpTrustProjectConfig` is `true`.
+The literal text stays and the log names the variable.
+This keeps a repository from sending a credential to a server that it names.
+While the option is `false`, the server mounts with its static `headers` and the log names the server.
+A helper from the user, local or managed source keeps the environment of the user.
+- `type: stdio` and `type: http` (or `streamable-http`) run. An entry with a `url` and no `type` is skipped, as Claude Code skips it.
+- A field of the wrong type, such as a non-string `args` item, skips the entry. The warning names the field.
+- A field that the transport never reads, such as `url` on a stdio entry, is reported as ignored.
+- Stdio servers get `CLAUDE_PROJECT_DIR` in their environment.
+
+### Gaps: what cannot run in DSH
+
+These Claude Code features do not run here. The plugin warns when a file uses one, and the rest of the entry still loads.
+
+| Claude Code feature | Why it cannot run |
+|---|---|
+| `type: sse` and `type: ws` | DSH's MCP client has stdio and streamable-http only. The entry is skipped. |
+| `oauth` | DSH's MCP client has no OAuth flow. The server loads without it, and it may fail to connect. |
+| `alwaysLoad` | DSH loads every tool at startup. There is no deferred tool loading. The field is ignored. |
+| `headersHelper` on reconnect | DSH sets headers once, at mount. The helper does not run again on reconnect or after a 401. |
+| `headersHelper` on plugin servers | Not run. A plugin server with a helper is skipped, with a warning, because it could not authenticate. |
+| Server-managed settings, MDM profiles and registry policy | Only the files on disk are read. |
+| `--mcp-config` and `--strict-mcp-config` | DSH has no launch flag for them. |
+| claude.ai connectors | They need a claude.ai account fetch. |
+| MCP bundles (`.mcpb`, `.dxt`) and URLs in a plugin's `mcpServers` | Not supported. The entry is skipped, with a warning. |
+| `enableAllProjectMcpServers` and `enabledMcpjsonServers` | Ignored. Project servers always load, as `claude -p` loads them. DSH has no approval prompt. |
+| `enabledMcpServers` | Opt-in list for built-in servers. DSH has no built-in MCP servers. |
+| Subagent `mcpServers` in `agents/*.md` | Not read by this plugin. Upstream PR #5 (MCP in agent realms) is the related work. |
+| `${VAR}` in policy entries | Expands from the live process environment. Claude Code pins that environment. |
+| Default `timeout` | 60 seconds. Claude Code uses about 28 hours. |
+
 ## Notes
 
 - **Skill naming**: DSH requires kebab-case skill names. Nested skill directories are flattened (`gitnexus/gitnexus-guide` → `gitnexus-gitnexus-guide`); invalid frontmatter names fall back to the directory name.
-- **MCP lifecycle**: `.mcp.json` is read once at DSH startup from the launch workspace — not per session — and each server mounts for the process lifetime. Restart DSH to pick up edits.
+- **MCP lifecycle**: MCP files are read once at DSH startup from the launch workspace — not per session — and each server mounts for the process lifetime. Restart DSH to pick up edits.
 - **Project hooks**: the plugin has no workspace-trust prompt. A hook in `<project>/.claude/settings.json` or `<project>/.claude/settings.local.json` runs when DSH opens that project, with your permissions. Open only projects you trust.
   The plugin reads the project settings once, from the directory where DSH started, and not from the directory of each session. A PermissionRequest hook also gets the `reason` that DSH asks with, so it can tell a sandbox escalation from a plain approval.
 - **Hooks scope**: 26 of the 33 Claude Code hook events run, with all five handler types. See [Hooks](#hooks) for the DSH point behind each event and the events that cannot run.
