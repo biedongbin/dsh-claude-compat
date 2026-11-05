@@ -14,6 +14,7 @@
 - **处理器类型 `http`、`mcp_tool`、`prompt` 与 `agent`。** `http` 以 JSON 提交输入，请求头只读取 `allowedEnvVars` 中列出的变量。`mcp_tool` 通过 DSH 工具服务调用 MCP 工具。`prompt` 向会话模型提一个问题。`agent` 启动 DSH 子 agent 并读取它的结构化回答。每种类型只在 Claude Code 允许的事件上运行。后台 hook 以退出码 2 结束时，`asyncRewake` 会引导 agent 继续。
 
 ### 修复
+- **导入会话使用 DSH 原生项目目录 key**（[#12](https://github.com/biedongbin/dsh-claude-compat/issues/12)）。空格、非 ASCII 字符、连续分隔符、根目录与长路径现在对应到 DSH 实际读取的目录；CLI 回归覆盖列表、导入及已导入状态检测。
 - **项目 `.mcp.json` 不能通过 `${VAR}` 读取凭据变量。** 仓库曾可以把 `${GITHUB_TOKEN}` 发送给它所指定的服务器。除非 `mcpTrustProjectConfig` 为 `true`，该变量保持字面文本，日志会指出它。helper 的清理现在也覆盖 `PASS`、`CRED`、`COOKIE`、`DSN` 与带密码的 URL。
 - **`${CLAUDE_PLUGIN_ROOT}` 是变量值。** 安装路径中的 `${...}` 曾被再次展开，含 `$&` 的路径可能被当作模式。插件中名为 `__proto__` 的服务器曾被无声丢弃。现在重复的名称会被报告。
 - **检查插件 MCP 文件。** `mcpServers` 中的路径必须位于插件内。损坏的链接、无法读取的文件、错误的包装与无效的 JSON 都会连同原因一起报告。没有 `plugin.json` 的插件仍会加载其根目录的 `.mcp.json`。

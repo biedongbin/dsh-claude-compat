@@ -124,6 +124,28 @@ export function claudeProjectsDir(cwd, userDir) {
   return join(resolveUserClaudeDir(userDir), 'projects', folder);
 }
 
+// Match DSH session-persistence-jsonl's project key, including UTF-16 escaping
+// and its filesystem component limit. Keep this separate from Claude's key.
+export function projectKey(cwd) {
+  if (!cwd) throw new Error('empty project path');
+  let readable = '';
+  let separator = false;
+  for (let i = 0; i < cwd.length; i += 1) {
+    const char = cwd[i];
+    if (char === '/' || char === '\\' || char === ':') {
+      if (!separator) readable += '-';
+      separator = true;
+    } else {
+      separator = false;
+      readable += /[a-zA-Z0-9._-]/.test(char)
+        ? char
+        : `~${cwd.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')}`;
+    }
+  }
+  const slug = readable.replace(/^-+/, '') || 'root';
+  return `--${slug.slice(0, 251)}--`;
+}
+
 // CLAUDE_CODE_PLUGIN_DIRS: each entry is an absolute path or starts with `~`.
 // Claude Code skips any other entry, so this returns the skipped ones for a warning.
 export function envPluginDirs() {
