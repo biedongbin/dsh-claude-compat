@@ -146,46 +146,6 @@ git status  = 仅 ?? .DS_Store / ?? .github/.DS_Store / ?? .omc/（本机杂项�
 
 ---
 
-## 唯一待办：npm 发布 0.8.4
-
-### 为何没发成
-
-`npm publish` 失败，**纯凭据问题，非代码问题**：
-
-| 检查 | 结果 |
-|---|---|
-| `npm whoami` | `401 Unauthorized` |
-| `curl -H "Authorization: Bearer <token>" https://registry.npmjs.org/-/whoami` | `401` |
-| `npm publish` | `404 Not Found - PUT https://registry.npmjs.org/dsh-claude-compat`（npm 对无权限者以 404 掩藏真实原因） |
-| `~/.npmrc` 的 `registry` | `https://registry.npmmirror.com` ← **只读镜像** |
-| `~/.npmrc` 的 `_authToken` | `npm_...`，40 字符，**已失效** |
-| `npm publish --dry-run` | **正常**（19 files, 42.1 kB, version 0.8.4） |
-
-### 发布步骤（人工）
-
-```bash
-cd /Users/biedongbin/workspace_private/dsh-claude-compat
-npm login --registry https://registry.npmjs.org
-npm publish --registry https://registry.npmjs.org
-```
-
-**必须显式 `--registry https://registry.npmjs.org`** —— 否则会用 `~/.npmrc` 的 npmmirror 镜像，推不上去。
-
-或写入新 token 到 `~/.npmrc`（注意该文件 registry 是镜像，需单独覆盖发布时 registry）：
-```
-//registry.npmjs.org/:_authToken=<new-token>
-```
-
-### 发布后验证
-
-```bash
-npm view dsh-claude-compat@0.8.4 version --registry https://registry.npmjs.org
-```
-
-用户升级：`dsh plugin --profile web add dsh-claude-compat@latest`
-
----
-
 ## 环境注意事项（下次会话会用到）
 
 ### 网络：git/curl 的 TLS 间歇性握手失败
@@ -199,18 +159,6 @@ git -c http.version=HTTP/1.1 fetch origin main
 git -c http.version=HTTP/1.1 push origin main
 ```
 `curl` 则重试即可（首次 000、二次通常通）。
-
-### 凭据：两套 token 状态
-
-- **`gh` 的 keyring token 已失效**（`gh auth status` 报 `The token in keyring is invalid`）。
-  临时绕过：从 osxkeychain 取有效 `gho_` token 注入环境变量 ——
-  ```bash
-  CRED=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null)
-  export GH_TOKEN=$(echo "$CRED" | awk -F= '/^password=/{print $2}')
-  ```
-  该 token scope = `gist, read:org, repo, workflow`，足够 issue/PR 操作。
-  长期修：`gh auth login -h github.com`。
-- **npm token 失效**（见上「唯一待办」）。
 
 ### 跨目录工作
 

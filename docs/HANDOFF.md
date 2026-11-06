@@ -96,4 +96,4 @@ DSH 无自有 MCP 配置源，`.mcp.json` 是唯一来源，天然单向。无�
 - 所有新增用户可见字符串需走 i18n（`core/i18n.go` 是 Claude 侧；本 DSH 插件用 `slog`/`console.log`，保持与现有代码一致即可）
 - 改动后必须 `node --check` 每个改动的 .js/.mjs，再 `npm run check` 全绿
 - 新增管理 skill 必须同步 `test/self-check.test.js` 两处硬编码 skill 列表
-- 提交时保留 Co-Authored-By 尾部
+- 提交作者使用仓库用户身份，提交说明只包含变更内容

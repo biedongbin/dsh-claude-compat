@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code bridge",
+    "description": "Reuse Claude Code skills, plugins and configuration, and import conversations through native DSH controls."
+  }
+}

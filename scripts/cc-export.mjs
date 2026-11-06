@@ -18,7 +18,7 @@
 // (name, description, whenToUse), so a DSH skill round-trips with no body edit.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { findProjectRootSync, parseFrontmatter, stringField } from '../src/lib.js';
 
 // ---- helpers ---------------------------------------------------------------
@@ -27,7 +27,8 @@ function walkSkills(root) {
   // Returns [{ name, dir, file }] for every SKILL.md directly under root/<name>/.
   const out = [];
   let entries;
-  try { entries = readdirSync(root, { withFileTypes: true }); } catch { return out; }
+  try { entries = readdirSync(root, { withFileTypes: true }); }
+  catch (error) { if (error?.code === 'ENOENT') return out; throw error; }
   for (const e of entries) {
     if (!e.isDirectory() || e.name.startsWith('.')) continue;
     const file = join(root, e.name, 'SKILL.md');
@@ -63,11 +64,17 @@ function claudeSkillsDir(root) {
 const invokedDirectly = process.argv[1]?.endsWith('cc-export.mjs') ?? false;
 if (invokedDirectly) {
 const [cmd, ...rest] = process.argv.slice(2);
-const flag = (name) => {
-  const i = rest.indexOf(`--${name}`);
-  return i >= 0 ? rest[i + 1] : undefined;
-};
-const cwd = flag('cwd') ?? process.cwd();
+const options = { overwrite: false };
+for (let index = 0; index < rest.length; index += 1) {
+  const option = rest[index];
+  if (option === '--overwrite') { options.overwrite = true; continue; }
+  if (!['--cwd', '--target'].includes(option) || !rest[index + 1] || rest[index + 1].startsWith('--')) {
+    console.error(`Unknown option or missing value: ${option}`);
+    process.exit(2);
+  }
+  options[option.slice(2)] = rest[++index];
+}
+const cwd = resolve(options.cwd ?? process.cwd());
 const markers = ['.git'];
 
 if (cmd === 'list') {
@@ -82,8 +89,8 @@ if (cmd === 'list') {
   if (root === undefined) { console.error('No project root found (no .git)'); process.exit(1); }
   const skills = walkSkills(dir);
   if (skills.length === 0) { console.log(`No DSH skills to export in ${dir}`); process.exit(0); }
-  const overwrite = flag('overwrite') !== undefined;
-  const targetBase = flag('target') ?? claudeSkillsDir(root);
+  const overwrite = options.overwrite;
+  const targetBase = options.target === undefined ? claudeSkillsDir(root) : resolve(cwd, options.target);
   let written = 0, skipped = 0, failed = 0;
   for (const s of skills) {
     const raw = readFileSync(s.file, 'utf8');
@@ -118,6 +125,7 @@ if (cmd === 'list') {
   }
   console.log(`exported ${written} skill(s), skipped ${skipped}, failed ${failed} → ${targetBase}`);
   if (written > 0) console.log('Claude Code will pick them up under .claude/skills/ — restart Claude Code or reload.');
+  if (failed > 0) process.exitCode = 1;
 } else {
   console.error('usage: cc-export.mjs list|export [--cwd dir] [--target dir] [--overwrite]');
   process.exit(2);

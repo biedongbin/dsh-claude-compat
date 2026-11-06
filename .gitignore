@@ -1,3 +1,6 @@
 node_modules/
 .npmrc
 *.tgz
+.DS_Store
+.omc/
+.tmp/

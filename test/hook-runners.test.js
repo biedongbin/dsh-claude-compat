@@ -88,10 +88,8 @@ test('buildPrompt replaces every $ARGUMENTS, or appends the input', () => {
 
 // ─── mcp_tool runner ─────────────────────────────────────────────────────────
 
-// A fake of the shipped ToolRuntime contract (dsh-tools 0.2.1-rc.5): `get(name, scope)` sees
-// the global tools plus the tools of the scope it is given, and `execute` takes ONE call
-// with parsed arguments and returns ONE result. Any other input shape throws, as the real
-// runtime reads `exec.callId`, `exec.name` and `exec.signal` from the input itself.
+// DSH 0.2.2 executes wire calls in batches. Keep the recorded test invocations
+// normalized so individual hook assertions remain focused on their behavior.
 function fakeTools(handler, { scoped = new Map() } = {}) {
   const calls = [];
   const global = (name) => name.startsWith('mcp__srv__');
@@ -99,15 +97,18 @@ function fakeTools(handler, { scoped = new Map() } = {}) {
   return {
     calls,
     get: (name, scope) => (visible(name, scope) ? { name } : undefined),
-    execute: async (input) => {
-      assert.equal(typeof input.callId, 'string', 'callId');
-      assert.equal(typeof input.name, 'string', 'name');
-      assert.equal('calls' in input, false, 'one call per execute, not a batch');
-      assert.notEqual(typeof input.arguments, 'string', 'arguments are parsed, not JSON text');
+    execute: async (batch) => {
+      assert.equal(batch.calls.length, 1, 'one historical hook call in a native batch');
+      const call = batch.calls[0];
+      assert.equal(call.type, 'tool-call');
+      assert.equal(typeof call.id, 'string');
+      assert.equal(typeof call.arguments, 'string', 'wire arguments are JSON');
+      const input = { callId: call.id, name: call.name, arguments: JSON.parse(call.arguments), signal: batch.signal,
+        ...(batch.agent === undefined ? {} : { agent: batch.agent }) };
       assert.ok(input.signal instanceof AbortSignal, 'signal');
       assert.ok(visible(input.name, input.agent), `tool ${input.name} is visible to the calling scope`);
       calls.push(input);
-      return handler(input);
+      return { results: [{ callId: call.id, result: await handler(input) }], additionalContexts: [], concluded: false };
     },
   };
 }

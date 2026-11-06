@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code 兼容桥",
+    "description": "复用 Claude Code 技能、插件与配置，通过 DSH 原生界面管理插件和导入历史会话。"
+  }
+}

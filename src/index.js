@@ -59,6 +59,7 @@ import {
 import { registerHooks } from './hooks.js';
 import { extraServers, loadMcpServers, mountMcpConfigs } from './mcp.js';
 import { registerManagerCommands } from './commands.js';
+import { registerCompatibilityService } from './compat-service.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
   CLAUDE_COMPAT_SOURCE_KIND,
@@ -164,19 +165,18 @@ export function apply(ctx, config = {}) {
     }
   } catch { /* the nudge must never break plugin activation */ }
 
+  let provider;
   if (config.enableSkills !== false) {
-    let provider;
     ctx.skills.registerProvider((control) => {
       provider = new ClaudeCompatSkillProvider(ctx, control, config);
       return provider;
     });
-    // Native human commands (host-executed, zero model tokens; see
-    // src/commands.js). The manager skills stay model-invocable as the
-    // fallback surface; the human entry point becomes the command. Needs the
-    // provider reference for reload invalidation.
-    if (config.enablePluginManager !== false) {
-      registerManagerCommands(ctx, config, () => provider);
-    }
+  }
+  // Management remains available when only the skill bridge is switched off.
+  if (config.enablePluginManager !== false) {
+    const invalidate = () => provider?.control?.invalidate();
+    const manager = registerCompatibilityService(ctx, config, invalidate);
+    registerManagerCommands(ctx, config, () => provider, manager);
   }
   // The rules section registers first, and the hooks after it, so the order of their
   // pre-step listeners stays as it was. The rules section reports its files to the hooks.
@@ -287,8 +287,8 @@ class ClaudeCompatSkillProvider {
       candidates.push(this.reloadSkillDef('reload-skills',
         'Hot-reload the skill catalog (alias of /reload-cc-plugins).'));
       candidates.push(this.managerSkillCandidate('cc-resume',
-        'List and import Claude Code sessions into DSH: browse the projects folder of the Claude config dir (default ~/.claude/projects) and resume any conversation.',
-        'User wants to resume, list, or import a Claude Code conversation/session into DSH. Usage: /cc-resume list, /cc-resume import <sessionId>.',
+        'Browse Claude Code sessions and ask DSH to read the selected source file, then summarize its background, task state and next steps.',
+        'User wants to browse or read a Claude Code conversation in DSH. Usage: /cc-resume, /cc-resume list, /cc-resume resume <sessionId>.',
         (await import('./cc-resume-skill.mjs')).CC_RESUME_SKILL_BODY));
       candidates.push(this.managerSkillCandidate('cc-export',
         'Export DSH-native skills (.dsh/skills) into Claude Code .claude/skills format, closing the DSH → Claude loop.',
@@ -353,7 +353,8 @@ class ClaudeCompatSkillProvider {
       // (Not in list(): that would fire on every catalog collection and
       // defeat the cache entirely.)
       if (locator.invalidate) {
-        try { this.control?.invalidate?.(); } catch { /* best-effort */ }
+        if (typeof this.control?.invalidate !== 'function') throw new Error('The skill catalog refresh control is unavailable.');
+        await this.control.invalidate();
       }
       return {
         name: candidate.name,

@@ -4,6 +4,31 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.2.0] — 2026-11-06
+
+### Upgrade notes
+- **Requires DSH `>=0.2.2-rc.1 <0.3.0`.** Restart DSH after upgrading, especially when the package manager reports a package-path change.
+- **One-click resume now submits a file reference.** DSH receives a short request to read the selected Claude JSONL and describe the background, current task state and next-step plan. Transcript bodies are not pasted into the prompt.
+- **Plugin mutations require the Claude CLI and use user scope.** CLI failures remain failures; the bridge no longer substitutes direct registry or Git writes. Seed and inline sources expose their supported read-only capabilities.
+
+### Added
+- **Native Claude Code management.** A Claude Code tab and interactive command cards cover installed plugins, discovery, marketplaces, conversation history and bridge status, with bilingual labels and theme-aware controls.
+- **Independent asynchronous operations.** Submit updates for several items, inspect their queued/running/results states, and cancel one task independently. Shared configuration/cache writes retain canonical locks, with bounded active tasks and result history.
+- **Configurable pagination and new-item forms.** Lists default to 10 entries and support 10/20/50/100; add marketplaces or install named plugins while other items are updating.
+- **Inline conversation previews and two resume destinations.** A management-page click creates a normal DSH conversation in the source project's Workspace; a `/cc-resume` card inside a conversation submits the reading request to that current session, preserving its messages, directory and model. Recent-turn selection guides DSH's reading.
+- **A structured `claude_compat` tool.** Native controls, commands and the model-facing tool share operation results and errors, including history lookup, file-reference handoff, plugin management and catalog refresh.
+
+### Fixed
+- **First-command visibility in blank sessions.** Management command results now have a resident area above the composer even when DSH omits the normal Chat view. Running, success and error states remain visible for all five commands; normal Chat activation removes the fallback without duplicate rows.
+- **Desktop transport routing.** The exact authenticated Fetch route coexists with the native Gateway and preserves owner, Origin and lifecycle checks.
+- **Large histories and changing source directories.** Resume preparation resolves a safe source path with bounded metadata sampling instead of scanning or assembling the full transcript. A Claude session changing cwd no longer prevents preview or file-reference handoff.
+- **Resume targeting and delivery receipts.** Source Claude identity is separate from the target DSH session. Stable request IDs prevent duplicate creation/admission; partial failures retain known targets, and confirmed admission is not misreported as cancellation. Older completions cannot take navigation from newer user intent.
+- **Export execution and options.** Desktop export resolves a real Node interpreter, uses the effective session cwd, and resolves relative targets consistently. A final `--overwrite` works; invalid flags and failed writes return errors.
+- **Catalog refresh and hook execution.** Both reload aliases and inline skills await invalidation and surface failures. MCP hook runners use the current native batch-tool contract. Legacy archive retries preserve existing DSH continuations.
+
+### Verification
+- Added regressions for the native blank-session gate, command-only lifecycle updates, per-item queues, bounded file references, current/new session targeting, authenticated HTTP transport, real temporary-project exports and refresh failures.
+
 ## [1.1.0] — 2026-11-05
 
 ### Upgrade notes
@@ -27,7 +52,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ### Verification and remaining limits
 - Release verification targets DSH 0.2.1-rc.5 with Desktop Node 24.21.0. Node 22 has a known URL-normalization property-test difference; do not treat that runtime as fully verified.
 - With a custom `userClaudeDir`, use explicit `/cc-resume list` and `/cc-resume import <id>` commands. The default interactive picker's later skill handoff does not yet carry that directory.
-- Complete AgentLoop contract tests require the optional matching testkit. See [release preparation notes](docs/releases/1.1.0.md) for the verification scope and manual publication steps.
+- Complete AgentLoop contract tests require the optional matching testkit. The isolated 1.1.0 suite completed with 628 passed, 0 failed and 2 capability skips.
 
 ## [1.0.1] — 2026-11-04
 
@@ -37,7 +62,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
 ## [1.0.0] — 2026-10-30
 
 ### Added
-- **Published to the DSH plugin market.** The repo now hosts a market index — `site/index.json`, deployed to GitHub Pages by `.github/workflows/market.yml`. Add `https://biedongbin.github.io/dsh-claude-compat/index.json` as an index source in the 插件市场「发现」 tab to browse and install every release. `scripts/update-market-index.mjs` regenerates the index from the npm registry (non-deprecated versions declaring `dsh.bundle`, matching the official generator's rule); versions already listed are preserved across reruns, so run it after `npm publish` and commit to pick up the new release. 0.9.2 was packed but never pushed to npm — the registry jumps from 0.9.1 straight to 1.0.0.
+- **Published to the DSH plugin market.** The repo now hosts a market index — `site/index.json`, deployed to GitHub Pages by `.github/workflows/market.yml`. Add `https://biedongbin.github.io/dsh-claude-compat/index.json` as an index source in the 插件市场「发现」 tab to browse and install every release. `scripts/update-market-index.mjs` regenerates the index from the npm registry (non-deprecated versions declaring `dsh.bundle`, matching the official generator's rule); versions already listed are preserved across reruns, so run it after `npm publish` and commit to pick up the new release.
 
 ## [0.9.2] — 2026-10-28
 
@@ -54,7 +79,7 @@ All notable changes to this project are documented here. Versions follow [SemVer
 - **`/cc-plugin` HELP copy said `/plugin` throughout** while the skill is invoked as `/cc-plugin`; now consistent, and the Execution section explicitly tells the model to run `claude plugin <args>` via bash (`runPluginCommand` has no DSH tool mount, so the body is the only execution path).
 
 ### Tooling
-- **npm tarball ships only the runtime scripts.** `files` previously globbed the whole `scripts/` directory, publishing maintainer-only tooling (`deploy-local.sh` — checkout→profile deploy with a macOS app-path hint, meaningless elsewhere; `gen-downloads-chart.mjs`) alongside the four scripts the installed plugin actually needs (`cc-resume.mjs`, `cc-export.mjs`, `zstd-compat.mjs`, `dsh-restart.sh` for the `bin`). Both dev scripts stay in the repo; only the published package slims down.
+- **npm tarball ships only the runtime scripts.** `files` previously globbed the whole `scripts/` directory, publishing development tooling (`deploy-local.sh` — checkout→profile deploy with a macOS app-path hint, meaningless elsewhere; `gen-downloads-chart.mjs`) alongside the four scripts the installed plugin actually needs (`cc-resume.mjs`, `cc-export.mjs`, `zstd-compat.mjs`, `dsh-restart.sh` for the `bin`). Both dev scripts stay in the repo; only the published package slims down.
 
 ## [0.9.0] — 2026-10-28
 

@@ -4,6 +4,31 @@
 
 本项目所有重要变更记录于此。版本遵循 [SemVer](https://semver.org/)。
 
+## [1.2.0] — 2026-11-06
+
+### 升级须知
+- **要求 DSH `>=0.2.2-rc.1 <0.3.0`。** 更新后重启 DSH；包管理器报告包路径变化时，需要完整退出再打开。
+- **一键恢复改为发送文件引用。** DSH 只收到源 Claude JSONL 路径和简短指令，按需读取后概述背景、当前任务状态和下一步计划，不再把历史正文粘贴进提示。
+- **插件写操作依赖 Claude CLI，范围为用户级。** CLI 失败会明确返回失败，不再通过直接修改注册表或 Git 目录兜底。种子与内联来源会显示实际支持的只读能力。
+
+### 新增
+- **原生 Claude Code 管理界面。** Claude Code 标签页与交互命令卡片覆盖已安装插件、发现插件、市场、历史会话和桥接状态，提供中英文文案及主题适配控件。
+- **逐项异步操作。** 可连续提交多个条目更新，分别查看排队、执行和结果并独立取消；共用配置与缓存的写操作保留规范路径锁，活动任务和结果历史均有上限。
+- **可选分页与新增入口。** 默认每页 10 条，可选 10/20/50/100；更新其他条目时仍可添加插件市场或安装新插件。
+- **行内会话预览与两种恢复目标。** 管理页在源项目工作区新建普通 DSH 会话；从某个 DSH 对话内的 `/cc-resume` 卡片点击时，直接向当前会话发送阅读请求，保留已有消息、目录和模型。最近若干轮选项用于提示 DSH 的阅读重点。
+- **结构化 `claude_compat` 工具。** 原生界面、命令与模型工具共用操作结果和错误，支持历史定位、文件引用交接、插件管理和目录刷新。
+
+### 修复
+- **空白会话首条命令不可见。** 即使 DSH 尚未显示普通聊天视图，输入框上方也会显示管理命令结果；五个命令的加载、成功与错误均可见，正常聊天激活后移除备用区域，避免重复显示。
+- **桌面版传输路由。** 精确的认证 Fetch 路由与原生 Gateway 共存，保留所有者、Origin 和生命周期检查。
+- **大历史与源目录变化。** 恢复准备仅安全定位源文件并有界采样元数据，不再扫描或组装全文。Claude 会话中途切换 cwd 不再阻止预览或文件引用交接。
+- **恢复目标与提交回执。** 分开处理 Claude 来源身份和 DSH 目标会话；稳定请求 ID 避免重复创建或提交，部分失败保留已知目标，已确认接收不误报为取消，较早完成的任务不会抢走后续导航。
+- **导出进程与参数。** 桌面版解析真正的 Node 解释器，使用会话实际 cwd，一致处理相对目标；末尾 `--overwrite` 正常生效，非法参数与写入失败返回错误。
+- **刷新与 Hook 接口。** 两个 reload 命令及 inline 技能等待实际失效刷新并报告失败；MCP Hook 使用当前原生批量工具接口；旧式归档重试保留已有 DSH 接续内容。
+
+### 验证
+- 新增原生空会话门控、纯命令生命周期更新、逐项队列、有界文件引用、当前／新建会话目标、认证 HTTP 传输、真实临时项目导出和刷新失败回归。
+
 ## [1.1.0] — 2026-11-05
 
 ### 升级须知
@@ -27,7 +52,7 @@
 ### 验证与剩余限制
 - 发布验证使用 DSH 0.2.1-rc.5 与 Desktop 自带 Node 24.21.0。Node 22 的 URL 归一化属性测试存在已知差异，不能视为该运行时已完整验证。
 - 自定义 `userClaudeDir` 时，请使用显式 `/cc-resume list` 与 `/cc-resume import <id>`。默认交互选择器后续的 skill 交接尚未携带该目录。
-- 完整 AgentLoop 契约测试需要匹配的可选 testkit；验证范围与手动发布步骤见[发布准备说明](docs/releases/1.1.0.md)。
+- 完整 AgentLoop 契约测试需要匹配的可选 testkit；1.1.0 的隔离验证为 628 通过、0 失败、2 项能力跳过。
 
 ## [1.0.1] — 2026-11-04
 
@@ -37,7 +62,7 @@
 ## [1.0.0] — 2026-10-30
 
 ### 新增
-- **发布至 DSH 插件市场。** 仓库现托管市场索引 `site/index.json`，由 `.github/workflows/market.yml` 部署到 GitHub Pages。在 DSH 插件市场的「发现」标签页添加索引源 `https://biedongbin.github.io/dsh-claude-compat/index.json`，即可浏览并安装全部版本。`scripts/update-market-index.mjs` 从 npm registry 再生索引（规则与官方生成器一致：未弃用且声明 `dsh.bundle` 的版本）；已列出的版本跨重跑保留，`npm publish` 后重跑并提交即可收录新版。0.9.2 曾打包但从未推送 npm——registry 从 0.9.1 直接跳到 1.0.0。
+- **发布至 DSH 插件市场。** 仓库现托管市场索引 `site/index.json`，由 `.github/workflows/market.yml` 部署到 GitHub Pages。在 DSH 插件市场的「发现」标签页添加索引源 `https://biedongbin.github.io/dsh-claude-compat/index.json`，即可浏览并安装全部版本。`scripts/update-market-index.mjs` 从 npm registry 再生索引（规则与官方生成器一致：未弃用且声明 `dsh.bundle` 的版本）；已列出的版本跨重跑保留，`npm publish` 后重跑并提交即可收录新版。
 
 ## [0.9.2] — 2026-10-28
 
@@ -54,7 +79,7 @@
 - **`/cc-plugin` HELP 文案通篇写 `/plugin`**，与实际技能名 `/cc-plugin` 不一致；已统一，且 Execution 段明确指示模型经 bash 运行 `claude plugin <args>`（`runPluginCommand` 没有 DSH tool 挂载，skill body 是唯一执行通路）。
 
 ### 工具
-- **npm 包只发布运行时脚本**。`files` 此前整目录收录 `scripts/`，把仅维护者使用的工具（`deploy-local.sh` —— checkout→profile 部署，错误提示硬编码 macOS app 路径，别处无意义；`gen-downloads-chart.mjs`）一并带了出去。现改为逐个列举安装后真正需要的四个：`cc-resume.mjs`、`cc-export.mjs`、`zstd-compat.mjs`、`dsh-restart.sh`（`bin` 用）。两个开发脚本仍留在仓库，仅瘦身发布包。
+- **npm 包只发布运行时脚本**。`files` 此前整目录收录 `scripts/`，把开发工具（`deploy-local.sh` —— checkout→profile 部署，错误提示硬编码 macOS app 路径，别处无意义；`gen-downloads-chart.mjs`）一并带了出去。现改为逐个列举安装后真正需要的四个：`cc-resume.mjs`、`cc-export.mjs`、`zstd-compat.mjs`、`dsh-restart.sh`（`bin` 用）。两个开发脚本仍留在仓库，仅瘦身发布包。
 
 ## [0.9.0] — 2026-10-28
 
