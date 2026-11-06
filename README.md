@@ -38,20 +38,25 @@ Your skills show up in the `/` menu, rules inject into new sessions, and `/agent
 
 ---
 
-## 1.1.0 highlights and upgrade
+## 1.2.0: native management and session handoff
 
-- **More configuration sources:** custom Claude roots, relocatable plugin seeds and inline plugins, plus managed/local/project/user MCP definitions and policy.
-- **Broader hook coverage:** 26 of 33 events and five handler types, with native tool-name mapping, failure blocking and bounded UTF-8 output.
-- **Reliable session paths:** `/cc-resume` uses Claude's directory encoder to find transcripts and DSH's different encoder to place imports, including spaces, Unicode and long paths.
+The sidebar Plugins page includes a **Claude Code** tab with installed plugins, discovery and marketplaces, plus conversation history and bridge status. Version 1.2.0 supports **DSH >=0.2.2-rc.1 and <0.3.0**; **Node.js 24** is the recommended, verified runtime.
 
-Before upgrading from 1.0.x:
+- **Manage plugins and marketplaces:** install new plugins, add marketplaces, search their catalogs, and enable, disable, update or uninstall entries. Lists start at 10 items per page, with 10/20/50/100 selectable.
+- **Submit independent operations:** each item has its own queued/running state, result and cancellation. Other items stay usable; writes to the same Claude configuration and cache execute in sequence. Mutations use the Claude CLI in user scope, report real failures and refresh the skill catalog after successful changes. Seed and inline sources are read-only.
+- **Use commands from a blank conversation:** `/cc-plugin` and `/cc-resume` open interactive managers without a model round trip. If the first input is a management command, its result appears above the composer; the regular chat view takes over when the conversation starts.
+- **Read Claude history in DSH:** search and preview sessions, then send only the selected source file's path and a short reading request. DSH reads as needed and summarizes the background, current task state and next-step plan; transcript bodies are not inlined. A management-page click creates a normal DSH conversation in the source project's Workspace. A `/cc-resume` card inside a conversation uses that current session, preserving its messages, directory and model.
+- **Export and refresh:** `/cc-export` uses the Session's effective directory and resolves a real Node interpreter on Desktop. Both reload aliases wait for catalog invalidation and expose failures.
+
+Management pages, commands and the `claude_compat` tool share the operation service. UI operations require the authenticated owner; tool access to user-level Claude configuration and history requires full access or approval. Version changes are recorded in the [1.2.0 changelog](CHANGELOG.md#120--2026-11-06).
+
+### Upgrading existing configurations
 
 1. Give HTTP MCP entries an explicit `"type": "http"` (or `"streamable-http"`). URL-only, SSE and WebSocket entries are skipped with a warning.
 2. Keep `mcpTrustProjectConfig: false` unless you trust the project. Project helpers do not run and credential references stay literal by default; see [MCP servers](#mcp-servers).
 3. Review project hooks before enabling them: there is no workspace-trust prompt. Restart DSH after the update to reload MCP and hooks from the launch workspace.
-4. If a previous session import is absent from DSH, re-import the original Claude session. The corrected directory key applies to new imports; old misplaced logs are not automatically moved or deleted.
 
-Version 1.1.0 is validated against DSH 0.2.1-rc.5 with Desktop Node 24.21.0. Node 22 has a known URL-normalization property-test difference. See the [changelog](CHANGELOG.md) and [release preparation notes](docs/releases/1.1.0.md) for migration and verification details.
+Earlier configuration and legacy-archive migration details are in the [1.1.0 changelog](CHANGELOG.md#110--2026-11-05).
 
 ## What it brings over — at a glance
 
@@ -94,19 +99,19 @@ Installing this plugin adds five native management commands:
 
 | Command | What it does |
 |---|---|
-| `/cc-plugin` | Full Claude Code plugin management: `list`, `install <name>[@marketplace]`, `uninstall`, `enable`, `disable`, `update [name]`, `search <term>`, `marketplace list\|add\|remove\|update`. One-shot syntax `/cc-plugin <name>@<marketplace>` installs directly. Engine: the `claude` CLI when available, otherwise a built-in fallback (direct JSON + git, with timestamped backups of every file it touches). All state stays in Claude-native locations (`~/.claude/plugins`, `~/.claude/settings.json` `enabledPlugins`) so Claude Code and DSH read the same truth. |
-| `/reload-cc-plugins` | Hot-reload the skill catalog: drop cached provider lists and notify observers so newly installed/removed skills appear in the **current session** — no restart, no new session. |
+| `/cc-plugin` | Open the plugin manager, or use `list`, `install <name>[@marketplace]`, `uninstall`, `enable`, `disable`, `update [name]`, `search <term>`, and `marketplace list\|add\|remove\|update`. `/cc-plugin <name>@<marketplace>` installs directly. Changes require the `claude` CLI in user scope; missing CLI, authentication and network errors are reported without direct JSON or git fallback writes. Claude Code and DSH read the same configured plugin registry and settings. |
+| `/reload-cc-plugins` | Refresh the skill catalog in the **current session**, waiting for invalidation to complete and reporting failures. Newly installed or removed skills appear without creating another session. MCP and hook changes still require a DSH restart. |
 | `/reload-skills` | Alias of `/reload-cc-plugins`. |
-| `/cc-export` | Export DSH-native skills (`.dsh/skills`) into Claude Code `.claude/skills/<name>/SKILL.md` with frontmatter preserved. `list` / `export [--overwrite] [--target]`. |
-| `/cc-resume` | List Claude Code conversation sessions for the current project (`~/.claude/projects/`) and import any of them into DSH with full user/assistant/tool history. Imported sessions appear in the DSH session list titled `cc: <preview>` and resume like native ones. `list` / `import <sessionId>` / `--limit-turns N` for huge sessions. |
+| `/cc-export` | List or export DSH-native skills (`.dsh/skills`) to Claude Code `.claude/skills/<name>/SKILL.md`, preserving frontmatter. Uses the Session's effective directory and a real Node interpreter on Desktop. `list` / `export [--overwrite] [--target <directory>]`; relative targets follow the effective directory. |
+| `/cc-resume` | Browse Claude history and hand its background to DSH. A conversation command card continues in its owning DSH session; the management page creates a normal new conversation in the source project's Workspace. `list` / `resume <Claude sessionId> [--cwd source-project] [--limit-turns N]`; `import` aliases `resume`, while `archive` retains the separate legacy archive copy. |
 
 Typical loop: `/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → new skills visible immediately. Plugin-shipped MCP servers still require a DSH restart (process-lifetime mount).
 
-### Session import paths
+### Context handoff and legacy archives
 
-Claude transcripts and DSH logs use different project-directory encodings. The importer reads the configured Claude `projects/` folder and writes to `~/.dsh/sessions/<DSH-project-key>/session-cc-<id>/`; the same DSH key is used for the imported checkmark. Re-running an import refreshes that session in the correct destination.
+One-click continuation locates the configured Claude `projects/` source and submits only its path with a short reading request. DSH reads it as needed and first describes the background, current task state and next-step plan. The plugin does not inline the transcript, scan the whole file or automatically execute historical pending work. Source lookup and the target DSH session identity remain separate; directory changes inside Claude history do not reject handoff.
 
-With an explicit `userClaudeDir` that differs from `CLAUDE_CONFIG_DIR` or the default, use `/cc-resume list` and `/cc-resume import <id>`. The default interactive picker's later skill handoff does not yet carry the explicit directory. Direct CLI usage can pass `--user-claude-dir <dir>` together with `--cwd <project>`.
+The native page and commands honor `userClaudeDir`. Use `/cc-resume resume <id> --cwd <source-project>` to select another source folder while continuing in the invoking DSH session. Explicit `archive` and `sessions.import` remain separate archive operations that preserve existing DSH logs. The standalone CLI is a legacy format utility, and is not used by one-click continuation.
 
 ## Requirements
 
@@ -363,9 +368,9 @@ skillAliases:
 
 ## Troubleshooting
 
-### Direct CLI usage
+### Legacy archive CLI
 
-If a custom host does not expose the native management commands, run the packaged CLI directly. Pass the project and custom Claude directory explicitly when needed:
+The standalone CLI is a legacy archive utility, separate from native file-reference handoff. Pass the project and custom Claude directory explicitly when creating an archive:
 
 ```bash
 node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list --cwd /path/to/project
@@ -384,14 +389,14 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 **Installed a plugin via `/cc-plugin` but its skills don't show.** Run `/reload-cc-plugins`. Still missing → restart DSH (plugin-shipped MCP servers always need a restart).
 
-**`/cc-resume` import fails on compression.** The importer needs the `zstd` binary (macOS: `brew install zstd`; most Linux images ship it).
+**The legacy archive CLI reports a compression error.** That standalone utility requires `zstd` (macOS: `brew install zstd`). Native `/cc-resume` file-reference handoff does not compress the conversation and needs no `zstd` binary.
 
-**`/cc-plugin` reports "claude CLI unavailable".** The fallback engine handles install/enable/disable; for marketplace add/update, install Claude Code (`npm install -g @anthropic-ai/claude-code`) or manage marketplaces from Claude Code directly.
+**`/cc-plugin` reports "claude CLI unavailable".** Install Claude Code (`npm install -g @anthropic-ai/claude-code`) to change plugins or marketplaces. Browsing local catalogs remains available; failed mutations do not fall back to direct registry writes.
 
-## Release notes
+## Changelog
 
-- **[1.1.0 release preparation](docs/releases/1.1.0.md)** — upgrade notes, verification scope and manual npm publication.
-- **[Changelog](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md))** — release history from 0.1.0 to the latest version.
+- **[1.2.0](CHANGELOG.md#120--2026-11-06) ([简体中文](CHANGELOG.zh-CN.md#120--2026-11-06))** — native management, file-reference session handoff and command fixes.
+- **[Full changelog](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md))** — the complete version history.
 
 ## Acknowledgments
 

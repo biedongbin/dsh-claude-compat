@@ -97,18 +97,18 @@ async function runMcpToolHook(ctx, support, hook, payload, { timeoutMs, agent })
     if (missing.length > 0) {
       console.warn(`dsh-claude-compat: mcp_tool hook ${name}: no field of the hook input at ${missing.map((path) => `\${${path}}`).join(', ')}; sent as empty text`);
     }
-    // ToolRuntime.execute takes one call and returns one result. A tool that ignores the signal
-    // must not hold the DSH event, so the guard also ends the wait.
-    const result = await Promise.race([
+    // DSH 0.2.2 executes a batch of wire calls and pairs each settlement by callId.
+    // The timeout also bounds an executor that does not honor cancellation.
+    const batch = await Promise.race([
       ctx.tools.execute({
-        callId,
-        name,
-        arguments: input,
+        calls: [{ type: 'tool-call', id: callId, name, arguments: JSON.stringify(input) }],
         signal: abort.signal,
         ...scope === undefined ? {} : { agent: scope },
       }),
       guard.promise,
     ]);
+    const result = batch.results.find((entry) => entry.callId === callId)?.result;
+    if (!result) return failedRun(`MCP tool ${name}: the executor returned no result for this call`);
     const text = blocksToText(result.content);
     if (result.isError) return failedRun(`MCP tool ${name} failed: ${text}`);
     return { exitCode: 0, stdout: text, failed: false };

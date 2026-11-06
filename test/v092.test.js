@@ -42,22 +42,21 @@ test('registers the five manager commands; reload fires control.invalidate()', a
   assert.equal(invalidated, 2, 'reload-skills is an alias sharing the invalidate path');
 });
 
-test('cc-resume command: empty input → list, pinned to the session cwd', async () => {
+test('cc-resume command: empty input opens a native browser pinned to the session cwd', async () => {
   const { ctx, defs } = fakeCommandHost();
   registerManagerCommands(ctx, {}, () => undefined);
   const empty = mkdtempSync(join(tmpdir(), 'dcc-cmd-resume-'));
   const out = await defs.get('cc-resume').handler({ rawInput: '', ...agentIn(empty) });
   assert.equal(out.kind, 'success');
-  assert.match(out.text, /No Claude sessions found/);
-  assert.ok(out.text.includes(empty), 'script output names the pinned --cwd');
+  assert.deepEqual(JSON.parse(out.text), { ui: 'claude-compat', mode: 'sessions', cwd: empty });
 });
 
-test('cc-plugin command: no args → help text (no claude CLI needed)', async () => {
+test('cc-plugin command: no args opens native plugin controls without running the CLI', async () => {
   const { ctx, defs } = fakeCommandHost();
   registerManagerCommands(ctx, {}, () => undefined);
   const out = await defs.get('cc-plugin').handler({ rawInput: '', ...agentIn('/tmp') });
   assert.equal(out.kind, 'success');
-  assert.match(out.text, /Claude Code Plugin Manager/);
+  assert.deepEqual(JSON.parse(out.text), { ui: 'claude-compat', mode: 'plugins', cwd: '/tmp' });
 });
 
 test('cc-export command: list in a markerless dir uses the cwd (no git required)', async () => {
@@ -79,14 +78,14 @@ test('apply(): wires commands next to the provider; manager skills leave the use
     },
     on: () => () => {},
   };
-  apply(ctx, { enablePlugins: false });
+  apply(ctx, { enablePlugins: false, enableMcp: false, enableHooks: false, enableRules: false });
   assert.equal(defs.size, 5, 'five commands registered through the inject guard');
   const mgr = (await provider.list({ cwd: '/tmp' })).find((c) => c.name === 'cc-plugin');
   assert.equal(mgr.invocation.userInvocable, false, 'human entry moves to the command');
   assert.equal(mgr.invocation.modelInvocable, true, 'model fallback surface stays');
 });
 
-test('cc-resume command: no args → steers an interactive pick into the agent', async () => {
+test('cc-resume command: native picker avoids steering and explicit list uses the same service', async () => {
   // One fake Claude project under a sandbox HOME; os.homedir() reads $HOME.
   const home = mkdtempSync(join(tmpdir(), 'dcc-home-'));
   const pickCwd = '/tmp/dcc-pick';
@@ -108,20 +107,14 @@ test('cc-resume command: no args → steers an interactive pick into the agent',
       signal: sig(),
     });
     assert.equal(out.kind, 'success');
-    assert.match(out.text, /Interactive pick started — 1 candidate/);
-    assert.equal(steered.length, 1, 'exactly one steering message');
-    const text = steered[0].content[0].text;
-    assert.ok(text.includes(sid), 'full session id travels in the message');
-    assert.match(text, /恢复 Claude Code 会话/, 'presentable request header, not internal mechanics');
-    assert.match(text, /帮我修登录 bug/, 'session preview included');
-    assert.match(text, /cc-resume skill 的 Interactive flow/, 'procedure deferred to the skill playbook');
-    assert.doesNotMatch(text, /bash|node\s|ask_user_question/, 'no tool or command internals leak into the bubble');
+    assert.deepEqual(JSON.parse(out.text), { ui: 'claude-compat', mode: 'sessions', cwd: pickCwd });
+    assert.equal(steered.length, 0, 'the native browser never steers or starts a model turn');
     // explicit 'list' stays the static card path
     const listing = await defs.get('cc-resume').handler({
       rawInput: 'list', agent: { session: { header: { cwd: pickCwd } }, steer: () => {} }, signal: sig(),
     });
     assert.equal(listing.kind, 'success');
-    assert.match(listing.text, /1 Claude sessions/);
+    assert.equal(JSON.parse(listing.text).items[0].id, sid);
     });
   } finally {
     process.env.HOME = prevHome;
@@ -134,7 +127,7 @@ test('apply() on a host without ctx.inject: compatibility no-op, skills still wo
     skills: { registerProvider: (f) => { provider = f({ signal: sig(), invalidate: () => {} }); return () => {}; } },
     on: () => () => {},
   };
-  apply(ctx, { enablePlugins: false }); // must not throw
+  apply(ctx, { enablePlugins: false, enableMcp: false, enableHooks: false, enableRules: false }); // must not throw
   const list = await provider.list({ cwd: '/tmp' });
   assert.ok(list.some((c) => c.name === 'cc-plugin'));
 });

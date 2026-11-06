@@ -38,20 +38,25 @@ dsh web
 
 ---
 
-## 1.1.0 更新与升级
+## 1.2.0：原生管理与会话接续
 
-- **更多配置来源**：支持自定义 Claude 根目录、可搬移插件种子、内联插件，以及 managed／本地／项目／用户 MCP 定义和策略。
-- **更完整的 hooks**：支持 33 个事件中的 26 个、五类处理器，补齐原生工具名映射、失败拦截和有上限的 UTF-8 输出。
-- **正确的会话路径**：`/cc-resume` 分别使用 Claude 编码查找源会话、使用 DSH 编码写入导入结果，覆盖空格、Unicode 与长路径。
+侧栏「插件」中的 **Claude Code** 标签页提供已安装插件、发现插件、插件市场三个管理页，以及历史会话和桥接状态。1.2.0 支持 **DSH >=0.2.2-rc.1 且 <0.3.0**，推荐使用已验证的 **Node.js 24**。
 
-从 1.0.x 升级前：
+- **管理插件与市场**：可安装新插件、添加市场、搜索目录，以及启用、禁用、更新或卸载条目。列表默认每页 10 条，可选 10／20／50／100 条。
+- **逐项提交操作**：每项独立显示排队、执行、结果和取消，其他条目仍可操作；写入同一份 Claude 配置和缓存的任务依次执行。变更通过 Claude CLI 的用户作用域完成，失败原因会显示，成功后刷新技能目录。种子和内联来源只读。
+- **空白会话直接使用命令**：`/cc-plugin`、`/cc-resume` 无参数打开交互管理界面，不经过模型。首条输入就是管理命令时，结果显示在输入框上方；开始正常对话后由聊天视图接管。
+- **交给 DSH 阅读历史**：会话可搜索和预览，一键恢复仅发送所选源文件路径和简短阅读指令。DSH 按需读取并简述背景、当前任务状态和下一步计划，不内联历史正文。管理页操作会在源项目工作区新建普通 DSH 会话；对话内的 `/cc-resume` 卡片使用当前会话，保留已有对话、目录和模型。
+- **导出与刷新**：`/cc-export` 使用会话的有效工作目录，并在桌面版中解析真正的 Node 解释器；两个刷新命令都会等待目录刷新完成，并显示失败原因。
+
+管理页、命令和 `claude_compat` 工具共用操作服务。界面操作要求已认证的所有者；工具访问用户级 Claude 配置和历史需要完整权限或当次批准。版本变更统一记录在 [1.2.0 更新日志](CHANGELOG.zh-CN.md#120--2026-11-06)。
+
+### 现有配置升级
 
 1. HTTP MCP 条目显式写 `"type": "http"`（或 `"streamable-http"`）。只有 URL、SSE 或 WebSocket 的条目会告警并跳过。
 2. 除非信任项目，否则保持 `mcpTrustProjectConfig: false`。默认不运行项目 helper，凭据变量保持字面文本；详见 [MCP 服务器](#mcp-服务器)。
 3. 启用前检查项目 hooks：插件没有工作区信任提示。更新后重启 DSH，从启动工作区重新加载 MCP 与 hooks。
-4. 旧导入在 DSH 中找不到时，重新导入原 Claude 会话。修正后的目录 key 用于新导入；不会自动移动或删除旧的错位日志。
 
-1.1.0 的验证环境为 DSH 0.2.1-rc.5 与 Desktop 自带 Node 24.21.0。Node 22 的 URL 归一化属性测试存在已知差异。迁移与验证详情见[更新日志](CHANGELOG.zh-CN.md)和[发布准备说明](docs/releases/1.1.0.md)。
+更早的配置与旧式归档迁移说明见 [1.1.0 更新日志](CHANGELOG.zh-CN.md#110--2026-11-05)。
 
 ## 一键带过来的东西
 
@@ -94,19 +99,19 @@ dsh web
 
 | 命令 | 作用 |
 |---|---|
-| `/cc-plugin` | 完整 Claude Code 插件管理：`list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。一键语法 `/cc-plugin <名>@<市场>` 直接安装。引擎：有 `claude` CLI 时优先调度，否则内置降级（直接操作 JSON + git，被改文件自动时间戳备份）。状态全部落在 Claude 原生位置（`~/.claude/plugins`、`~/.claude/settings.json` 的 `enabledPlugins`），Claude Code 与 DSH 读同一份真相。 |
-| `/reload-cc-plugins` | 热重载 skill catalog：清缓存并广播变更，新装/卸载的插件技能**当前会话**立即可见 —— 无需重启、无需新会话。 |
+| `/cc-plugin` | 打开插件管理界面，或使用 `list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。`/cc-plugin <名>@<市场>` 可直接安装。变更要求 `claude` CLI，并使用用户作用域；CLI 缺失、认证或网络错误会明确报告，不会降级为直接写 JSON 或 git 文件。Claude Code 与 DSH 读取同一份配置的插件注册表和设置。 |
+| `/reload-cc-plugins` | 刷新**当前会话**的技能目录，等待刷新完成并报告失败。新增或移除的技能无需新建会话即可出现；MCP 与 hook 变更仍需重启 DSH。 |
 | `/reload-skills` | `/reload-cc-plugins` 的别名。 |
-| `/cc-export` | 把 DSH 原生 skill（`.dsh/skills`）导出为 Claude Code `.claude/skills/<name>/SKILL.md`，frontmatter 保留。`list` / `export [--overwrite] [--target]`。 |
-| `/cc-resume` | 列出当前项目的 Claude Code 会话（`~/.claude/projects/`），并把任意一个导入 DSH —— 完整 user/assistant/工具历史。导入会话以 `cc: <预览>` 标题出现在 DSH 会话列表，可像原生会话一样恢复。`list` / `import <sessionId>` / `--limit-turns N`（大会话只导最近 N 轮）。 |
+| `/cc-export` | 列出或导出 DSH 原生 skill（`.dsh/skills`）到 Claude Code `.claude/skills/<name>/SKILL.md`，保留 frontmatter。使用会话的有效工作目录，桌面版通过真正的 Node 解释器执行。`list` / `export [--overwrite] [--target <目录>]`；相对目标路径按有效工作目录解析。 |
+| `/cc-resume` | 浏览 Claude 历史并把背景交给 DSH 接续。对话内的卡片直接续接当前 DSH 会话；管理页的一键恢复在源项目工作区新建普通 DSH 会话。`list` / `resume <Claude sessionId> [--cwd 源目录] [--limit-turns N]`；`import` 是 `resume` 的别名，`archive` 才是旧式历史归档副本。 |
 
 典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
 
-### 会话导入路径
+### 上下文接续与旧式归档
 
-Claude 源会话与 DSH 日志使用不同的项目目录编码。导入器读取配置的 Claude `projects/` 目录，写入 `~/.dsh/sessions/<DSH-project-key>/session-cc-<id>/`；已导入勾选状态使用同一个 DSH key。重复导入会在正确的目标目录刷新该会话。
+一键恢复只定位配置的 Claude `projects/` 源文件，并发送文件路径及简短的阅读总结指令。DSH 按需读取文件，先概述背景、当前任务状态和下一步计划；插件不内联正文、不扫描全文，也不自动执行历史待办。源文件查找位置和目标 DSH 会话身份分别传递，Claude 历史中途切换目录不会阻止接续。
 
-显式 `userClaudeDir` 与 `CLAUDE_CONFIG_DIR` 或默认目录不同时，请使用 `/cc-resume list` 和 `/cc-resume import <id>`。默认交互选择器后续的 skill 交接尚未携带显式目录。直接使用 CLI 时可同时传入 `--user-claude-dir <dir>` 与 `--cwd <project>`。
+原生界面与命令使用配置的 `userClaudeDir`。可用 `/cc-resume resume <id> --cwd <源项目>` 选择其他项目历史，同时在发起命令的 DSH 会话继续。显式 `archive` 和 `sessions.import` 仍保留为独立归档操作，并保留已有 DSH 日志。独立 CLI 是旧格式工具，不参与一键恢复。
 
 ## 环境要求
 
@@ -361,9 +366,9 @@ skillAliases:
 
 ## 故障排查
 
-### 直接使用 CLI
+### 旧式归档 CLI
 
-自定义宿主未提供原生管理命令时，可直接调用安装包中的 CLI。需要时显式传入项目与自定义 Claude 配置目录：
+独立 CLI 用于旧式历史归档，与原生文件引用接续是两条路径。创建归档时显式传入项目和自定义 Claude 配置目录：
 
 ```bash
 node node_modules/dsh-claude-compat/scripts/cc-resume.mjs list --cwd /path/to/project
@@ -382,14 +387,14 @@ bash scripts/dsh-restart.sh --no-patch   # 跳过 prompt 补丁，只重启
 
 **`/cc-plugin` 装了插件但技能没出现。** 先 `/reload-cc-plugins`。仍没有 → 重启 DSH（插件自带 MCP 服务器必须重启）。
 
-**`/cc-resume` 导入时报压缩错误。** 导入器需要 `zstd` 二进制（macOS：`brew install zstd`；多数 Linux 镜像自带）。
+**旧式归档 CLI 报压缩错误。** 该独立工具需要 `zstd`（macOS：`brew install zstd`）。原生 `/cc-resume` 的文件引用接续不压缩会话，无需 `zstd` 二进制。
 
-**`/cc-plugin` 提示 claude CLI 不可用。** 降级引擎已覆盖 install/enable/disable；marketplace add/update 需要安装 Claude Code（`npm install -g @anthropic-ai/claude-code`）或直接在 Claude Code 里管理市场。
+**`/cc-plugin` 提示 claude CLI 不可用。** 安装 Claude Code（`npm install -g @anthropic-ai/claude-code`）后再变更插件或市场。仍可浏览本地目录；变更失败不会降级为直接修改注册表。
 
-## Release notes
+## 更新日志
 
-- **[1.1.0 发布准备](docs/releases/1.1.0.md)** —— 升级须知、验证范围与手动 npm 发布步骤。
-- **[更新日志](CHANGELOG.zh-CN.md)（[English](CHANGELOG.md)）** — 0.1.0 至最新版本的完整发布历史。
+- **[1.2.0](CHANGELOG.zh-CN.md#120--2026-11-06)（[English](CHANGELOG.md#120--2026-11-06)）** — 原生管理、文件引用会话接续与命令修复。
+- **[完整更新日志](CHANGELOG.zh-CN.md)（[English](CHANGELOG.md)）** — 全部版本历史。
 
 ## 社区鸣谢
 

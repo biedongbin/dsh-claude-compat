@@ -20,13 +20,14 @@ async function load(name) {
 
 const cordis = await load('@deepseek-ai/cordis');
 const toolsPkg = await load('@deepseek-ai/dsh-tools');
+const executorPkg = await load('@deepseek-ai/dsh-tool-executor-native');
 const scopePkg = await load('@deepseek-ai/dsh-scope');
 const promptPkg = await load('@deepseek-ai/dsh-system-prompt');
 const testkit = await load('@deepseek-ai/dsh-agent-loop-testkit');
 const llmPkg = await load('@deepseek-ai/dsh-llm');
 const sessionPkg = await load('@deepseek-ai/dsh-session');
 
-const hasTools = [cordis, toolsPkg, scopePkg, promptPkg].every(Boolean);
+const hasTools = [cordis, toolsPkg, executorPkg, scopePkg, promptPkg].every(Boolean);
 const hasLoop = hasTools && [testkit, llmPkg, sessionPkg].every(Boolean);
 const needs = (ok, why) => (ok ? {} : { skip: `${why} is not installed` });
 
@@ -36,6 +37,8 @@ async function mountTools() {
   const ctx = new cordis.Context();
   await ctx.plugin(promptPkg.default, {});
   await ctx.plugin(toolsPkg.default);
+  // DSH 0.2.2 separates tool registration from its selected executor.
+  await ctx.plugin(executorPkg);
   return ctx;
 }
 

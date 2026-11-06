@@ -68,16 +68,16 @@ test('runPluginCommand: help with no args; dispatches via injected CLI dep', asy
   await runPluginCommand('enable foo', { claude: fake });
   await runPluginCommand('disable foo', { claude: fake });
   await runPluginCommand('update foo', { claude: fake });
-  await runPluginCommand('update', { claude: fake });
+  assert.match(await runPluginCommand('update', { claude: fake }), /update requires target/);
   await runPluginCommand('marketplace list', { claude: fake });
   await runPluginCommand('marketplace add owner/repo', { claude: fake });
   await runPluginCommand('marketplace remove official', { claude: fake });
   await runPluginCommand('marketplace update', { claude: fake });
   await runPluginCommand('foo@bar', { claude: fake }); // one-shot install syntax
   assert.deepEqual(calls, [
-    'install foo@bar', 'uninstall foo', 'enable foo', 'disable foo',
-    'update foo', 'update', 'marketplace list', 'marketplace add owner/repo',
-    'marketplace remove official', 'marketplace update', 'install foo@bar',
+    'install foo@bar --scope user', 'uninstall foo --scope user', 'enable foo --scope user', 'disable foo --scope user',
+    'update foo --scope user', 'marketplace list', 'marketplace add owner/repo',
+    'marketplace remove official', 'marketplace update', 'install foo@bar --scope user',
   ]);
 });
 

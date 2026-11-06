@@ -1,24 +1,33 @@
 {
   "name": "dsh-claude-compat",
-  "version": "1.1.0",
-  "description": "DeepSeek Harness plugin: bridge Claude Code's .claude/ directories (project and ~/.claude: skills, commands, rules) into DSH native skill registry and message-stream rules injection.",
+  "version": "1.2.0",
+  "description": "DeepSeek Harness plugin: reuse Claude Code configuration, manage plugins and marketplaces, and continue Claude sessions through native DSH controls.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-chat", "@deepseek-ai/dsh-client-ui-workspace"]
     }
   },
   "files": [
     "src",
+    "locale/*.json",
+    "icon.svg",
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md",
     "CHANGELOG.zh-CN.md",
-    "docs/releases",
     "cordis.patch.yml",
     "scripts/cc-resume.mjs",
     "scripts/cc-export.mjs",
@@ -43,6 +52,9 @@
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/dsh-skill": "*",
     "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session": ">=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-sandbox": ">=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.2-rc.1 <0.3.0",
     "@deepseek-ai/schemastery": "*"
   },
   "peerDependenciesMeta": {
@@ -59,11 +71,26 @@
       "optional": true
     }
   },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-skill": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-executor-native": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-sandbox": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "react": "18.3.1",
+    "react-test-renderer": "18.3.1"
+  },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "scripts": {
-    "check": "node --check src/index.js && node --check src/lib.js && node --check src/mcp.js && node --check src/mcp-sources.js && node --check src/mcp-policy.js && node --check src/mcp-vars.js && node --check src/hooks.js && node --check src/agents.js && node --check src/plugins.js && node --check src/aliases.js && node --check src/commands.js && node --check src/hook-spec.js && node --check src/hook-events.js && node --check src/hook-output.js && node --check src/hook-handlers.js && node --check src/hook-engine.js && node --check src/hook-support.js && node --check src/hook-bridge-tools.js && node --check src/hook-bridge-session.js && node --check src/hook-bridge-permissions.js && node --check src/hook-bridge-tasks.js && node --check src/hook-bridge-messages.js && node --check src/hook-bridge-agent.js && node --check src/hook-bridge-notify.js && node --check src/hook-watch.js && node --check src/hook-bridge-feed.js && node --check src/hook-bridge-files.js && node --check src/hook-bridge-config.js && node --check src/hook-bridge-model.js && node --check src/hook-bridge-team.js && node --check src/hook-bridge-instructions.js && node --check src/hook-verdict.js && node --check src/hook-runners-model.js && node --test test/self-check.test.js test/v040.test.js test/v050.test.js test/v060.test.js test/v070.test.js test/v080.test.js test/v090.test.js test/v092.test.js test/v100.test.js test/location-env.test.js test/hook-spec.test.js test/hook-output.test.js test/hook-handlers.test.js test/hook-bridges.test.js test/hook-runtime.test.js test/hook-permissions.test.js test/hook-tasks.test.js test/hook-agent.test.js test/hook-matcher.test.js test/hook-watch.test.js test/hook-session-feed.test.js test/hook-files.test.js test/hook-verdict.test.js test/hook-runners.test.js test/hook-hardening.test.js test/hook-properties.test.js test/mcp-policy.test.js test/mcp-sources.test.js test/mcp-failures.test.js test/mcp-properties.test.js test/mcp-plugins.test.js test/session-paths.test.js"
+    "check": "node --check src/client.js && node --check src/compat-service.js && node --check src/session-import.js && node --check src/session-handoff.js && node --check src/index.js && node --check src/lib.js && node --check src/mcp.js && node --check src/mcp-sources.js && node --check src/mcp-policy.js && node --check src/mcp-vars.js && node --check src/hooks.js && node --check src/agents.js && node --check src/plugins.js && node --check src/aliases.js && node --check src/commands.js && node --check src/hook-spec.js && node --check src/hook-events.js && node --check src/hook-output.js && node --check src/hook-handlers.js && node --check src/hook-engine.js && node --check src/hook-support.js && node --check src/hook-bridge-tools.js && node --check src/hook-bridge-session.js && node --check src/hook-bridge-permissions.js && node --check src/hook-bridge-tasks.js && node --check src/hook-bridge-messages.js && node --check src/hook-bridge-agent.js && node --check src/hook-bridge-notify.js && node --check src/hook-watch.js && node --check src/hook-bridge-feed.js && node --check src/hook-bridge-files.js && node --check src/hook-bridge-config.js && node --check src/hook-bridge-model.js && node --check src/hook-bridge-team.js && node --check src/hook-bridge-instructions.js && node --check src/hook-verdict.js && node --check src/hook-runners-model.js && node --test test/self-check.test.js test/v040.test.js test/v050.test.js test/v060.test.js test/v070.test.js test/v080.test.js test/v090.test.js test/v092.test.js test/v100.test.js test/location-env.test.js test/hook-spec.test.js test/hook-output.test.js test/hook-handlers.test.js test/hook-bridges.test.js test/hook-runtime.test.js test/hook-permissions.test.js test/hook-tasks.test.js test/hook-agent.test.js test/hook-matcher.test.js test/hook-watch.test.js test/hook-session-feed.test.js test/hook-files.test.js test/hook-verdict.test.js test/hook-runners.test.js test/hook-hardening.test.js test/hook-properties.test.js test/mcp-policy.test.js test/mcp-sources.test.js test/mcp-failures.test.js test/mcp-properties.test.js test/mcp-plugins.test.js test/session-paths.test.js test/native-manager.test.js test/plugin-operations.test.js test/session-import.test.js test/rpc-transport.test.js test/job-queue.test.js test/client-operations.test.js test/session-handoff.test.js test/handoff-context.test.js test/handoff-integration.test.js test/first-command.test.js test/manager-commands.test.js"
   },
   "bin": {
     "dsh-claude-compat-restart": "scripts/dsh-restart.sh"

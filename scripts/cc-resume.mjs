@@ -27,7 +27,7 @@
 // DSH session list. Idempotent: importing twice reuses the same target dir
 // (events are truncated and rewritten).
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { claudeProjectsDir, projectKey, resolveUserClaudeDir } from '../src/lib.js';
 import { join, basename } from 'node:path';
@@ -179,7 +179,8 @@ export function buildDshEvents(parsed, { limitTurns } = {}) {
 export function writeDshSession(sessionDir, id, cwd, events) {
   mkdirSync(sessionDir, { recursive: true });
   const logPath = join(sessionDir, 'session.jsonl.zstd');
-  rmSync(logPath, { force: true });
+  // Never rewrite an imported log: it may already contain new DSH conversation.
+  if (existsSync(logPath)) return logPath;
   const header = {
     type: 'session',
     version: 0,
@@ -191,7 +192,8 @@ export function writeDshSession(sessionDir, id, cwd, events) {
   };
   const headerLine = JSON.stringify(header) + '\n';
   const body = events.map((e) => JSON.stringify(e)).join('\n') + (events.length ? '\n' : '');
-  writeFileSync(logPath, zstdFramesSync(headerLine, body));
+  try { writeFileSync(logPath, zstdFramesSync(headerLine, body), { flag: 'wx' }); }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
   return logPath;
 }
 

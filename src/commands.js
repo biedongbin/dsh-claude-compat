@@ -17,11 +17,10 @@ import { execFile } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
-import { runPluginCommand } from './plugin-manager.js';
-import { listClaudeSessions } from '../scripts/cc-resume.mjs';
+import { createCompatibilityService } from './compat-service.js';
 
 const execFileAsync = promisify(execFile);
+const serviceOf = (ctx, name) => typeof ctx.get === 'function' ? ctx.get(name) : ctx[name];
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -35,15 +34,20 @@ function clip(text) {
 }
 
 /** Run one of this package's CLI scripts as `node scripts/<name> <args>`. */
-async function runScript(script, rawArgs, { cwd, signal, timeoutMs = 120_000 }) {
-  const args = rawArgs.filter(Boolean);
+async function runScript(script, rawArgs, { ctx, cwd, signal, timeoutMs = 120_000 }) {
+  const args = [...rawArgs];
   // The host process cwd is not the session cwd — always pin --cwd unless the
   // user passed one explicitly (both scripts treat it as an override).
   if (!args.includes('--cwd')) args.push('--cwd', cwd);
   try {
+    // Desktop's process.execPath is Electron, not a Node script interpreter.
+    const executable = process.versions.electron
+      ? await serviceOf(ctx, 'subprocess')?.resolveExecutable('node', undefined, signal)
+      : process.execPath;
+    if (!executable) throw new Error('A Node executable is required to export skills.');
     const { stdout, stderr } = await execFileAsync(
-      process.execPath, [join(PLUGIN_ROOT, 'scripts', script), ...args],
-      { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', signal });
+      executable, [join(PLUGIN_ROOT, 'scripts', script), ...args],
+      { cwd, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, encoding: 'utf8', signal });
     return { kind: 'success', text: clip(`${stdout}${stderr ? `\n${stderr}` : ''}`) };
   } catch (error) {
     if (error?.killed || error?.name === 'AbortError') {
@@ -59,15 +63,15 @@ function invocationCwd(agent) {
 }
 
 function splitArgs(rawInput) {
-  return String(rawInput ?? '').trim().split(/\s+/).filter(Boolean);
+  return [...String(rawInput ?? '').matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((match) => match[1] ?? match[2] ?? match[3]);
 }
 
 /** Session-cwd-pinned passthrough to a CLI script. Empty input → `list`. */
-function scriptHandler(script, { timeoutMs } = {}) {
+function scriptHandler(script, ctx, cwdFor, { timeoutMs } = {}) {
   return async ({ agent, rawInput, signal }) => {
     const args = splitArgs(rawInput);
     return runScript(script, args.length === 0 ? ['list'] : args, {
-      cwd: invocationCwd(agent), signal, timeoutMs,
+      ctx, cwd: cwdFor(agent), signal, timeoutMs,
     });
   };
 }
@@ -85,84 +89,68 @@ const RELOAD_DONE = [
  * `getProvider` lazily resolves the skill provider (for cache invalidation)
  * because commands may register before the provider factory has run.
  */
-export function registerManagerCommands(ctx, config, getProvider) {
-  const userDirArgs = config.userClaudeDir ? ['--user-claude-dir', config.userClaudeDir] : [];
-  try {
-    ctx.inject(['commands'], (commandCtx) => {
+export function registerManagerCommands(ctx, config, getProvider, manager) {
+  const service = manager ?? createCompatibilityService(ctx, config, () => getProvider()?.control?.invalidate());
+  const cwdFor = (agent) => (agent?.session ? serviceOf(ctx, 'workingDirectory')?.get(agent.session) : undefined) ?? invocationCwd(agent);
+  const surface = (mode, cwd, targetSessionId) => ({ kind: 'success', text: JSON.stringify({ ui: 'claude-compat', mode, cwd,
+    ...(mode === 'sessions' && targetSessionId ? { targetSessionId } : {}) }) });
+  const resultOf = (result) => ({ kind: result.ok === false ? 'error' : 'success', text: clip(JSON.stringify(result)) });
+  if (typeof ctx.inject !== 'function') return;
+  ctx.inject(['commands'], (commandCtx) => {
       const reloadHandler = async () => {
-        try { getProvider()?.control?.invalidate?.(); } catch { /* best-effort */ }
+        const provider = getProvider();
+        if (typeof provider?.control?.invalidate !== 'function') throw new Error('The Claude skill provider is unavailable; skills may be disabled.');
+        await provider.control.invalidate();
         return { kind: 'success', text: RELOAD_DONE };
       };
       const defs = [
         {
           name: 'cc-resume',
-          description: 'Import a Claude Code session into DSH — interactive picker by default',
-          input: { hint: '[pick | list | import <sessionId>] — default: interactive picker in chat' },
-          // No args → Claude-Code-/resume-style flow: the command plane cannot
-          // host interaction (static text card only), but a command producer
-          // may steer the receiving Agent (the dsh-plan-mode pattern). The
-          // handler lists sessions host-side, then steers ONE user message
-          // that directs the agent to present the candidates as clickable
-          // ask-options and run the import itself.
+          description: 'Browse Claude Code history and ask the current DSH conversation to read its file and summarize background, task state and next steps',
+          input: { hint: '[list | resume <Claude sessionId> [--cwd path] [--limit-turns N] | archive <sessionId>] — no arguments opens the session browser' },
           handler: async ({ agent, rawInput, signal }) => {
             const args = splitArgs(rawInput);
-            if (args[0] === 'list' || args[0] === 'import') {
-              return runScript('cc-resume.mjs', [...args, ...userDirArgs], { cwd: invocationCwd(agent), signal, timeoutMs: 300_000 });
-            }
-            const cwd = invocationCwd(agent);
-            let sessions = [];
-            try { sessions = listClaudeSessions(cwd, 12, config.userClaudeDir); } catch { /* no claude dir */ }
-            if (sessions.length === 0) {
-              return runScript('cc-resume.mjs', ['list', ...userDirArgs], { cwd, signal });
-            }
-            const two = (n) => String(n).padStart(2, '0');
-            const rows = sessions.map((s, i) => {
-              const d = s.createdAt ? new Date(s.createdAt) : null;
-              const when = d ? `${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}` : '?';
-              return `${i + 1}. ${s.id}  ${when}  ${s.messages}msg  ${s.title}${s.imported ? ' ✓imported' : ''}`;
-            }).join('\n');
-            // The steered message IS visible as a user bubble — keep it
-            // presentable: candidate data + one line handing off to the
-            // cc-resume skill, which carries the full interactive playbook
-            // (ask picker → import → guidance). No tool names or commands.
-            const text = [
-              `恢复 Claude Code 会话 — ${cwd} 最近 ${sessions.length} 条候选：`,
-              '',
-              rows,
-              '',
-              '（请按 cc-resume skill 的 Interactive flow 处理）',
-            ].join('\n');
+            const cwd = cwdFor(agent);
+            const targetSessionId = agent?.id ?? agent?.session?.id;
+            if (!args.length || args[0] === 'pick') return surface('sessions', cwd, targetSessionId);
             try {
-              agent.steer(createUserMessage({
-                content: [{ type: 'text', text }],
-                source: { kind: 'user' },
-              }));
-            } catch (error) {
-              return { kind: 'error', text: `interactive pick failed to start: ${error?.message ?? error} — use /cc-resume list instead` };
-            }
-            return { kind: 'success', text: `Interactive pick started — ${sessions.length} candidate sessions, choose in chat.` };
+              const sourceAt = args.indexOf('--cwd');
+              const sourceCwd = sourceAt >= 0 ? args[sourceAt + 1] : cwd;
+              if (args[0] === 'list') return resultOf(await service.execute({ action: 'sessions.list', cwd: sourceCwd, limit: 10 }, signal));
+              if (!['resume', 'import', 'archive'].includes(args[0]) || !args[1]) throw new Error('Use /cc-resume, /cc-resume list or /cc-resume resume <full Claude session id>.');
+              const archive = args[0] === 'archive';
+              if (!archive && !targetSessionId) throw new Error('The current DSH conversation could not be identified.');
+              const at = args.indexOf('--limit-turns');
+              const request = { action: archive ? 'sessions.import' : 'sessions.resume', cwd: sourceCwd, sessionId: args[1],
+                ...(at >= 0 ? { limitTurns: Number(args[at + 1]) } : {}),
+                ...(archive ? { newSnapshot: args.includes('--new-snapshot') } : { targetSessionId }) };
+              return resultOf(await service.execute(request, signal));
+            } catch (error) { return { kind: 'error', text: error.message }; }
           },
         },
         {
           name: 'cc-plugin',
           description: 'Manage Claude Code plugins and marketplaces',
           input: { hint: '[<name>[@marketplace]] [install|uninstall|enable|disable|update|search|marketplace ...]' },
-          handler: async ({ rawInput }) => {
-            // runPluginCommand owns its timeouts (claude CLI 120s, marketplace
-            // ops 300s); abort merely stops the UI from awaiting.
+          handler: async ({ agent, rawInput, signal }) => {
+            const args = splitArgs(rawInput);
+            const cwd = cwdFor(agent);
+            if (!args.length) return surface('plugins', cwd);
+            let [action, ...rest] = args;
+            if (action === 'remove') action = 'uninstall';
+            if (action === 'marketplace') { const [sub, ...tail] = rest; action = `marketplace-${sub === 'rm' ? 'remove' : sub}`; rest = tail; }
+            else if (!['list', 'search', 'install', 'uninstall', 'enable', 'disable', 'update'].includes(action)) { rest = [action, ...rest]; action = 'install'; }
             try {
-              const text = await runPluginCommand(String(rawInput ?? ''), { config });
-              return { kind: 'success', text: clip(text) };
-            } catch (error) {
-              return { kind: 'error', text: clip(error?.message ?? String(error)) };
-            }
+              return resultOf(await service.execute({ action: `plugins.${action}`, cwd,
+                ...(action === 'search' ? { query: rest.join(' ') } : rest.length ? { target: rest.join(' ') } : {}) }, signal));
+            } catch (error) { return { kind: 'error', text: error.message }; }
           },
         },
         {
           name: 'cc-export',
           description: 'Export DSH-native skills into Claude Code .claude/skills format',
           input: { hint: '[list|export] [--target <dir>] [--overwrite]' },
-          handler: scriptHandler('cc-export.mjs'),
+          handler: scriptHandler('cc-export.mjs', ctx, cwdFor),
         },
         {
           name: 'reload-cc-plugins',
@@ -177,10 +165,11 @@ export function registerManagerCommands(ctx, config, getProvider) {
           handler: reloadHandler,
         },
       ];
-      for (const definition of defs) commandCtx.commands.register(definition);
-    });
-  } catch {
-    // Host predates ctx.inject or the command service — the manager skills
-    // remain the fallback path; stay silent, this is a compatibility no-op.
-  }
+      for (const definition of defs) commandCtx.commands.register({ ...definition,
+        async handler(invocation) {
+          try { return await definition.handler(invocation); }
+          catch (error) { return { kind: 'error', text: clip(error?.message ?? String(error)) }; }
+        },
+      });
+  });
 }

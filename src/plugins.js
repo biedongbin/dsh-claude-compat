@@ -20,6 +20,7 @@ import {
   envPathList,
   envPluginDirs,
   resolveClaudePluginsRoot,
+  resolveUserClaudeDir,
   parseFrontmatter,
   stringField,
 } from './lib.js';
@@ -30,7 +31,9 @@ import { resolveCandidateName, warnUnmapped } from './aliases.js';
 // CLAUDE_CODE_PLUGIN_SEED_DIR roots (the first root that holds a plugin wins),
 // and the CLAUDE_CODE_PLUGIN_DIRS plugin directories. An inline plugin replaces
 // an installed plugin with the same manifest name, as a whole.
-export function readInstalledClaudePlugins(pluginsRoot, userDir) {
+export function readInstalledClaudePlugins(pluginsRoot, userDir, { includeDisabled = false } = {}) {
+  const enabled = readPluginEnablement(userDir);
+  if (enabled === undefined) return [];
   const primary = resolveClaudePluginsRoot(pluginsRoot, userDir);
   const installed = [
     ...readInstalledFile(primary, { missingIsFine: true }),
@@ -43,18 +46,50 @@ export function readInstalledClaudePlugins(pluginsRoot, userDir) {
   const inline = dirs.map(inlinePlugin).filter(Boolean);
   const inlineByName = new Map(inline.map((plugin) => [plugin.name, plugin]));
   const byKey = new Map();
+  const disabledInlineNames = new Set();
   for (const plugin of installed) {
+    // Resolve source precedence before filtering: a disabled primary entry
+    // must not reveal the same key from a seed root.
+    if (byKey.has(plugin.key)) continue;
     const replacement = inlineByName.get(manifestName(plugin));
     if (replacement !== undefined) {
+      if (enabled[plugin.key] === false) disabledInlineNames.add(replacement.name);
       warnOnce(`${replacement.installPath} from CLAUDE_CODE_PLUGIN_DIRS replaces installed plugin ${plugin.key} (${plugin.installPath})`);
+      byKey.set(plugin.key, null);
       continue;
     }
-    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+    byKey.set(plugin.key, { ...plugin, enabled: enabled[plugin.key] !== false });
   }
   for (const plugin of inline) {
-    if (!byKey.has(plugin.key)) byKey.set(plugin.key, plugin);
+    if (!byKey.has(plugin.key)) {
+      const active = Object.hasOwn(enabled, plugin.key)
+        ? enabled[plugin.key] : !disabledInlineNames.has(plugin.name);
+      byKey.set(plugin.key, { ...plugin, enabled: active });
+    }
   }
-  return [...byKey.values()];
+  return [...byKey.values()].filter((plugin) => plugin !== null && (includeDisabled || plugin.enabled));
+}
+
+// Missing settings keep the historical default. Unreadable settings never
+// silently turn a previously disabled plugin back on.
+function readPluginEnablement(userDir) {
+  const path = join(resolveUserClaudeDir(userDir), 'settings.json');
+  try {
+    const settings = JSON.parse(claReadSync(path));
+    if (!isObject(settings) || (settings.enabledPlugins !== undefined && !isObject(settings.enabledPlugins))) {
+      throw new Error('settings and enabledPlugins must be objects');
+    }
+    const enabled = Object.create(null);
+    for (const [key, value] of Object.entries(settings.enabledPlugins ?? {})) {
+      enabled[key] = value === true;
+      if (typeof value !== 'boolean') warnOnce(`${path}: enabledPlugins.${key} must be boolean; this plugin is disabled`);
+    }
+    return enabled;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return Object.create(null);
+    warnOnce(`cannot read plugin enablement ${path}: ${error.message}; plugin content is not loaded`);
+    return undefined;
+  }
 }
 
 // The name that plugin conflicts compare: the manifest name, else the key name.
@@ -103,7 +138,7 @@ function inlinePlugin(dir) {
   const name = readManifestName(dir, (path, error) => {
     warnOnce(`cannot read plugin manifest ${path}: ${error.message}. Using "${fallback}".`);
   }) ?? fallback;
-  return { key: `${name}@inline`, name, marketplace: 'inline', installPath: dir, version: 'inline' };
+  return { key: `${name}@inline`, name, marketplace: 'inline', scope: 'inline', sourceKind: 'inline', installPath: dir, version: 'inline' };
 }
 
 // Parse <root>/installed_plugins.json → plugin records for scope==='user'
@@ -138,6 +173,8 @@ function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
       key,
       name,
       marketplace,
+      scope: 'user',
+      sourceKind: seed ? 'seed' : 'primary',
       installPath: seed ? seedInstallPath(root, record.installPath, { key, name, marketplace, version }) : record.installPath,
       version,
     });
