@@ -2,6 +2,7 @@
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { CLAUDE_COMPAT_SOURCE_KIND } from './lib.js';
+import { safeServiceOf } from './compat.js';
 
 // The agent type that DSH subagents report. DSH does not name a type for a run.
 export const SUBAGENT_TYPE = 'general-purpose';
@@ -93,8 +94,12 @@ export function createSupport(ctx) {
 
     // The agent's current directory. The working-directory service is optional,
     // so a deployment without it falls back to the session's start directory.
+    // Read it with the inject-free lookup: this plugin declares only `skills`
+    // in `inject`, so a bare `ctx.workingDirectory` read would throw for every
+    // hook payload — that is, for every tool call.
     cwd(agent) {
-      const current = agent?.session === undefined ? undefined : ctx.workingDirectory?.get?.(agent.session);
+      const service = agent?.session === undefined ? undefined : safeServiceOf(ctx, 'workingDirectory');
+      const current = service?.get?.(agent.session);
       return current ?? agent?.session?.header?.cwd ?? process.cwd();
     },
 
@@ -132,6 +137,9 @@ export function createSupport(ctx) {
     /** Add the outcome's context to a running agent, so the model sees it on its next step. */
     inject(agent, outcome) {
       if (agent === undefined) return;
+      // Older DSH agents may not expose inject(); the context is an enhancement,
+      // so an absent method must not fail the hook.
+      if (typeof agent.inject !== 'function') return;
       for (const message of this.contextMessages(outcome)) agent.inject(message);
     },
 
