@@ -1,13 +1,12 @@
 // One operation service for the native pages, slash commands and agent tool.
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection';
 import { resolveUserClaudeDir, resolveClaudePluginsRoot } from './lib.js';
 import { runPluginOperation } from './plugin-manager.js';
 import { createSessionHandoffService } from './session-handoff.js';
+import { serviceOf, loadClientRequestSchema } from './compat.js';
 
 const PLUGIN_READS = new Set(['list', 'search', 'marketplace-list']);
-const serviceOf = (ctx, name) => typeof ctx.get === 'function' ? ctx.get(name) : ctx[name];
 const SESSION_ACTIONS = new Map([
   ['sessions.projects', 'listProjects'], ['sessions.list', 'listSessions'],
   ['sessions.preview', 'preview'], ['sessions.import', 'importSession'],
@@ -299,13 +298,17 @@ export function registerCompatibilityService(ctx, config, invalidate) {
         let body;
         try { body = await request.json(); }
         catch { return new Response('body is not JSON', { status: 400 }); }
-        const parsed = clientRequestSchema.safeParse(body);
+        // Releases before 0.2.2 do not export clientRequestSchema. Without it the
+        // envelope check degrades to the method name; it never becomes "no check".
+        const schema = await loadClientRequestSchema();
+        const parsed = schema === undefined ? undefined : schema.safeParse(body);
+        const envelope = parsed === undefined ? body : parsed.data;
         const rpcId = typeof body?.rpcId === 'string' ? body.rpcId : 'invalid-request';
         const reply = (result) => Response.json({ type: 'server-response', rpcId, result });
-        if (!parsed.success || parsed.data.method !== 'claude-compat') {
+        if ((parsed !== undefined && !parsed.success) || envelope?.method !== 'claude-compat') {
           return reply({ ok: false, error: { code: 'gateway/bad-request', message: 'Invalid Claude compatibility RPC envelope.', details: {} } });
         }
-        try { return reply({ ok: true, value: await service.call(parsed.data.payload, request.signal) }); }
+        try { return reply({ ok: true, value: await service.call(envelope.payload, request.signal) }); }
         catch (error) {
           return reply({ ok: false, error: { code: 'claude-compat/operation-failed', message: error.message, details: {} } });
         }

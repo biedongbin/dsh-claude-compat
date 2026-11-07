@@ -7,10 +7,10 @@
 // - agent starts a DSH subagent that may use tools, and reads its structured answer.
 
 import { createHash, randomUUID } from 'node:crypto';
-import { BlockAssembler } from '@deepseek-ai/dsh-llm';
 import { failedRun } from './hook-handlers.js';
 import { HOOK_CALL_PREFIX, blocksToText } from './hook-support.js';
 import { parseVerdict, verdictToRun } from './hook-verdict.js';
+import { serviceOf, executeToolCall, createBlockAssembler } from './compat.js';
 
 // ----- mcp_tool ---------------------------------------------------------------
 
@@ -84,7 +84,8 @@ function abortReason(error, timeoutMs) {
 async function runMcpToolHook(ctx, support, hook, payload, { timeoutMs, agent }) {
   const name = mcpToolName(hook.server, hook.tool);
   const scope = agent?.session === undefined ? undefined : agent;
-  if (ctx.tools?.get?.(name, scope) === undefined) {
+  const tools = serviceOf(ctx, 'tools');
+  if (tools?.get?.(name, scope) === undefined) {
     return failedRun(`MCP tool ${name} is not available: the server is not configured, or still connecting`);
   }
   const callId = `${HOOK_CALL_PREFIX}${randomUUID()}`;
@@ -97,17 +98,18 @@ async function runMcpToolHook(ctx, support, hook, payload, { timeoutMs, agent })
     if (missing.length > 0) {
       console.warn(`dsh-claude-compat: mcp_tool hook ${name}: no field of the hook input at ${missing.map((path) => `\${${path}}`).join(', ')}; sent as empty text`);
     }
-    // DSH 0.2.2 executes a batch of wire calls and pairs each settlement by callId.
-    // The timeout also bounds an executor that does not honor cancellation.
-    const batch = await Promise.race([
-      ctx.tools.execute({
-        calls: [{ type: 'tool-call', id: callId, name, arguments: JSON.stringify(input) }],
+    // The executor takes a batch on 0.2.2 and one call on earlier releases; the
+    // compatibility layer picks the contract. The timeout also bounds an
+    // executor that does not honor cancellation.
+    const result = await Promise.race([
+      executeToolCall(tools, {
+        type: 'tool-call', id: callId, name, arguments: JSON.stringify(input),
+      }, {
         signal: abort.signal,
         ...scope === undefined ? {} : { agent: scope },
       }),
       guard.promise,
     ]);
-    const result = batch.results.find((entry) => entry.callId === callId)?.result;
     if (!result) return failedRun(`MCP tool ${name}: the executor returned no result for this call`);
     const text = blocksToText(result.content);
     if (result.isError) return failedRun(`MCP tool ${name} failed: ${text}`);
@@ -154,14 +156,17 @@ function modelTarget(agent, model) {
 async function runPromptHook(ctx, hook, payload, { timeoutMs, event, agent }) {
   const target = modelTarget(agent, hook.model);
   if (target === undefined) return failedRun('no model is known for this prompt hook; set "model" as provider/model');
-  if (typeof ctx.llm?.stream !== 'function') return failedRun('the DSH model service is not available');
+  const llm = serviceOf(ctx, 'llm');
+  if (typeof llm?.stream !== 'function') return failedRun('the DSH model service is not available');
   const abort = new AbortController();
   const guard = timeoutGuard(timeoutMs, abort);
   try {
-    const assembler = new BlockAssembler();
+    // Resolved lazily: a top-level import fails the plugin on releases whose
+    // dsh-llm does not export BlockAssembler at all.
+    const assembler = await createBlockAssembler();
     const wantsImpossible = event === 'stop' || event === 'subagent-stop';
     const consume = (async () => {
-      for await (const chunk of ctx.llm.stream({
+      for await (const chunk of llm.stream({
         provider: target.provider,
         model: target.model,
         system: PROMPT_SYSTEM + (wantsImpossible ? IMPOSSIBLE_NOTE : ''),
@@ -244,7 +249,9 @@ function timeoutGuard(timeoutMs, abort) {
 // Start the subagent. When the timeout wins, a late start is still stopped. `late.release` runs
 // when that has finished, so the child stays muted until it is gone.
 async function startVerifier(ctx, spec, timeout, late) {
-  const starting = ctx.subagents.startActivation(spec);
+  const subagents = serviceOf(ctx, 'subagents');
+  if (subagents === undefined) throw new Error('the DSH subagent service is not available');
+  const starting = subagents.startActivation(spec);
   try {
     return await Promise.race([starting, timeout.promise]);
   } catch (error) {
@@ -268,7 +275,7 @@ function agentVerdict(result) {
 
 async function runAgentHook(ctx, support, hook, payload, { timeoutMs, event, agent }) {
   if (typeof agent?.inject !== 'function') return failedRun('an agent hook needs a running agent, and this event has none');
-  if (ctx.subagents?.getProvider?.(SUBAGENT_PROVIDER) === undefined) {
+  if (serviceOf(ctx, 'subagents')?.getProvider?.(SUBAGENT_PROVIDER) === undefined) {
     return failedRun(`no "${SUBAGENT_PROVIDER}" subagent provider is registered, so an agent hook cannot start`);
   }
   const childId = randomUUID();
