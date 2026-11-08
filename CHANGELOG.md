@@ -4,6 +4,22 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.2.1] — 2026-11-08
+
+### Fixed
+- **Cordis service access** ([#14](https://github.com/biedongbin/dsh-claude-compat/issues/14), [#13](https://github.com/biedongbin/dsh-claude-compat/pull/13)). Read optional working-directory, session-persistence, tool, model and subagent services through `ctx.get()`. Hook payload creation no longer fails with `cannot get property "workingDirectory" without inject`; missing working-directory services retain the session-directory fallback.
+- **Tool execution on both supported DSH releases.** Select the contract before execution: `0.2.2-rc.1` uses wire-call batches, while `0.2.1-rc.2` receives a single call with decoded JSON arguments. Preserve call IDs, agent scope and cancellation; never retry a tool because of an exception or an error result.
+- **Prerelease version declarations.** The engine and peer ranges explicitly include `0.2.1-rc.2` and `0.2.2-rc.1`, avoiding a range that inadvertently excluded the newer release candidate.
+
+### Compatibility policy
+- Maintain two explicitly tested DSH versions at a time. This release targets `0.2.1-rc.2` and `0.2.2-rc.1`; future upgrades advance that support list instead of retaining unbounded backward compatibility.
+- Restart DSH after updating to load the corrected hook listeners.
+
+### Verification
+- Expanded regressions cover decoded JSON values, result correlation, scope and signal preservation, malformed arguments, unknown executors and no retries after failure or cancellation.
+- Node 24.22.2 full check: 787 passed, 0 failed, 2 optional testkit skips. Node 22 retains the previously known URL-normalization property-test difference.
+- Independently installed, version-consistent DSH tool runtimes passed 18 integration checks across both supported versions, including real Cordis hook allow/deny/failure paths and cancellation. This validates the tool/hook integration, not a full GUI or live model/network deployment.
+
 ## [1.2.0] — 2026-11-06
 
 ### Upgrade notes

@@ -298,8 +298,8 @@ export function registerCompatibilityService(ctx, config, invalidate) {
         let body;
         try { body = await request.json(); }
         catch { return new Response('body is not JSON', { status: 400 }); }
-        // Releases before 0.2.2 do not export clientRequestSchema. Without it the
-        // envelope check degrades to the method name; it never becomes "no check".
+        // Both supported releases export clientRequestSchema. If the module is
+        // unavailable, the fallback still checks the RPC method name.
         const schema = await loadClientRequestSchema();
         const parsed = schema === undefined ? undefined : schema.safeParse(body);
         const envelope = parsed === undefined ? body : parsed.data;

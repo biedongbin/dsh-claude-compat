@@ -40,7 +40,7 @@ Your skills show up in the `/` menu, rules inject into new sessions, and `/agent
 
 ## 1.2.0: native management and session handoff
 
-The sidebar Plugins page includes a **Claude Code** tab with installed plugins, discovery and marketplaces, plus conversation history and bridge status. Version 1.2.0 supports **DSH >=0.2.2-rc.1 and <0.3.0**; **Node.js 24** is the recommended, verified runtime.
+The sidebar Plugins page includes a **Claude Code** tab with installed plugins, discovery and marketplaces, plus conversation history and bridge status. Version 1.2.1 supports **DSH 0.2.1-rc.2 and 0.2.2-rc.1**; **Node.js 24** is the recommended runtime. Compatibility maintenance follows a rolling two-version policy: each upgrade explicitly lists and tests the two supported DSH releases, replacing the older entry rather than promising support for unknown future releases. See the [1.2.1 changelog](CHANGELOG.md#121--2026-11-08) for the hook service-access and tool-execution fixes.
 
 - **Manage plugins and marketplaces:** install new plugins, add marketplaces, search their catalogs, and enable, disable, update or uninstall entries. Lists start at 10 items per page, with 10/20/50/100 selectable.
 - **Submit independent operations:** each item has its own queued/running state, result and cancellation. Other items stay usable; writes to the same Claude configuration and cache execute in sequence. Mutations use the Claude CLI in user scope, report real failures and refresh the skill catalog after successful changes. Seed and inline sources are read-only.

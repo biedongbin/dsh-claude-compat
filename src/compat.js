@@ -32,45 +32,37 @@ export const safeServiceOf = serviceOf;
 /**
  * Execute one tool call through the DSH tool executor.
  *
- * DSH 0.2.2-rc.1+ takes a batch (`{ calls, signal, agent }`) and pairs each
- * settlement by callId; earlier releases took a single call (`{ callId, name,
- * arguments, signal, agent }`) and returned the result itself.
+ * DSH 0.2.2-rc.1 takes a batch (`{ calls, signal, agent }`) and pairs each
+ * settlement by callId; 0.2.1-rc.2 takes a single call (`{ callId, name,
+ * arguments, signal, agent }`) with parsed JSON arguments and returns the result.
  * @param {object} tools the ctx tool service
  * @param {{type: string, id: string, name: string, arguments: string}} call wire-format call
  * @param {{signal?: AbortSignal, agent?: object}} options runner options
  * @returns {Promise<object|undefined>} one tool execution result
  */
 export async function executeToolCall(tools, call, options = {}) {
-  if (tools === undefined) throw new Error('the DSH tool service is not available');
-
-  let outcome;
-  try {
-    outcome = await tools.execute({ calls: [call], ...options });
-  } catch (error) {
-    // Fall back only when the executor rejects the shape; a failing tool is a
-    // real result and must never be re-run under the other contract.
-    if (!isContractMismatch(error)) throw error;
-    return tools.execute({ callId: call.id, name: call.name, arguments: call.arguments, ...options });
+  if (tools == null || typeof tools.execute !== 'function') {
+    throw new Error('the DSH tool service is not available');
   }
 
-  // Batch contract: one settlement per callId.
-  if (outcome !== null && typeof outcome === 'object' && Array.isArray(outcome.results)) {
-    return outcome.results.find((entry) => entry.callId === call.id)?.result;
+  // The supported 0.2.2-rc.1 runtime exposes setExecutor; 0.2.1-rc.2
+  // owns preparation itself. Inspect capabilities before executing: neither
+  // a thrown error nor an isError result is permission to execute again.
+  if (typeof tools.setExecutor === 'function') {
+    const outcome = await tools.execute({ calls: [call], ...options });
+    return outcome?.results?.find((entry) => entry.callId === call.id)?.result;
   }
-  // Single-call contract: the result is the return value.
-  return outcome;
-}
-
-/** True only for "this executor does not accept a `calls` batch" — nothing else is retried. */
-function isContractMismatch(error) {
-  if (error === null || typeof error !== 'object') return false;
-  if (error.name !== 'TypeError') return false;
-  return /\bcalls\b/i.test(String(error.message));
+  if (typeof tools.prepareExecution === 'function' && typeof tools.createExecution === 'function') {
+    return tools.execute({
+      callId: call.id, name: call.name, arguments: JSON.parse(call.arguments), ...options,
+    });
+  }
+  throw new Error('unsupported DSH tool executor; supported versions are 0.2.1-rc.2 and 0.2.2-rc.1');
 }
 
 /**
- * Resolve BlockAssembler at use time. Releases before 0.2.2 may not export it,
- * and a missing top-level export fails the whole plugin at import time.
+ * Resolve BlockAssembler at use time. Both supported releases export it;
+ * deferred loading keeps an unavailable model service local to prompt hooks.
  * @returns {Promise<object>} a BlockAssembler instance
  */
 export async function createBlockAssembler() {
@@ -83,9 +75,8 @@ export async function createBlockAssembler() {
 }
 
 /**
- * Resolve the RPC request schema at use time; older releases do not export it.
- * A missing schema is not fatal: the caller keeps the method check and drops
- * only the envelope validation it cannot perform.
+ * Resolve the RPC request schema at use time. Both supported releases export
+ * it; when the optional module is unavailable the caller retains its method check.
  * @returns {Promise<object|undefined>}
  */
 export async function loadClientRequestSchema() {

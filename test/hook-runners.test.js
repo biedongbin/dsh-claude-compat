@@ -96,6 +96,7 @@ function fakeTools(handler, { scoped = new Map() } = {}) {
   const visible = (name, scope) => global(name) || (scope !== undefined && scoped.get(scope)?.has(name) === true);
   return {
     calls,
+    setExecutor() {},
     get: (name, scope) => (visible(name, scope) ? { name } : undefined),
     execute: async (batch) => {
       assert.equal(batch.calls.length, 1, 'one historical hook call in a native batch');
