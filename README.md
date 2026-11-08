@@ -38,7 +38,7 @@ Your skills show up in the `/` menu, rules inject into new sessions, and `/agent
 
 ---
 
-## 1.2.0: native management and session handoff
+## 1.2.1: DSH compatibility, native management and session handoff
 
 The sidebar Plugins page includes a **Claude Code** tab with installed plugins, discovery and marketplaces, plus conversation history and bridge status. Version 1.2.1 supports **DSH 0.2.1-rc.2 and 0.2.2-rc.1**; **Node.js 24** is the recommended runtime. Compatibility maintenance follows a rolling two-version policy: each upgrade explicitly lists and tests the two supported DSH releases, replacing the older entry rather than promising support for unknown future releases. See the [1.2.1 changelog](CHANGELOG.md#121--2026-11-08) for the hook service-access and tool-execution fixes.
 
@@ -48,7 +48,7 @@ The sidebar Plugins page includes a **Claude Code** tab with installed plugins, 
 - **Read Claude history in DSH:** search and preview sessions, then send only the selected source file's path and a short reading request. DSH reads as needed and summarizes the background, current task state and next-step plan; transcript bodies are not inlined. A management-page click creates a normal DSH conversation in the source project's Workspace. A `/cc-resume` card inside a conversation uses that current session, preserving its messages, directory and model.
 - **Export and refresh:** `/cc-export` uses the Session's effective directory and resolves a real Node interpreter on Desktop. Both reload aliases wait for catalog invalidation and expose failures.
 
-Management pages, commands and the `claude_compat` tool share the operation service. UI operations require the authenticated owner; tool access to user-level Claude configuration and history requires full access or approval. Version changes are recorded in the [1.2.0 changelog](CHANGELOG.md#120--2026-11-06).
+Management pages, commands and the `claude_compat` tool share the operation service. UI operations require the authenticated owner; tool access to user-level Claude configuration and history requires full access or approval. Version changes are recorded in the [full changelog](CHANGELOG.md).
 
 ### Upgrading existing configurations
 
@@ -395,7 +395,7 @@ The script also re-applies the idempotent `dsh-terminal-bash` prompt patch, whic
 
 ## Changelog
 
-- **[1.2.0](CHANGELOG.md#120--2026-11-06) ([简体中文](CHANGELOG.zh-CN.md#120--2026-11-06))** — native management, file-reference session handoff and command fixes.
+- **[1.2.1](CHANGELOG.md#121--2026-11-08) ([简体中文](CHANGELOG.zh-CN.md#121--2026-11-08))** — fixes hook service access and tool execution across the two supported DSH versions.
 - **[Full changelog](CHANGELOG.md) ([简体中文](CHANGELOG.zh-CN.md))** — the complete version history.
 
 ## Acknowledgments
