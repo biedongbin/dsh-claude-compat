@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { setImmediate as yieldToHost } from 'node:timers/promises';
 import { CLAUDE_COMPAT_SOURCE_KIND, claudeProjectFolder, claudeProjectsDir, resolveUserClaudeDir } from './lib.js';
+import { serviceOf } from './compat.js';
 
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SAMPLE_BYTES = 128 * 1024;
@@ -162,8 +163,9 @@ export function createSessionImportService(ctx, config = {}) {
   let runtime;
   const loadRuntime = () => runtime ??= import('@deepseek-ai/dsh-session');
   const persistence = () => {
-    if (!ctx.sessionPersistence) throw new Error('DSH sessionPersistence is unavailable');
-    return ctx.sessionPersistence;
+    const service = serviceOf(ctx, 'sessionPersistence');
+    if (!service) throw new Error('DSH sessionPersistence is unavailable');
+    return service;
   };
 
   async function directory(cwd) {
@@ -288,7 +290,7 @@ export function createSessionImportService(ctx, config = {}) {
     candidates.sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     const items = candidates.slice(offset, offset + limit);
     for (const item of items) {
-      const imported = ctx.sessionPersistence ? await existing(cwd, item.id, signal) : undefined;
+      const imported = serviceOf(ctx, 'sessionPersistence') ? await existing(cwd, item.id, signal) : undefined;
       if (imported) {
         item.importedSessionId = imported.sessionId;
         item.importStatus = imported.status;
