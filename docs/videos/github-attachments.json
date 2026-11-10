@@ -9,7 +9,16 @@
     "download_status": 200,
     "download_sha256_matches": true,
     "rendered_video_element": true,
-    "public_access": "verify after commit associates attachment with public README"
+    "public_access": {
+      "http_status": 404,
+      "note": "Unauthenticated direct URL access differs from the verified public README player."
+    },
+    "published_readme_player": {
+      "controls": true,
+      "ready_state": 4,
+      "duration_seconds": 40.233333,
+      "url": "https://github.com/biedongbin/dsh-claude-compat"
+    }
   },
   "zh-CN": {
     "url": "https://github.com/user-attachments/assets/429c9039-ec83-49c4-8ba9-7553cc7bc1f4",
@@ -21,6 +30,15 @@
     "download_status": 200,
     "download_sha256_matches": true,
     "rendered_video_element": true,
-    "public_access": "verify after commit associates attachment with public README"
+    "public_access": {
+      "http_status": 404,
+      "note": "Unauthenticated direct URL access differs from the verified public README player."
+    },
+    "published_readme_player": {
+      "controls": true,
+      "ready_state": 4,
+      "duration_seconds": 33.866667,
+      "url": "https://github.com/biedongbin/dsh-claude-compat/blob/main/README.zh-CN.md"
+    }
   }
 }
