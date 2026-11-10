@@ -17,60 +17,23 @@
 
 ---
 
-## 在 DSH 对话中看实际效果
+## 10 秒速览
 
-[![观看中文对话操作演示](docs/videos/dsh-claude-compat-interactive-zh-CN-poster.png)](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4)
+1. **把 Claude Code 配置带到 DSH。** 复用已有 `.claude/` 目录中受支持的技能、斜杠命令、规则、代理定义、hooks 和 MCP 配置。
+2. **在 DSH 内管理 Claude 插件。** 从 **插件 → Claude Code** 浏览已安装插件和市场，也可以用 `/cc-plugin` 在对话中打开管理界面。
+3. **接着理解 Claude 会话中的任务。** 用 `/cc-resume` 查找、预览历史会话，再交给 DSH 阅读并总结背景、任务状态和下一步。
 
-**[观看中文录屏](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4)** · 33.9 秒 · 无声 · 原速浏览器操作
-
-先从 DSH 主窗口点击 **插件 → Claude Code**，展示完整管理页面。随后演示对话内 `/cc-plugin`、用 `/cc-resume` 预览并接续演示历史，以及从 `/` 菜单运行桥接技能、得到真实回复。所有操作保持原速，只剪去模型等待；结果稳定显示约四秒，便于阅读。
-
-演示历史和 `demo-brief` 技能是明确标注的录制素材，不是插件内置功能。个人路径及工作区信息已遮盖。
+技能可在当前会话刷新；MCP 与 hook 配置变更需要重启 DSH。受支持的运行时及能力边界见[兼容与升级说明](#121dsh-兼容原生管理与会话接续)。
 
 ![DSH 内的 Claude Code 插件管理](docs/demo-video/screenshots/zh-CN/plugin-navigation.png)
 
-[桥接状态](docs/demo-video/screenshots/zh-CN/skills.png) · [历史会话](docs/demo-video/screenshots/zh-CN/history.png) · [录制源与剪辑说明](docs/demo-video/README.md)
+## 演示视频 · 34 秒
 
-## 10 秒速览
+https://github.com/user-attachments/assets/429c9039-ec83-49c4-8ba9-7553cc7bc1f4
 
-你已经在 Claude Code 里攒了一整套趁手的 `.claude/`——skills、斜杠命令、rules、agents、hooks、MCP servers。换到 **DSH (DeepSeek Harness)** 时，你不想把这些全部重新搭一遍。
+[观看／下载中文 MP4](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4) · [English video](docs/videos/dsh-claude-compat-interactive-en.mp4)
 
-**dsh-claude-compat 就是那座桥。** 它读取项目与用户级 Claude 配置，通过 DSH 原生服务暴露支持的内容。技能可在当前会话中重新加载；MCP 与 hook 配置变化需要重启 DSH。
-
-```bash
-dsh plugin --profile web add dsh-claude-compat@latest
-dsh web
-```
-
-你的 skills 出现在 `/` 菜单里，规则注入新会话；`/agent-name` 通过 DSH 原生 skill 接口加载委派指令。
-
-**或用 DSH 自己装（推荐）**：复制下面这句给 DSH，它会读 skill、自动安装并验证：
-
-> 请阅读 https://github.com/biedongbin/dsh-claude-compat/blob/main/.claude/skills/install-dsh-compat/SKILL.md 并按步骤安装 dsh-claude-compat 插件。
-
-> ⭐ 觉得好用？[点这里给个 star](https://github.com/biedongbin/dsh-claude-compat)——它让我们持续改进，也帮更多人找到这个插件。
-
----
-
-## 1.2.1：DSH 兼容、原生管理与会话接续
-
-侧栏「插件」中的 **Claude Code** 标签页提供已安装插件、发现插件、插件市场三个管理页，以及历史会话和桥接状态。1.2.1 支持 **DSH 0.2.1-rc.2 和 0.2.2-rc.1**，推荐使用 **Node.js 24**。后续采用滚动双版本维护策略：每次升级明确列出并验证两个受支持的 DSH 版本，用新版替换最旧条目，不预先承诺兼容尚未验证的未来版本。Hook 服务读取与工具执行修复见 [1.2.1 更新日志](CHANGELOG.zh-CN.md#121--2026-11-08)。
-
-- **管理插件与市场**：可安装新插件、添加市场、搜索目录，以及启用、禁用、更新或卸载条目。列表默认每页 10 条，可选 10／20／50／100 条。
-- **逐项提交操作**：每项独立显示排队、执行、结果和取消，其他条目仍可操作；写入同一份 Claude 配置和缓存的任务依次执行。变更通过 Claude CLI 的用户作用域完成，失败原因会显示，成功后刷新技能目录。种子和内联来源只读。
-- **空白会话直接使用命令**：`/cc-plugin`、`/cc-resume` 无参数打开交互管理界面，不经过模型。首条输入就是管理命令时，结果显示在输入框上方；开始正常对话后由聊天视图接管。
-- **交给 DSH 阅读历史**：会话可搜索和预览，一键恢复仅发送所选源文件路径和简短阅读指令。DSH 按需读取并简述背景、当前任务状态和下一步计划，不内联历史正文。管理页操作会在源项目工作区新建普通 DSH 会话；对话内的 `/cc-resume` 卡片使用当前会话，保留已有对话、目录和模型。
-- **导出与刷新**：`/cc-export` 使用会话的有效工作目录，并在桌面版中解析真正的 Node 解释器；两个刷新命令都会等待目录刷新完成，并显示失败原因。
-
-管理页、命令和 `claude_compat` 工具共用操作服务。界面操作要求已认证的所有者；工具访问用户级 Claude 配置和历史需要完整权限或当次批准。版本变更统一记录在[完整更新日志](CHANGELOG.zh-CN.md)。
-
-### 现有配置升级
-
-1. HTTP MCP 条目显式写 `"type": "http"`（或 `"streamable-http"`）。只有 URL、SSE 或 WebSocket 的条目会告警并跳过。
-2. 除非信任项目，否则保持 `mcpTrustProjectConfig: false`。默认不运行项目 helper，凭据变量保持字面文本；详见 [MCP 服务器](#mcp-服务器)。
-3. 启用前检查项目 hooks：插件没有工作区信任提示。更新后重启 DSH，从启动工作区重新加载 MCP 与 hooks。
-
-更早的配置与旧式归档迁移说明见 [1.1.0 更新日志](CHANGELOG.zh-CN.md#110--2026-11-05)。
+展示完整插件页面、对话内管理卡片、历史接续和技能实际回复。录制使用明确标注的演示历史与临时演示技能，个人信息已遮盖。[录制源与剪辑说明](docs/demo-video/README.md)。
 
 ## 一键带过来的东西
 
@@ -85,47 +48,6 @@ dsh web
 | `~/.claude/plugins` | DSH skill（`/cc-plugin` 管理） | 安装的插件技能一并可用 |
 
 同一套目录，项目 `.claude/` 和用户级 `~/.claude/` **都会读**。同名项按固定优先级去重：**项目 `.claude` > DSH 原生 > `~/.claude`**——项目技能永远覆盖其他副本，用户技能永远不覆盖 DSH 原生。`CLAUDE.md` / `AGENTS.md` 由 DSH 内置的 `dsh-agent-instructions` 处理，**本插件不碰**。
-
-## 功能（实现细节）
-
-| `.claude/` 路径 | 机制 | 行为 |
-|---|---|---|
-| `skills/**/SKILL.md` | DSH skill provider | 仅 name + description 进模型可见目录；正文按需加载（`skill` 工具）。新增 skill 下次 catalog 刷新即出现，无需重启。 |
-| `commands/*.md` | DSH skill provider | 同上，且用户可直接调用：斜杠菜单里 `/command-name` 可用。 |
-| `rules/*.md` | 消息流注入 | rules 全文拼接，包 `<system-reminder>` 信封，每会话一次以 user-role 消息插在消息数组最前 —— 与 Claude Code 同通道（`prependUserContext`），模型可靠遵循。 |
-| `agents/*.md` | DSH skill provider（委派 shim） | DSH 没有 markdown 子代理格式，因此每个 agent 文件变成 **skill**，正文开头带显式"以此人设委派子代理"指令。模型与用户均可调用，`/agent-name` 可用。同名 agent 与 skill 一样按 rank 去重。 |
-| `managed-mcp.json`、`managedMcpServers`、`.claude.json`、`<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义按 Claude Code 的优先级读取，并在 DSH 启动时（启动工区）挂载为 `dsh-mcp-client` 插件实例：`command` → stdio，`type: http` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。见 [MCP 服务器](#mcp-服务器)。 |
-| `.claude/settings.json` → `hooks` | Hooks | Claude Code hooks，桥接到 DSH 扩展点。见 [Hooks](#hooks)。 |
-| `~/.claude/plugins`（已安装插件） | DSH skill provider | 已安装的 Claude Code 插件市场插件贡献其 skills/commands/agents（读取每个安装的 `.claude-plugin/plugin.json` 清单，无清单时回退目录扫描），rank `750` —— 长尾：project `.claude`、DSH 原生、`~/.claude` 在同名冲突时全部优先。插件的 MCP 服务器（清单 `mcpServers`）仅在显式开启 `enablePluginMcp` 后挂载 —— 挂载第三方 MCP 比列出 skills 信任门槛更高。 |
-
-同类目录同样读取**用户级** `~/.claude/`（skills、commands、rules、agents 与 `~/.claude/settings.json` hooks）。同名 skill/command/rule/agent 去重，优先级固定：
-
-**项目 `.claude` > DSH 原生（`.dsh`）> `~/.claude`**
-
-- 项目 `.claude` 条目 rank=`50`；DSH 自身 skills —— 项目 `.dsh` 根、`.agents` 根与 bundled skills（rank=`100`–`600`，`BUNDLED_SKILL_RANK`）—— 位于两者之间；`~/.claude` 条目 rank=`700`。项目 skill 永远压过 DSH 原生与用户副本；用户 skill 永远压不过 DSH 原生。
-- `~/.claude/rules` 中与项目同 basename 的 rule 文件被跳过（项目优先）。
-
-`CLAUDE.md` / `AGENTS.md` **不碰** —— DSH 内置 `dsh-agent-instructions` 已处理。
-
-## 内置命令
-
-安装本插件后可使用五个原生管理命令：
-
-| 命令 | 作用 |
-|---|---|
-| `/cc-plugin` | 打开插件管理界面，或使用 `list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。`/cc-plugin <名>@<市场>` 可直接安装。变更要求 `claude` CLI，并使用用户作用域；CLI 缺失、认证或网络错误会明确报告，不会降级为直接写 JSON 或 git 文件。Claude Code 与 DSH 读取同一份配置的插件注册表和设置。 |
-| `/reload-cc-plugins` | 刷新**当前会话**的技能目录，等待刷新完成并报告失败。新增或移除的技能无需新建会话即可出现；MCP 与 hook 变更仍需重启 DSH。 |
-| `/reload-skills` | `/reload-cc-plugins` 的别名。 |
-| `/cc-export` | 列出或导出 DSH 原生 skill（`.dsh/skills`）到 Claude Code `.claude/skills/<name>/SKILL.md`，保留 frontmatter。使用会话的有效工作目录，桌面版通过真正的 Node 解释器执行。`list` / `export [--overwrite] [--target <目录>]`；相对目标路径按有效工作目录解析。 |
-| `/cc-resume` | 浏览 Claude 历史并把背景交给 DSH 接续。对话内的卡片直接续接当前 DSH 会话；管理页的一键恢复在源项目工作区新建普通 DSH 会话。`list` / `resume <Claude sessionId> [--cwd 源目录] [--limit-turns N]`；`import` 是 `resume` 的别名，`archive` 才是旧式历史归档副本。 |
-
-典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
-
-### 上下文接续与旧式归档
-
-一键恢复只定位配置的 Claude `projects/` 源文件，并发送文件路径及简短的阅读总结指令。DSH 按需读取文件，先概述背景、当前任务状态和下一步计划；插件不内联正文、不扫描全文，也不自动执行历史待办。源文件查找位置和目标 DSH 会话身份分别传递，Claude 历史中途切换目录不会阻止接续。
-
-原生界面与命令使用配置的 `userClaudeDir`。可用 `/cc-resume resume <id> --cwd <源项目>` 选择其他项目历史，同时在发起命令的 DSH 会话继续。显式 `archive` 和 `sessions.import` 仍保留为独立归档操作，并保留已有 DSH 日志。独立 CLI 是旧格式工具，不参与一键恢复。
 
 ## 环境要求
 
@@ -148,6 +70,71 @@ dsh plugin --profile web add github:biedongbin/dsh-claude-compat
 ```
 
 重启 DSH（`dsh web`）。完成 —— skills 出现在 `/` 菜单，rules 注入每个新会话。
+
+**也可以让 DSH 安装：**
+
+> 请阅读 https://github.com/biedongbin/dsh-claude-compat/blob/main/.claude/skills/install-dsh-compat/SKILL.md 并按步骤安装 dsh-claude-compat 插件。
+
+## 1.2.1：DSH 兼容、原生管理与会话接续
+
+侧栏「插件」中的 **Claude Code** 标签页提供已安装插件、发现插件、插件市场三个管理页，以及历史会话和桥接状态。1.2.1 支持 **DSH 0.2.1-rc.2 和 0.2.2-rc.1**，推荐使用 **Node.js 24**。后续采用滚动双版本维护策略：每次升级明确列出并验证两个受支持的 DSH 版本，用新版替换最旧条目，不预先承诺兼容尚未验证的未来版本。Hook 服务读取与工具执行修复见 [1.2.1 更新日志](CHANGELOG.zh-CN.md#121--2026-11-08)。
+
+- **管理插件与市场**：可安装新插件、添加市场、搜索目录，以及启用、禁用、更新或卸载条目。列表默认每页 10 条，可选 10／20／50／100 条。
+- **逐项提交操作**：每项独立显示排队、执行、结果和取消，其他条目仍可操作；写入同一份 Claude 配置和缓存的任务依次执行。变更通过 Claude CLI 的用户作用域完成，失败原因会显示，成功后刷新技能目录。种子和内联来源只读。
+- **空白会话直接使用命令**：`/cc-plugin`、`/cc-resume` 无参数打开交互管理界面，不经过模型。首条输入就是管理命令时，结果显示在输入框上方；开始正常对话后由聊天视图接管。
+- **交给 DSH 阅读历史**：会话可搜索和预览，一键恢复仅发送所选源文件路径和简短阅读指令。DSH 按需读取并简述背景、当前任务状态和下一步计划，不内联历史正文。管理页操作会在源项目工作区新建普通 DSH 会话；对话内的 `/cc-resume` 卡片使用当前会话，保留已有对话、目录和模型。
+- **导出与刷新**：`/cc-export` 使用会话的有效工作目录，并在桌面版中解析真正的 Node 解释器；两个刷新命令都会等待目录刷新完成，并显示失败原因。
+
+管理页、命令和 `claude_compat` 工具共用操作服务。界面操作要求已认证的所有者；工具访问用户级 Claude 配置和历史需要完整权限或当次批准。版本变更统一记录在[完整更新日志](CHANGELOG.zh-CN.md)。
+
+### 现有配置升级
+
+1. HTTP MCP 条目显式写 `"type": "http"`（或 `"streamable-http"`）。只有 URL、SSE 或 WebSocket 的条目会告警并跳过。
+2. 除非信任项目，否则保持 `mcpTrustProjectConfig: false`。默认不运行项目 helper，凭据变量保持字面文本；详见 [MCP 服务器](#mcp-服务器)。
+3. 启用前检查项目 hooks：插件没有工作区信任提示。更新后重启 DSH，从启动工作区重新加载 MCP 与 hooks。
+
+更早的配置与旧式归档迁移说明见 [1.1.0 更新日志](CHANGELOG.zh-CN.md#110--2026-11-05)。
+
+## 内置命令
+
+安装本插件后可使用五个原生管理命令：
+
+| 命令 | 作用 |
+|---|---|
+| `/cc-plugin` | 打开插件管理界面，或使用 `list`、`install <名>[@市场]`、`uninstall`、`enable`、`disable`、`update [名]`、`search <词>`、`marketplace list\|add\|remove\|update`。`/cc-plugin <名>@<市场>` 可直接安装。变更要求 `claude` CLI，并使用用户作用域；CLI 缺失、认证或网络错误会明确报告，不会降级为直接写 JSON 或 git 文件。Claude Code 与 DSH 读取同一份配置的插件注册表和设置。 |
+| `/reload-cc-plugins` | 刷新**当前会话**的技能目录，等待刷新完成并报告失败。新增或移除的技能无需新建会话即可出现；MCP 与 hook 变更仍需重启 DSH。 |
+| `/reload-skills` | `/reload-cc-plugins` 的别名。 |
+| `/cc-export` | 列出或导出 DSH 原生 skill（`.dsh/skills`）到 Claude Code `.claude/skills/<name>/SKILL.md`，保留 frontmatter。使用会话的有效工作目录，桌面版通过真正的 Node 解释器执行。`list` / `export [--overwrite] [--target <目录>]`；相对目标路径按有效工作目录解析。 |
+| `/cc-resume` | 浏览 Claude 历史并把背景交给 DSH 接续。对话内的卡片直接续接当前 DSH 会话；管理页的一键恢复在源项目工作区新建普通 DSH 会话。`list` / `resume <Claude sessionId> [--cwd 源目录] [--limit-turns N]`；`import` 是 `resume` 的别名，`archive` 才是旧式历史归档副本。 |
+
+典型闭环：`/cc-plugin install ralph-loop@claude-plugins-official` → `/reload-cc-plugins` → 新技能立即可见。插件自带的 MCP 服务器仍需重启 DSH（进程级挂载）。
+
+### 上下文接续与旧式归档
+
+一键恢复只定位配置的 Claude `projects/` 源文件，并发送文件路径及简短的阅读总结指令。DSH 按需读取文件，先概述背景、当前任务状态和下一步计划；插件不内联正文、不扫描全文，也不自动执行历史待办。源文件查找位置和目标 DSH 会话身份分别传递，Claude 历史中途切换目录不会阻止接续。
+
+原生界面与命令使用配置的 `userClaudeDir`。可用 `/cc-resume resume <id> --cwd <源项目>` 选择其他项目历史，同时在发起命令的 DSH 会话继续。显式 `archive` 和 `sessions.import` 仍保留为独立归档操作，并保留已有 DSH 日志。独立 CLI 是旧格式工具，不参与一键恢复。
+
+## 功能（实现细节）
+
+| `.claude/` 路径 | 机制 | 行为 |
+|---|---|---|
+| `skills/**/SKILL.md` | DSH skill provider | 仅 name + description 进模型可见目录；正文按需加载（`skill` 工具）。新增 skill 下次 catalog 刷新即出现，无需重启。 |
+| `commands/*.md` | DSH skill provider | 同上，且用户可直接调用：斜杠菜单里 `/command-name` 可用。 |
+| `rules/*.md` | 消息流注入 | rules 全文拼接，包 `<system-reminder>` 信封，每会话一次以 user-role 消息插在消息数组最前 —— 与 Claude Code 同通道（`prependUserContext`），模型可靠遵循。 |
+| `agents/*.md` | DSH skill provider（委派 shim） | DSH 没有 markdown 子代理格式，因此每个 agent 文件变成 **skill**，正文开头带显式"以此人设委派子代理"指令。模型与用户均可调用，`/agent-name` 可用。同名 agent 与 skill 一样按 rank 去重。 |
+| `managed-mcp.json`、`managedMcpServers`、`.claude.json`、`<projectRoot>/.mcp.json` | MCP 服务器 | Claude Code 格式的 MCP 服务器定义按 Claude Code 的优先级读取，并在 DSH 启动时（启动工区）挂载为 `dsh-mcp-client` 插件实例：`command` → stdio，`type: http` → streamable-http。畸形条目或缺少 `@deepseek-ai/dsh-mcp-client` 时降级为告警，绝不崩溃。见 [MCP 服务器](#mcp-服务器)。 |
+| `.claude/settings.json` → `hooks` | Hooks | Claude Code hooks，桥接到 DSH 扩展点。见 [Hooks](#hooks)。 |
+| `~/.claude/plugins`（已安装插件） | DSH skill provider | 已安装的 Claude Code 插件市场插件贡献其 skills/commands/agents（读取每个安装的 `.claude-plugin/plugin.json` 清单，无清单时回退目录扫描），rank `750` —— 长尾：project `.claude`、DSH 原生、`~/.claude` 在同名冲突时全部优先。插件的 MCP 服务器（清单 `mcpServers`）仅在显式开启 `enablePluginMcp` 后挂载 —— 挂载第三方 MCP 比列出 skills 信任门槛更高。 |
+
+同类目录同样读取**用户级** `~/.claude/`（skills、commands、rules、agents 与 `~/.claude/settings.json` hooks）。同名 skill/command/rule/agent 去重，优先级固定：
+
+**项目 `.claude` > DSH 原生（`.dsh`）> `~/.claude`**
+
+- 项目 `.claude` 条目 rank=`50`；DSH 自身 skills —— 项目 `.dsh` 根、`.agents` 根与 bundled skills（rank=`100`–`600`，`BUNDLED_SKILL_RANK`）—— 位于两者之间；`~/.claude` 条目 rank=`700`。项目 skill 永远压过 DSH 原生与用户副本；用户 skill 永远压不过 DSH 原生。
+- `~/.claude/rules` 中与项目同 basename 的 rule 文件被跳过（项目优先）。
+
+`CLAUDE.md` / `AGENTS.md` **不碰** —— DSH 内置 `dsh-agent-instructions` 已处理。
 
 ## 配置
 

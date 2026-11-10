@@ -1,0 +1,26 @@
+{
+  "en": {
+    "url": "https://github.com/user-attachments/assets/795abf8f-bc05-4c34-849d-65c61f34afd7",
+    "repository_file": "docs/videos/dsh-claude-compat-interactive-en.mp4",
+    "sha256": "4fe364467c1168d31338e8b92742a69d016e1cd771f124239d68bf30c3b88188",
+    "bytes": 1142915,
+    "storage_status": 204,
+    "completion_status": 200,
+    "download_status": 200,
+    "download_sha256_matches": true,
+    "rendered_video_element": true,
+    "public_access": "verify after commit associates attachment with public README"
+  },
+  "zh-CN": {
+    "url": "https://github.com/user-attachments/assets/429c9039-ec83-49c4-8ba9-7553cc7bc1f4",
+    "repository_file": "docs/videos/dsh-claude-compat-interactive-zh-CN.mp4",
+    "sha256": "63546c9b642983179e96c19a97d4f8d5a3adbab6ebbf84f72454b57544d3ade1",
+    "bytes": 1024960,
+    "storage_status": 204,
+    "completion_status": 200,
+    "download_status": 200,
+    "download_sha256_matches": true,
+    "rendered_video_element": true,
+    "public_access": "verify after commit associates attachment with public README"
+  }
+}
