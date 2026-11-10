@@ -1,0 +1,85 @@
+{
+  "description": "Normal-speed real browser recording. Full DSH navigation first; only model waiting is omitted. Stable results are freshly recorded for reading. No accelerated clips, subsecond inserts, UI resizing or synthesized motion.",
+  "width": 1440,
+  "height": 900,
+  "fps": 30,
+  "scenes": [
+    {
+      "name": "overview",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "plugins",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "history",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "summary-steady",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "skill",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "skill-steady",
+      "speed": 1,
+      "keep": null
+    }
+  ],
+  "languages": {
+    "zh-CN": {
+      "history": {
+        "speed": 1,
+        "keep": [
+          {
+            "start": 0.041,
+            "end": 7.4319999999999995,
+            "speed": 1
+          }
+        ]
+      },
+      "skill": {
+        "speed": 1,
+        "keep": [
+          {
+            "start": 0.068,
+            "end": 5.607,
+            "speed": 1
+          }
+        ]
+      }
+    },
+    "en": {
+      "history": {
+        "speed": 1,
+        "keep": [
+          {
+            "start": 0.055,
+            "end": 7.354,
+            "speed": 1
+          }
+        ]
+      },
+      "skill": {
+        "speed": 1,
+        "keep": [
+          {
+            "start": 0.28,
+            "end": 12.781,
+            "speed": 1
+          }
+        ]
+      }
+    }
+  },
+  "editing_help": "Per scene keep may be [{start:0.5,end:3.2,speed:1},{start:8,end:12,speed:1.5}] in actual capture seconds. Ranges must be chronological, nonoverlapping and within capture. Initial time before first frame is omitted. languages may override by language then scene name, e.g. languages.en.skill={keep:[...],speed:1}. capture.json marks are preserved in verification for choosing cuts; cuts are never inferred automatically."
+}

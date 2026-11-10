@@ -17,6 +17,20 @@
 
 ---
 
+## 在 DSH 对话中看实际效果
+
+[![观看中文对话操作演示](docs/videos/dsh-claude-compat-interactive-zh-CN-poster.png)](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4)
+
+**[观看中文录屏](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4)** · 33.9 秒 · 无声 · 原速浏览器操作
+
+先从 DSH 主窗口点击 **插件 → Claude Code**，展示完整管理页面。随后演示对话内 `/cc-plugin`、用 `/cc-resume` 预览并接续演示历史，以及从 `/` 菜单运行桥接技能、得到真实回复。所有操作保持原速，只剪去模型等待；结果稳定显示约四秒，便于阅读。
+
+演示历史和 `demo-brief` 技能是明确标注的录制素材，不是插件内置功能。个人路径及工作区信息已遮盖。
+
+![DSH 内的 Claude Code 插件管理](docs/demo-video/screenshots/zh-CN/plugin-navigation.png)
+
+[桥接状态](docs/demo-video/screenshots/zh-CN/skills.png) · [历史会话](docs/demo-video/screenshots/zh-CN/history.png) · [录制源与剪辑说明](docs/demo-video/README.md)
+
 ## 10 秒速览
 
 你已经在 Claude Code 里攒了一整套趁手的 `.claude/`——skills、斜杠命令、rules、agents、hooks、MCP servers。换到 **DSH (DeepSeek Harness)** 时，你不想把这些全部重新搭一遍。

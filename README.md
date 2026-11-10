@@ -17,6 +17,20 @@
 
 ---
 
+## See it inside a DSH conversation
+
+[![Watch the English conversation demo](docs/videos/dsh-claude-compat-interactive-en-poster.png)](docs/videos/dsh-claude-compat-interactive-en.mp4)
+
+**[Watch the English recording](docs/videos/dsh-claude-compat-interactive-en.mp4)** · 40.2 seconds · silent · normal-speed browser interaction
+
+Start in the DSH main window, click **Plugins → Claude Code**, and see the complete management page. Then use `/cc-plugin` inside chat, preview and resume a labelled demo history with `/cc-resume`, and run a bridged skill to get a real model reply. All actions play at normal speed; only model waits are cut. Completed results stay visible for about four seconds.
+
+The history and `demo-brief` skill are explicit recording fixtures, not built-in product features. Private paths and workspace details are masked.
+
+![Claude Code plugin management inside DSH](docs/demo-video/screenshots/en/plugin-navigation.png)
+
+[Bridge status](docs/demo-video/screenshots/en/skills.png) · [Conversation history](docs/demo-video/screenshots/en/history.png) · [Recording source and editing notes](docs/demo-video/README.md)
+
 ## The 10-second pitch
 
 You've already built up a solid `.claude/` in Claude Code — skills, slash commands, rules, agents, hooks, MCP servers. Moving to **DSH (DeepSeek Harness)** shouldn't mean rebuilding all of it.
