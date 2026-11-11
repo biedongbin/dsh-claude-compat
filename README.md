@@ -37,6 +37,14 @@ See the full plugin page, inline management cards, history handoff and a real sk
 
 ## Quick start
 
+**Install from the desktop / Web interface**
+
+Open **Plugins → Add plugin**, enter `dsh-claude-compat`, then click **Install**. The fresh Web capture below shows the graphical installation entry.
+
+![Enter dsh-claude-compat in the DSH Add plugin dialog](docs/readme/assets/install-plugin-en.png)
+
+**Install from the command line**
+
 Requires **DSH 0.2.1-rc.2 or 0.2.2-rc.1**, with `pnpm` on `PATH`. **Node.js 24** is recommended.
 
 ```bash

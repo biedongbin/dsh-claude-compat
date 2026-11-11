@@ -37,6 +37,14 @@ https://github.com/user-attachments/assets/429c9039-ec83-49c4-8ba9-7553cc7bc1f4
 
 ## 快速开始
 
+**桌面端 / Web 界面安装**
+
+打开 **插件 → 添加插件**，输入 `dsh-claude-compat`，点击 **安装**。下图在 Web 端重新截取，展示界面安装入口。
+
+![通过 DSH 添加插件界面填写 dsh-claude-compat](docs/readme/assets/install-plugin-zh-cn.png)
+
+**命令行安装**
+
 需要 **DSH 0.2.1-rc.2 或 0.2.2-rc.1**，且 `PATH` 中可用 `pnpm`；推荐 **Node.js 24**。
 
 ```bash

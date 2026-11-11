@@ -8,6 +8,16 @@
 
 ## 安装 / 更新
 
+### 桌面端 / Web 界面安装
+
+打开 **插件 → 添加插件**，输入 `dsh-claude-compat`，点击 **安装**。下图在 Web 端重新截取，展示界面安装入口。
+
+![通过 DSH 添加插件界面填写 dsh-claude-compat](../assets/install-plugin-zh-cn.png)
+
+截图仅填写包名，没有实际点击安装。若已安装，界面可能提示先卸载再重新安装。
+
+### 命令行
+
 一条命令 —— 包声明了 `dsh.bundle`，DSH 自动激活（无需手改 `cordis.patch.yml`）。安装或更新到最新版：
 
 ```bash

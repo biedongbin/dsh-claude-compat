@@ -8,6 +8,16 @@
 
 ## Install / Update
 
+### Install from the desktop / Web interface
+
+Open **Plugins → Add plugin**, enter `dsh-claude-compat`, then click **Install**. The fresh Web capture below shows the graphical installation entry.
+
+![Enter dsh-claude-compat in the DSH Add plugin dialog](../assets/install-plugin-en.png)
+
+Only the package name was entered for this capture; no installation was submitted. If already installed, the interface may ask you to uninstall before reinstalling.
+
+### Command line
+
 One command — the package declares `dsh.bundle`, so DSH activates it automatically (no manual `cordis.patch.yml` editing). Install or update to the latest release:
 
 ```bash
