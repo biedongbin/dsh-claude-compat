@@ -8,7 +8,11 @@ window.__ModuleLoader__.load({
       en: {
         title: 'Claude Code', plugins: 'Installed plugins', search: 'Discover', find: 'Search', markets: 'Marketplaces',
         sessions: 'Sessions', status: 'Bridge status', loading: 'Loading…', retry: 'Retry', refresh: 'Refresh',
-        query: 'Search by name or description', empty: 'No matching items', enabled: 'Enabled', disabled: 'Disabled',
+        query: 'Search by name or description', enabled: 'Enabled', disabled: 'Disabled',
+        empty: 'Nothing matches. Try another category, clear the search, or check that the project has a .claude/ directory.',
+        searchAsYouType: 'Type to search — results update as you type',
+        activeFilters: 'Narrowed by', removeFilter: 'Remove this filter', clearFilters: 'Clear all',
+        noMatchFor: 'Nothing matches these filters:', sourceLabel: 'Source',
         enable: 'Enable', disable: 'Disable', update: 'Update', remove: 'Uninstall', install: 'Install',
         target: 'Plugin name@marketplace', marketTarget: 'Marketplace repository, URL or directory', add: 'Add marketplace',
         confirm: 'Confirm', cancel: 'Cancel', confirmRemove: 'Remove this item?', running: 'Running',
@@ -76,7 +80,11 @@ window.__ModuleLoader__.load({
       zh: {
         title: 'Claude Code', plugins: '已安装插件', search: '发现插件', find: '搜索', markets: '插件市场',
         sessions: '历史会话', status: '桥接状态', loading: '正在加载…', retry: '重试', refresh: '刷新',
-        query: '搜索名称或描述', empty: '没有匹配的内容', enabled: '已启用', disabled: '已禁用',
+        query: '搜索名称或描述', enabled: '已启用', disabled: '已禁用',
+        empty: '没有匹配的内容。换个分类、清空搜索，或确认项目的 .claude/ 目录是否存在。',
+        searchAsYouType: '输入即搜索，无需确认',
+        activeFilters: '当前筛选', removeFilter: '移除该筛选', clearFilters: '清空全部筛选',
+        noMatchFor: '没有符合以下筛选的内容：', sourceLabel: '来源',
         enable: '启用', disable: '禁用', update: '更新', remove: '卸载', install: '安装',
         target: '插件名@市场名', marketTarget: '市场仓库、地址或本地目录', add: '添加市场',
         confirm: '确认', cancel: '取消', confirmRemove: '确认移除此项？', running: '执行中',
@@ -217,6 +225,13 @@ button into a full-width slab, which read as one giant control. */
 .dcc-file-pre{margin:10px 0 0;padding:16px 18px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;
   background:var(--dsw-alias-bg-layer-2);font-size:13px;line-height:1.75;white-space:pre-wrap;
   overflow-wrap:anywhere;max-height:62vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+/* Active-filter chips: the answer to "why is the list empty". */
+.dcc-inv-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;margin-bottom:10px;
+  border-radius:8px;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,transparent)}
+.dcc-filter-chip{font:inherit;font-size:12px;min-height:26px;padding:2px 9px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dcc-filter-chip:hover{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}
 /* What a plugin ships, as clickable counters. */
 .dcc-provides{margin:12px 0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px}
 .dcc-provides h4{font-size:12px;margin:0 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}
@@ -923,6 +938,24 @@ button into a full-width slab, which read as one giant control. */
           const status = useLoad({ action: 'status', ...(sessionId ? { sessionId } : {}) }, revision);
           const cwd = cwdOverride || status.data?.cwd || '';
           const drillActive = pluginFilter.key !== '' && pluginFilter.forKind === kind;
+          // One place that answers "why is this list empty": every filter that is
+          // currently narrowing it, each removable on its own.
+          const activeFilters = [
+            search !== '' && { key: 'search', label: `${t('query')}: ${search}`,
+              clear: () => { remember(); setQuery(''); setSearch(''); setOffset(0); } },
+            source !== '' && { key: 'source', label: `${t('sourceLabel')}: ${t(INV_SOURCE_LABEL[source] ?? source)}`,
+              clear: () => { remember(); setSource(''); setOffset(0); setSelectedId(null); } },
+            drillActive && { key: 'plugin', label: `${t('filteredByPlugin')} ${pluginFilter.name || pluginFilter.key}`,
+              clear: () => { remember(); setPluginFilter({ key: '', name: '', forKind: '' }); setOffset(0); setSelectedId(null); } },
+            showDuplicates && { key: 'duplicates', label: t('duplicates'),
+              clear: () => { remember(); setShowDuplicates(false); setOffset(0); setSelectedId(null); } },
+          ].filter(Boolean);
+          const clearAllFilters = () => {
+            remember();
+            setQuery(''); setSearch(''); setSource('');
+            setPluginFilter({ key: '', name: '', forKind: '' });
+            setShowDuplicates(false); setOffset(0); setSelectedId(null);
+          };
           // Full-area file viewer state (see FileViewer).
           const emptyView = { open: false, id: '', name: '', path: '', loading: false, data: null,
             error: '', translating: false, translation: undefined, translateError: '', cached: false, backend: '' };
@@ -1018,6 +1051,13 @@ button into a full-width slab, which read as one giant control. */
             setOffset(previous.offset);
             setSelectedId(previous.selectedId);
           }
+          // Debounced live search: 220 ms is long enough to skip intermediate
+          // keystrokes and short enough to feel immediate.
+          useEffect(() => {
+            if (query === search) return undefined;
+            const timer = setTimeout(() => { setSearch(query); setOffset(0); }, 220);
+            return () => clearTimeout(timer);
+          }, [query]);
           const refresh = () => setRevision((n) => n + 1);
           async function chooseDirectory() {
             try { const dir = await ctx.get('uiWorkspace')?.pickDirectory(); if (dir) { setCwdOverride(dir); setOffset(0); setSelectedId(null); } }
@@ -1058,10 +1098,22 @@ button into a full-width slab, which read as one giant control. */
                 drillActive && h('div', { className: 'dcc-inv-filterbar' },
                   h('span', null, `${t('filteredByPlugin')}${pluginFilter.name}`),
                   h(Button, { onClick: () => { remember(); setPluginFilter({ key: '', name: '', forKind: '' }); setOffset(0); setSelectedId(null); } }, t('clearFilter'))),
-                kind !== 'trash' && h('form', { className: 'dcc-toolbar', onSubmit: (event) => { event.preventDefault(); remember(); setSearch(query); setOffset(0); } },
-                  h('input', { type: 'search', value: query, onChange: (event) => setQuery(event.target.value), 'aria-label': t('query'), placeholder: t('query') }),
-                  h('button', { type: 'submit', disabled: state.loading }, t('find'))),
-                h(LoadState, { state, retry: refresh, empty: items.length === 0 ? t('empty') : '' }),
+                // Typing searches: there is no confirm step to forget, and no
+                // stale applied query left behind after the box is cleared.
+                kind !== 'trash' && h('div', { className: 'dcc-toolbar' },
+                  h('input', { type: 'search', value: query, onChange: (event) => setQuery(event.target.value),
+                    'aria-label': t('query'), placeholder: t('searchAsYouType') })),
+                kind !== 'trash' && activeFilters.length > 0 && h('div', { className: 'dcc-inv-filters', role: 'group', 'aria-label': t('activeFilters') },
+                  h('span', { className: 'dcc-subtle' }, `${t('activeFilters')}：`),
+                  activeFilters.map((entry) => h('button', {
+                    key: entry.key, className: 'dcc-filter-chip', onClick: entry.clear,
+                    title: t('removeFilter'),
+                  }, `${entry.label} ✕`)),
+                  h(Button, { onClick: clearAllFilters }, t('clearFilters'))),
+                h(LoadState, { state, retry: refresh,
+                  empty: items.length === 0
+                    ? (activeFilters.length > 0 ? `${t('noMatchFor')} ${activeFilters.map((entry) => entry.label).join(' · ')}` : t('empty'))
+                    : '' }),
                 kind === 'trash' && h('ul', { className: 'dcc-list', 'aria-busy': state.loading }, items.map((entry) => {
                   const request = { action: 'inventory.restore', id: entry.id, cwd };
                   return h('li', { key: `${entry.id}:${entry.trashedAt}`, className: `dcc-inv-item${selectedId === entry.id ? ' dcc-inv-sel' : ''}`,

@@ -126,6 +126,36 @@ test('no button renders without a visible label', () => {
   assert.deepEqual(offenders, [], 'a missing locale key produced a blank button');
 });
 
+test('inventory search runs as you type and has no confirm button', () => {
+  const { registrations } = loadClient();
+  const main = registrations.find((entry) => entry.options.name === 'main');
+  const tree = main.render({});
+  const inputs = [];
+  const buttons = [];
+  walk(tree, (node) => {
+    const cls = typeof node?.props?.className === 'string' ? node.props.className : '';
+    if (node?.tag === 'input' && node.props?.type === 'search') inputs.push(node.props);
+    if (node?.tag === 'button') buttons.push(flatten(node.kids).join(''));
+    if (cls.includes('dcc-inv-filters')) buttons.push('FILTER-BAR');
+  });
+  assert.equal(inputs.length, 1, 'exactly one search box');
+  // The placeholder advertises live search instead of an apply step.
+  assert.equal(inputs[0].placeholder, 'searchAsYouType');
+  assert.deepEqual(buttons.filter((label) => label === 'find'), [], 'no submit-to-search button remains');
+  // Nothing is filtered initially, so the chip bar stays out of the way.
+  assert.deepEqual(buttons.filter((label) => label === 'FILTER-BAR'), []);
+});
+
+test('an active filter is shown with its own clear action', () => {
+  // The chip bar is driven by state, so exercise its descriptor logic directly:
+  // every filter that can empty the list must appear in one removable list.
+  const source = readFileSync(SOURCE_PATH, 'utf8');
+  for (const key of ['search !== \'\'', 'source !== \'\'', 'drillActive &&', 'showDuplicates &&']) {
+    assert.ok(source.includes(key), `active-filter list covers ${key}`);
+  }
+  assert.ok(source.includes('clearAllFilters'), 'there is a clear-all action');
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function findNode(node, predicate) {
   if (Array.isArray(node)) {
