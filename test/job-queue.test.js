@@ -73,6 +73,12 @@ test('operation keys isolate marketplace, plugin and session targets', () => {
   assert.equal(operationKey({ action: 'sessions.import', cwd: '/project', sessionId: 'id' }), JSON.stringify(['session', '/project', 'id']));
   assert.equal(operationKey({ action: 'sessions.import' }), JSON.stringify(['session', '', '']));
   assert.equal(operationKey({ action: 'reload' }), JSON.stringify(['reload']));
+  for (const action of ['inventory.toggle', 'inventory.trash', 'inventory.restore']) {
+    assert.notEqual(operationKey({ action, id: 'same-item', cwd: '/a' }),
+      operationKey({ action, id: 'same-item', cwd: '/b' }), 'project mutations cannot share a cross-project lock');
+  }
+  assert.equal(operationKey({ action: 'inventory.trash', id: 'x', cwd: '/a' }),
+    operationKey({ action: 'inventory.restore', id: 'x', cwd: '/a' }));
 });
 
 test('different targets are accepted together and progress/results remain isolated', async (t) => {

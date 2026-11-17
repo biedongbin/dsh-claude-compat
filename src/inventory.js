@@ -1,9 +1,9 @@
 // dsh-claude-compat: inventory aggregation + per-project enable/disable state.
 //
-// The inventory answers "what did the Claude bridge actually load into this
-// DSH session?" — every plugin, skill, command, agent, rule file, hook file
-// and MCP server the bridge contributes, with source and rank so a collision
-// that the registry silently resolved is visible in the UI.
+// Inventory shows discovered Claude content and declared integrations. It is
+// not a runtime mount snapshot: declaration-only MCP/hook/rule rows say so.
+// Skill candidates carry source, rank and disable state so registry collisions
+// and the effect of per-project switches can be inspected.
 //
 // The per-project state file (<projectRoot>/.dsh/claude-compat-state.json)
 // records which bridge items the user switched OFF inside DSH. Missing file
@@ -11,8 +11,9 @@
 // of hand edits. Toggling only affects DSH-side injection (skill catalog
 // filtering in provider.list); it never touches Claude Code's own files.
 
-import { readFileSync, existsSync } from 'node:fs';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { link, lstat, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
   findProjectRootSync,
@@ -20,7 +21,8 @@ import {
   listMdFilesSync,
   readTextSafeSync,
 } from './lib.js';
-import { readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
+import { readInstalledClaudePlugins, readPluginMcpDeclarations } from './plugins.js';
+import { readSourceDocs, selectEntries } from './mcp-sources.js';
 
 export const COMPAT_STATE_VERSION = 1;
 
@@ -63,9 +65,29 @@ export async function writeCompatState(projectRoot, disabled) {
     version: COMPAT_STATE_VERSION,
     disabled: Object.fromEntries([...disabled].sort().map((id) => [id, true])),
   }, null, 2) + '\n';
-  const temp = `${path}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(temp, body, 'utf8');
-  await rename(temp, path);
+  await atomicWrite(path, body);
+}
+
+async function atomicWrite(path, body) {
+  const temp = `${path}.tmp-${randomUUID()}`;
+  try {
+    await writeFile(temp, body, { encoding: 'utf8', flag: 'wx' });
+    await rename(temp, path);
+  } finally {
+    await unlink(temp).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+  }
+}
+
+// One project state and trash manifest are shared by every item mutation.
+const mutationQueues = new Map();
+async function withProjectMutation(args, action) {
+  const root = findProjectRootSync(args.cwd, args.config.projectRootMarkers);
+  if (root === undefined) return Promise.reject(new Error('The project directory could not be resolved'));
+  const key = realpathSync(root);
+  const previous = mutationQueues.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => {}).then(() => action(args));
+  mutationQueues.set(key, pending);
+  return pending.finally(() => { if (mutationQueues.get(key) === pending) mutationQueues.delete(key); });
 }
 
 // Registry-namespace item id: source and name. Candidates carry the
@@ -128,7 +150,7 @@ export function filterCandidatesByState(candidates, cwd, config, plugins) {
     if (candidate.source === 'claude-compat-manager') return true;
     const owner = ownerOfPath(index, candidate.path);
     if (owner !== undefined && offPlugins.has(owner.key)) return false;
-    return !disabled.has(candidateId(candidate, owner?.key, kindOfPath(candidate.path)));
+    return !disabled.has(candidateId(candidate, owner?.key, candidate.compatKind ?? kindOfPath(candidate.path)));
   });
 }
 
@@ -148,24 +170,27 @@ export function pluginExtras(installPath) {
     } catch { /* a broken manifest is reported by the MCP bridge, not here */ }
   }
   try {
-    const translated = translatePluginMcp(manifest, installPath, {});
-    mcpNames.push(...(translated.names ?? []));
+    const declared = readPluginMcpDeclarations(manifest, installPath);
+    mcpNames.push(...declared.entries.map(([name]) => name));
     counts.mcp = mcpNames.length;
-  } catch { /* MCP translation is best-effort for display */ }
+  } catch { /* MCP declarations are best-effort for display */ }
   // Hooks: Claude plugins keep them in hooks/hooks.json or inline in the manifest.
   const hooksFile = readTextSafeSync(join(installPath, 'hooks', 'hooks.json'));
   let hooks = manifest.hooks;
   if (hooksFile !== undefined) {
     try { hooks = JSON.parse(hooksFile); } catch { /* keep the manifest value */ }
   }
+  if (isObject(hooks?.hooks)) hooks = hooks.hooks;
   if (isObject(hooks)) {
     const events = Object.keys(hooks);
     hookEvents.push(...events);
     counts.hook = events.length;
   }
   // Rules: no Claude convention, but a rules/ dir is the common shape.
-  counts.rule = listMdFilesSync(join(installPath, 'rules')).length;
-  return { counts, mcpNames, hookEvents };
+  const ruleFiles = listMdFilesSync(join(installPath, 'rules'));
+  counts.rule = ruleFiles.length;
+  return { counts, mcpNames, hookEvents, ruleFiles,
+    hooksPath: hooksFile === undefined ? join(installPath, '.claude-plugin', 'plugin.json') : join(installPath, 'hooks', 'hooks.json') };
 }
 
 // ─── inventory ───────────────────────────────────────────────────────────────
@@ -180,10 +205,10 @@ const KIND_ORDER = ['plugin', 'skill', 'command', 'agent', 'rule', 'hook', 'mcp'
 //   - rules files (project first, user fallback, basename dedupe — the
 //     same resolution buildRulesText performs)
 //   - hook files (settings.json `hooks` blocks, listed read-only)
-//   - MCP servers from loadMcpServers (process-lifetime mount)
+//   - MCP declarations from read-only source selection (runtime status unverified)
 // Same-name candidates across sources are resolved like the registry does
 // (lower rank wins); losers carry `overriddenBy` so the UI can flag them.
-export async function buildInventory({ cwd, config }) {
+export async function buildInventory({ cwd, config, managedDir }) {
   const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
   const { disabled } = readCompatState(projectRoot);
   const items = [];
@@ -199,7 +224,9 @@ export async function buildInventory({ cwd, config }) {
       source: 'claude-plugin', path: plugin.installPath, rank: config.pluginSkillRank ?? 750,
       toggleable: true, disabledInDsh: disabled.has(`plugin:${plugin.key}`),
       plugin: { key: plugin.key, marketplace: plugin.marketplace, version: plugin.version,
-        installPath: plugin.installPath, enabledInClaude: plugin.enabled === true },
+        installPath: plugin.installPath, enabledInClaude: plugin.enabled === true,
+        ...(plugin.installedAt !== undefined ? { installedAt: plugin.installedAt } : {}),
+        ...(plugin.lastUpdated !== undefined ? { lastUpdated: plugin.lastUpdated } : {}) },
     };
     pluginItems.push(item);
     items.push(item);
@@ -235,22 +262,28 @@ export async function buildInventory({ cwd, config }) {
   if (config.enablePlugins !== false) {
     const batch = await discoverPluginContent(config.pluginsRoot, 'claude-compat',
       config.pluginSkillSource ?? 'claude-plugin', config.pluginSkillRank ?? 750,
-      { enableAgents: config.enableAgents, userClaudeDir: config.userClaudeDir, ...aliasOptions });
-    // Plugin content mixes kinds; the locator path and invocation separate
-    // them: commands are user-invocable files from commands dirs, agents
-    // were rendered through discoverAgents. discoverPluginContent does not
-    // tag kinds, so classify by directory segment — skills/, commands/,
-    // agents/ — which is how the manifest layout names them.
+      { enableAgents: config.enableAgents, userClaudeDir: config.userClaudeDir, includeDisabled: true, ...aliasOptions });
+    // Explicit discovery kind also handles manifest paths such as ./personas.
     for (const candidate of batch) {
-      const path = candidate.path ?? '';
-      const kind = /\/commands\//.test(path) ? 'command' : /\/agents\//.test(path) ? 'agent' : 'skill';
+      const kind = candidate.compatKind ?? kindOfPath(candidate.path);
       candidates.push({ kind, candidate });
     }
   }
   // Registry-style dedupe: same name, lowest rank wins. All kinds share the
   // DSH skill namespace, so a command and skill of one name also collide.
+  const pluginByKey = new Map(plugins.map((plugin) => [plugin.key, plugin]));
+  const candidateState = (kind, candidate) => {
+    const owner = ownerOfPath(pluginByPath, candidate.path);
+    return {
+      disabledInDsh: disabled.has(candidateId(candidate, owner?.key, kind)),
+      disabledByPlugin: owner !== undefined && disabled.has(`plugin:${owner.key}`),
+      disabledInClaude: owner !== undefined && pluginByKey.get(owner.key)?.enabled !== true,
+    };
+  };
   const winners = new Map();
   for (const { kind, candidate } of candidates) {
+    const state = candidateState(kind, candidate);
+    if (state.disabledInDsh || state.disabledByPlugin || state.disabledInClaude) continue;
     const previous = winners.get(candidate.name);
     if (previous === undefined || candidate.rank < previous.candidate.rank) {
       winners.set(candidate.name, { kind, candidate });
@@ -265,13 +298,17 @@ export async function buildInventory({ cwd, config }) {
     const winnerOwner = winner === undefined ? undefined : ownerOfPath(pluginByPath, winner.candidate.path);
     const winnerOwnerKey = winnerOwner?.key;
     const winnerOwnerName = winnerOwner?.name;
+    const state = candidateState(kind, candidate);
+    const inactive = state.disabledInDsh || state.disabledByPlugin || state.disabledInClaude;
     items.push({
       id, kind, name: candidate.name, description: candidate.description ?? '',
       ...(candidate.whenToUse !== undefined ? { whenToUse: candidate.whenToUse } : {}),
       source: candidate.source, path: candidate.path, rank: candidate.rank,
       ...(owner !== undefined ? { pluginKey: owner.key, pluginName: owner.name } : {}),
-      toggleable: true, disabledInDsh: disabled.has(id),
-      ...(winner !== undefined && winner.candidate !== candidate
+      toggleable: !state.disabledByPlugin && !state.disabledInClaude, ...state,
+      ...(state.disabledByPlugin ? { toggleBlockedReason: 'Enable the owning plugin in DSH first' }
+        : state.disabledInClaude ? { toggleBlockedReason: 'Enable the owning plugin in Claude first' } : {}),
+      ...(!inactive && winner !== undefined && winner.candidate !== candidate
         ? { overriddenBy: candidateId(winner.candidate, winnerOwnerKey, winner.kind),
           overriddenByName: winnerOwnerName ?? null,
           overriddenBySource: winner.candidate.source,
@@ -287,26 +324,35 @@ export async function buildInventory({ cwd, config }) {
     });
   }
 
-  // What each plugin actually ships. Counted from EVERY discovered candidate
-  // (shadowed ones included: the plugin does provide them, DSH merely doesn't
-  // load them), plus MCP servers, hooks and rules read from the install dir.
-  const byPlugin = new Map();
-  for (const { kind, candidate } of candidates) {
-    const owner = ownerOfPath(pluginByPath, candidate.path);
-    if (owner === undefined) continue;
-    if (!byPlugin.has(owner.key)) byPlugin.set(owner.key, { skill: 0, command: 0, agent: 0 });
-    const bucket = byPlugin.get(owner.key);
-    bucket[kind] = (bucket[kind] ?? 0) + 1;
-  }
+  // Declaration rows and plugin totals share one dataset, including disabled plugins.
   for (const item of pluginItems) {
-    const installPath = item.plugin?.installPath;
-    const provided = { ...(byPlugin.get(item.plugin?.key) ?? { skill: 0, command: 0, agent: 0 }) };
-    const extras = installPath === undefined ? {} : pluginExtras(installPath);
-    Object.assign(provided, extras.counts);
-    item.provides = provided;
-    if (extras.mcpNames.length > 0) item.mcpNames = extras.mcpNames;
-    if (extras.hookEvents.length > 0) item.hookEvents = extras.hookEvents;
-    item.providesTotal = Object.values(provided).reduce((sum, value) => sum + value, 0);
+    const extras = pluginExtras(item.plugin.installPath);
+    item.mcpNames = extras.mcpNames;
+    item.hookEvents = extras.hookEvents;
+    const addExtra = (kind, name, path, description) => items.push({
+      id: `${kind}:${item.plugin.key}:${name}`, kind, name, description,
+      ...(path !== undefined ? { path } : {}),
+      source: 'claude-plugin', pluginKey: item.plugin.key, pluginName: item.name,
+      toggleable: false, disabledInDsh: item.disabledInDsh,
+      disabledInClaude: !item.plugin.enabledInClaude, declarationOnly: true,
+    });
+    for (const event of extras.hookEvents) {
+      addExtra('hook', event, extras.hooksPath, 'declared by plugin; plugin hooks are not injected by this bridge');
+    }
+    for (const file of extras.ruleFiles) {
+      addExtra('rule', basename(file), file, 'declared by plugin; plugin rules are not injected by this bridge');
+    }
+    for (const name of extras.mcpNames) {
+      const reason = config.enableMcp === false ? 'enableMcp is off'
+        : config.enablePlugins === false ? 'enablePlugins is off'
+        : !item.plugin.enabledInClaude ? 'plugin is disabled in Claude'
+        : config.enablePluginMcp !== true ? 'enablePluginMcp is off'
+        : 'startup policy and runtime status unverified';
+      addExtra('mcp', name, undefined, `declared by plugin; ${reason}`);
+    }
+    item.provides = Object.fromEntries(KIND_ORDER.filter((kind) => kind !== 'plugin')
+      .map((kind) => [kind, items.filter((row) => row.pluginKey === item.plugin.key && row.kind === kind).length]));
+    item.providesTotal = Object.values(item.provides).reduce((sum, count) => sum + count, 0);
   }
 
   // Rules — the same project-first, basename-deduped resolution the injector
@@ -323,7 +369,7 @@ export async function buildInventory({ cwd, config }) {
       seenRules.add(basename);
       items.push({ id: `rule:${source}:${basename}`, kind: 'rule', name: basename,
         description: 'injected once per session as a system-reminder',
-        source, path: file, rank: undefined, toggleable: false, disabledInDsh: false });
+        source, path: file, toggleable: false, disabledInDsh: false });
     }
   }
 
@@ -340,66 +386,43 @@ export async function buildInventory({ cwd, config }) {
       if (!isObject(hooks) || Object.keys(hooks).length === 0) continue;
       const summary = Object.entries(hooks).map(([event, matchers]) => `${event} ×${Array.isArray(matchers) ? matchers.length : 1}`).join(', ');
       items.push({ id: `hook:${source}:${path}`, kind: 'hook', name: path.split('/').pop(),
-        description: summary, source, path, rank: undefined, toggleable: false, disabledInDsh: false });
+        description: summary, source, path, toggleable: false, disabledInDsh: false });
     } catch { /* a malformed settings file is reported by the hook bridge */ }
   }
 
-  // MCP — process-lifetime mount; display-only, changes need a restart.
-  // Plugin-declared MCP servers were only counted in `provides`, never listed as
-  // items, so drilling into a plugin's "1 MCP" landed on an empty list.
-  const mcpOwner = new Map();
-  for (const item of pluginItems) {
-    for (const server of item.mcpNames ?? []) {
-      if (!mcpOwner.has(server)) mcpOwner.set(server, { key: item.plugin?.key, name: item.name });
-    }
-  }
-  const mounted = new Set();
-  try {
-    const { loadMcpServers } = await import('./mcp.js');
-    const loaded = await loadMcpServers(config);
-    for (const name of loaded.names ?? []) {
-      mounted.add(name);
-      const owner = mcpOwner.get(name);
-      items.push({ id: `mcp:${name}`, kind: 'mcp', name,
-        description: loaded.exclusive ? 'mounted (managed-mcp.json is exclusive)' : 'mounted at DSH startup',
-        source: 'mcp', path: undefined, rank: undefined, toggleable: false, disabledInDsh: false,
-        ...(owner ? { pluginKey: owner.key, pluginName: owner.name } : {}) });
-    }
-  } catch (error) {
-    console.warn(`dsh-claude-compat: inventory could not list MCP servers: ${error?.message ?? error}`);
-  }
-
-  // Declared by a plugin but not mounted (plugin MCP is opt-in). Listed so the
-  // drill-down can show them, and labelled so "not mounted" is not mistaken
-  // for "broken".
-  for (const item of pluginItems) {
-    for (const server of item.mcpNames ?? []) {
-      if (mounted.has(server)) continue;
-      items.push({ id: `mcp:${item.plugin?.key}:${server}`, kind: 'mcp', name: server,
-        description: 'declared by this plugin but not mounted (enablePluginMcp is off)',
-        source: 'claude-plugin', path: undefined, rank: undefined, toggleable: false, disabledInDsh: false,
-        pluginKey: item.plugin?.key, pluginName: item.name });
-    }
+  // Static source selection only: the startup loader executes headersHelper.
+  // Selected declarations do not prove successful translation, policy approval or mounting.
+  const selected = selectEntries(await readSourceDocs({ config, cwd, projectRoot, managedDir }));
+  for (const entry of selected.entries) {
+    items.push({ id: `mcp:${entry.scope}:${entry.name}`, kind: 'mcp', name: entry.name,
+      description: config.enableMcp === false ? 'declared; enableMcp is off'
+        : 'declared in Claude configuration; startup policy and runtime status unverified',
+      source: 'mcp', mcpScope: entry.scope,
+      toggleable: false, disabledInDsh: false, declarationOnly: true });
   }
 
   const counts = Object.fromEntries(KIND_ORDER.map((kind) => [kind, 0]));
   for (const item of items) counts[item.kind] = (counts[item.kind] ?? 0) + 1;
   items.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind)
     || a.name.localeCompare(b.name));
-  return { projectRoot, statePath: projectRoot !== undefined ? compatStatePath(projectRoot) : undefined,
+  return { projectRoot: projectRoot ?? null, statePath: projectRoot !== undefined ? compatStatePath(projectRoot) : null,
     counts, disabledCount: [...disabled].length, items };
 }
 
 // Apply one toggle. Rebuilds the inventory to validate the id, flips the
 // entry, persists, and lets the caller invalidate the skill catalog.
-export async function toggleInventoryItem({ cwd, config, id, disabled }) {
+export function toggleInventoryItem(args) {
+  return withProjectMutation(args, toggleItem);
+}
+
+async function toggleItem({ cwd, config, id, disabled }) {
   if (typeof id !== 'string' || id === '' || id.length > 512 || !id.includes(':')) {
     throw new Error('Toggle target must be an inventory item id (source:name)');
   }
   const inventory = await buildInventory({ cwd, config });
   const item = inventory.items.find((entry) => entry.id === id);
   if (item === undefined) throw new Error(`Unknown inventory item: ${id}`);
-  if (item.toggleable === false) throw new Error(`${item.kind} items are display-only for now`);
+  if (item.toggleable === false) throw new Error(item.toggleBlockedReason ?? `${item.kind} items are display-only for now`);
   const state = readCompatState(inventory.projectRoot);
   if (disabled) state.disabled.add(id);
   else state.disabled.delete(id);
@@ -421,7 +444,8 @@ export async function readItemContent(filePath, { maxBytes = 200_000 } = {}) {
   }
   const raw = await readFile(filePath, 'utf8');
   const truncated = raw.length > maxBytes;
-  return { ok: true, content: truncated ? raw.slice(0, maxBytes) : raw, truncated,
+  const content = truncated ? raw.slice(0, maxBytes) : raw;
+  return { ok: true, content, contentHash: createHash('sha256').update(content).digest('hex'), truncated,
     bytes: info.size, mtime: info.mtime.toISOString() };
 }
 
@@ -436,12 +460,20 @@ const trashDir = (root) => join(root, '.dsh', 'trash');
 const trashManifestPath = (root) => join(trashDir(root), 'manifest.json');
 
 function readTrashManifest(root) {
-  try { return JSON.parse(readFileSync(trashManifestPath(root), 'utf8')); } catch { return []; }
+  let raw;
+  try { raw = readFileSync(trashManifestPath(root), 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  const manifest = JSON.parse(raw);
+  if (!Array.isArray(manifest) || manifest.some((entry) => !isObject(entry)
+    || typeof entry.id !== 'string' || typeof entry.originalPath !== 'string' || typeof entry.trashPath !== 'string')) {
+    throw new Error('Trash manifest is invalid; repair it before changing trash');
+  }
+  return manifest;
 }
 
 async function writeTrashManifest(root, manifest) {
   await mkdir(trashDir(root), { recursive: true });
-  await writeFile(trashManifestPath(root), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  await atomicWrite(trashManifestPath(root), JSON.stringify(manifest, null, 2) + '\n');
 }
 
 // Trashed entries for the UI: manifest records that still exist on disk.
@@ -457,7 +489,19 @@ export function listTrashedItems({ cwd, config }) {
 
 // Move one file-backed inventory item into the trash. Plugin items refuse:
 // their lifecycle belongs to `plugins.uninstall`.
-export async function trashInventoryItem({ cwd, config, id }) {
+export function trashInventoryItem(args) {
+  return withProjectMutation(args, trashItem);
+}
+
+// link refuses an existing destination atomically; only regular files are supported.
+async function moveFileWithoutOverwrite(from, to) {
+  if (!(await lstat(from)).isFile()) throw new Error('Only regular files can be moved to or from trash');
+  await link(from, to);
+  try { await unlink(from); }
+  catch (error) { await unlink(to); throw error; }
+}
+
+async function trashItem({ cwd, config, id }) {
   if (typeof id !== 'string' || !id.includes(':')) throw new Error('Trash target must be an inventory item id');
   if (id.startsWith('plugin:')) throw new Error('Plugins are removed through plugins.uninstall, not the trash');
   const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
@@ -469,24 +513,42 @@ export async function trashInventoryItem({ cwd, config, id }) {
   const inventory = await buildInventory({ cwd, config });
   const item = inventory.items.find((entry) => entry.id === id);
   if (item === undefined) throw new Error(`Unknown inventory item: ${id}`);
+  if (item.pluginKey !== undefined || !['skill', 'command', 'agent'].includes(item.kind)) {
+    throw new Error('Only project or user skills, commands and agents can be trashed');
+  }
   if (typeof item.path !== 'string' || !existsSync(item.path)) throw new Error(`${item.name} has no local file to move`);
   const root = projectRoot;
-  const stamped = `${Date.now()}-${basename(item.path)}`;
-  const trashPath = join(trashDir(root), stamped);
+  const trashPath = join(trashDir(root), `${randomUUID()}-${basename(item.path)}`);
   await mkdir(trashDir(root), { recursive: true });
-  await rename(item.path, trashPath);
-  manifest.push({ id, originalPath: item.path, trashPath, at: new Date().toISOString() });
-  await writeTrashManifest(root, manifest);
-  const state = readCompatState(root);
-  state.disabled.add(id);
-  await writeCompatState(root, state.disabled);
+  await moveFileWithoutOverwrite(item.path, trashPath);
+  const entry = { id, originalPath: item.path, trashPath, at: new Date().toISOString() };
+  let manifestWritten = false;
+  try {
+    await writeTrashManifest(root, [...manifest, entry]);
+    manifestWritten = true;
+    const state = readCompatState(root);
+    state.disabled.add(id);
+    await writeCompatState(root, state.disabled);
+  } catch (error) {
+    try {
+      await moveFileWithoutOverwrite(trashPath, item.path);
+      if (manifestWritten) await writeTrashManifest(root, manifest);
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError], `Trash failed and rollback failed; recover the file at ${trashPath}`);
+    }
+    throw error;
+  }
   return { ok: true, id, catalogRefreshed: true,
     text: `${item.name} was moved to the project trash and disabled. Restore it from the trash list.` };
 }
 
 // Move the newest trashed entry for an id back to its original path and
 // re-enable it.
-export async function restoreInventoryItem({ cwd, config, id }) {
+export function restoreInventoryItem(args) {
+  return withProjectMutation(args, restoreItem);
+}
+
+async function restoreItem({ cwd, config, id }) {
   if (typeof id !== 'string' || !id.includes(':')) throw new Error('Restore target must be an inventory item id');
   const projectRoot = findProjectRootSync(cwd, config.projectRootMarkers);
   if (projectRoot === undefined) throw new Error('The project directory could not be resolved');
@@ -496,12 +558,23 @@ export async function restoreInventoryItem({ cwd, config, id }) {
   const entry = manifest[index];
   await mkdir(dirname(entry.originalPath), { recursive: true });
   if (existsSync(entry.originalPath)) throw new Error(`${entry.originalPath} already exists; move it away first`);
-  await rename(entry.trashPath, entry.originalPath);
-  manifest.splice(index, 1);
-  await writeTrashManifest(projectRoot, manifest);
-  const state = readCompatState(projectRoot);
-  state.disabled.delete(id);
-  await writeCompatState(projectRoot, state.disabled);
+  await moveFileWithoutOverwrite(entry.trashPath, entry.originalPath);
+  let manifestWritten = false;
+  try {
+    await writeTrashManifest(projectRoot, manifest.filter((_, at) => at !== index));
+    manifestWritten = true;
+    const state = readCompatState(projectRoot);
+    state.disabled.delete(id);
+    await writeCompatState(projectRoot, state.disabled);
+  } catch (error) {
+    try {
+      await moveFileWithoutOverwrite(entry.originalPath, entry.trashPath);
+      if (manifestWritten) await writeTrashManifest(projectRoot, manifest);
+    } catch (rollbackError) {
+      throw new AggregateError([error, rollbackError], `Restore failed and rollback failed; inspect ${entry.originalPath} and ${entry.trashPath}`);
+    }
+    throw error;
+  }
   return { ok: true, id, catalogRefreshed: true,
     text: `${entry.originalPath.split('/').pop()} was restored and re-enabled.` };
 }

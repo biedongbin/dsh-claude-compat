@@ -76,6 +76,16 @@ Restart DSH if it is already running. Your existing project and user-level `.cla
 | [Compatibility and upgrades](docs/readme/en/compatibility.md) | Tested DSH versions and migration notes |
 | [Troubleshooting](docs/readme/en/troubleshooting.md) | Missing skills, CLI errors, startup and archive issues |
 
+## What's new in 2.0.0
+
+**The inventory brings discovery, file reading and translation into one page.** Browse skills, commands, agents, rules, hooks, MCP declarations and plugins; drill into a plugin's capabilities and inspect duplicate candidates. Disabled Claude plugins remain visible. Counts describe the discovered inventory, not a snapshot of mounted runtime integrations. MCP inspection is read-only and does not execute `headersHelper`; plugin hooks and rules are declarations that this bridge does not inject.
+
+- **DSH switches:** per-project switches filter skills, commands and agents from the bridge's skill catalog. A plugin switch groups those three kinds only. State is saved in `.dsh/claude-compat-state.json`; Claude Code's enablement stays separate. Rules, hooks and MCP rows are view-only, and switching a plugin does not unmount its MCP servers or hooks.
+- **Read and manage files:** open file-backed entries in the viewer, copy paths, and move supported project files to the project trash with restore protection against overwriting existing files.
+- **View-only translation:** translate prose into the current DSH interface locale, with original and translation side by side. Source files stay unchanged; fenced code is preserved and excluded from provider requests. Results use a disk cache keyed by source content and target language; cache hits make no provider calls. **Translate again** requests fresh translation. DSH's translator service is preferred; when absent, the configured default model handles prose chunks, consuming model tokens and potentially incurring charges. Large files can require multiple calls. Progress survives closing and reopening the viewer; failed, cancelled or truncated output is not saved as a successful translation.
+
+See [bridge behavior](docs/readme/en/bridge-behavior.md), [commands](docs/readme/en/commands.md) and the [2.0.0 release notes](CHANGELOG.md#200--2026-11-17) for details and upgrade boundaries. The demo above predates this inventory update.
+
 ## Changelog
 
 [Release history](CHANGELOG.md) · [简体中文](CHANGELOG.zh-CN.md)

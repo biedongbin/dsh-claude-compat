@@ -94,6 +94,10 @@ export async function clientHarness(t, options = {}) {
   runInNewContext(source, {
     window: { __ModuleLoader__: { load(value) { definition = value; } } },
     crypto: globalThis.crypto, AbortController, console,
+    localStorage: options.storage ?? (() => {
+      const values = new Map(Object.entries(options.savedView ? { 'dcc-inv-view': JSON.stringify(options.savedView) } : {}));
+      return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    })(),
     setTimeout: (...args) => globalThis.setTimeout(...args),
     clearTimeout: (...args) => globalThis.clearTimeout(...args),
   }, { filename: 'src/client.js' });
@@ -107,6 +111,7 @@ export async function clientHarness(t, options = {}) {
   async function render(command) {
     let component = Manager;
     let props = { initialCwd: options.initialCwd ?? '/fixture-project' };
+    if (options.inventory && !command) component = slots.get('main:claude-compat');
     if (command) {
       component = slots.get('conversation.chat.commandview:cc-resume');
       assert.equal(typeof component, 'function');

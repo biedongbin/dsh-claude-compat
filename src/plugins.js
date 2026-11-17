@@ -177,6 +177,8 @@ function readInstalledFile(root, { missingIsFine = false, seed = false } = {}) {
       sourceKind: seed ? 'seed' : 'primary',
       installPath: seed ? seedInstallPath(root, record.installPath, { key, name, marketplace, version }) : record.installPath,
       version,
+      installedAt: typeof record.installedAt === 'string' ? record.installedAt : undefined,
+      lastUpdated: typeof record.lastUpdated === 'string' ? record.lastUpdated : undefined,
     });
   }
   return [...byKey.values()];
@@ -200,15 +202,14 @@ function isPathSegment(value) {
 // readFileSync kept local so readInstalledClaudePlugins stays sync-simple.
 function claReadSync(p) { return rfs(p, 'utf8'); }
 
-// Discover skill/command/agent candidates from all installed plugins. When a
-// plugin has a .claude-plugin/plugin.json manifest, its listed dirs are used;
-// otherwise fall back to scanning <installPath>/skills and <installPath>/commands.
+// Discover skill/command/agent candidates from conventional directories plus
+// any additional directories declared by .claude-plugin/plugin.json.
 // Claude Code's discoverCommands drops commands whose only description is the
 // empty string; plugin marketplaces ship many such stubs, so this wrapper
 // re-surfaces them with the filename stem as the description.
-export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal, userClaudeDir } = {}) {
+export async function discoverPluginContent(pluginsRoot, providerName, source, rank, { enableAgents, aliases, tagOriginal, userClaudeDir, includeDisabled = false } = {}) {
   const out = [];
-  const plugins = readInstalledClaudePlugins(pluginsRoot, userClaudeDir);
+  const plugins = readInstalledClaudePlugins(pluginsRoot, userClaudeDir, { includeDisabled });
   const { discoverSkills, discoverCommands } = await import('./index.js');
   const { discoverAgents } = await import('./agents.js');
   const aliasOptions = { aliases, tagOriginal };
@@ -231,21 +232,20 @@ export async function discoverPluginContent(pluginsRoot, providerName, source, r
       for (const c of batch) {
         if (seenByKind[kind].has(c.name)) continue;
         seenByKind[kind].add(c.name);
-        out.push(c);
+        out.push({ ...c, compatKind: { skills: 'skill', commands: 'command', agents: 'agent' }[kind] });
       }
     };
-    if (manifest !== undefined) {
-      const skillDirs = manifestDirs(manifest, 'skills', installPath);
-      for (const dir of skillDirs) push('skills')(await discoverSkills(dir, providerName, source, rank, aliasOptions));
-      const commandsDir = typeof manifest.commands === 'string' ? resolve(installPath, manifest.commands) : undefined;
-      if (commandsDir !== undefined) push('commands')(await patchedCommands(commandsDir));
-    } else {
-      push('skills')(await discoverSkills(join(installPath, 'skills'), providerName, source, rank, aliasOptions));
-      push('commands')(await patchedCommands(join(installPath, 'commands')));
+    // Conventional directories remain discoverable when a manifest exists.
+    // Manifest paths supplement them; per-kind dedupe above prevents repeats.
+    const dirs = (field) => new Set([join(installPath, field), ...manifestDirs(manifest ?? {}, field, installPath)]);
+    for (const dir of dirs('skills')) {
+      push('skills')(await discoverSkills(dir, providerName, source, rank, aliasOptions));
     }
+    for (const dir of dirs('commands')) push('commands')(await patchedCommands(dir));
     if (enableAgents !== false) {
-      const agentsDir = join(installPath, 'agents');
-      if (await pathExists(agentsDir)) push('agents')(await discoverAgents(agentsDir, providerName, source, rank, aliasOptions));
+      for (const dir of dirs('agents')) {
+        if (await pathExists(dir)) push('agents')(await discoverAgents(dir, providerName, source, rank, aliasOptions));
+      }
     }
   }
   return out;
@@ -364,12 +364,9 @@ function present(path) {
   try { lstatSync(path); return true; } catch { return false; }
 }
 
-// Translate a plugin's MCP config into dsh-mcp-client server configs. Claude Code
-// reads the plugin's own .mcp.json first, then each `mcpServers` shape in order,
-// and a later name replaces an earlier one. Returns { servers, warns, names }.
-// ${CLAUDE_PLUGIN_ROOT} is the install path, as Claude Code does it. It is a variable
-// value, so a `${...}` inside the path is not expanded again.
-export function translatePluginMcp(manifest, installPath, opts = {}) {
+// Read declarations without executing helpers or translating runtime configs.
+// The root .mcp.json is read first, then manifest shapes; later names replace earlier ones.
+export function readPluginMcpDeclarations(manifest, installPath) {
   const warns = [];
   const maps = [];
   const rootFile = resolve(installPath, '.mcp.json');
@@ -388,8 +385,15 @@ export function translatePluginMcp(manifest, installPath, opts = {}) {
       combined.set(name, entry);
     }
   }
+  return { entries: [...combined], warns };
+}
+
+// Translate shared declarations into runtime configs. The plugin root is a
+// variable value, so a `${...}` inside that path is not expanded again.
+export function translatePluginMcp(manifest, installPath, opts = {}) {
+  const { entries, warns } = readPluginMcpDeclarations(manifest, installPath);
   const vars = { ...process.env, CLAUDE_PLUGIN_ROOT: installPath };
-  const translated = translateServerEntries([...combined], { ...opts, vars });
+  const translated = translateServerEntries(entries, { ...opts, vars });
   return { ...translated, warns: [...warns, ...translated.warns] };
 }
 

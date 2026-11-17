@@ -30,17 +30,19 @@ export function translateCacheDir() {
 // translator.
 export function splitMarkdown(text) {
   const segments = [];
-  const fence = /^(`{3,}|~{3,})[^\n]*$/gm;
+  const fence = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
   let cursor = 0;
   let match;
   let openFence;
   while ((match = fence.exec(text)) !== null) {
     const marker = match[1][0];
     if (openFence === undefined) {
+      // Backtick fence info strings cannot contain backticks (CommonMark).
+      if (marker === '`' && match[2].includes('`')) continue;
       if (match.index > cursor) segments.push({ code: false, text: text.slice(cursor, match.index) });
       cursor = match.index;
-      openFence = marker;
-    } else if (marker === openFence) {
+      openFence = { marker, length: match[1].length };
+    } else if (marker === openFence.marker && match[1].length >= openFence.length && /^[\t \r]*$/.test(match[2])) {
       const end = match.index + match[0].length;
       segments.push({ code: true, text: text.slice(cursor, end) });
       cursor = end;
@@ -95,39 +97,64 @@ async function writeCache(dir, key, value) {
 //   * `complete`   — a one-shot model call, used when that service is not mounted
 //                    in the profile. Slower and costs tokens, but keeps the
 //                    feature usable instead of failing outright.
-export async function translateMarkdown({ text, targetLanguage, translator, complete, signal, cacheDir, force }) {
+export async function translateMarkdown({ text, targetLanguage, translator, complete, signal, cacheDir, force, onProgress = () => {} }) {
+  signal?.throwIfAborted();
+  const startedAt = Date.now();
+  const report = (completed, total, backend) => {
+    const timestamp = Date.now();
+    onProgress({ phase: 'running', translationProgress: { completed, total, backend },
+      text: `[${new Date(timestamp).toISOString()}] Translation ${completed}/${total} chunks · ${backend} · ${Math.floor((timestamp - startedAt) / 1000)}s elapsed` });
+  };
   const useTranslator = translator !== undefined && typeof translator.resolve === 'function';
-  if (!useTranslator && typeof complete !== 'function') {
-    throw new Error('Translation is unavailable: this profile has no translator service and no model route.');
-  }
   const dir = cacheDir ?? translateCacheDir();
   const key = cacheKey(text, targetLanguage);
   // `force` re-runs the backend (the recovery path for a bad cached entry).
   if (force !== true) {
     const hit = await readCache(dir, key);
-    if (hit !== undefined) return { content: hit, cached: true, calls: 0, backend: 'cache' };
-  }
-
-  const limit = Number(translator?.maxTextChars) > 0 ? Number(translator.maxTextChars) : 4000;
-  const pieces = [];
-  let calls = 0;
-  for (const segment of splitMarkdown(text)) {
-    if (segment.code) { pieces.push(segment.text); continue; }
-    for (const chunk of chunkProse(segment.text, limit)) {
-      if (chunk.trim() === '') { pieces.push(chunk); continue; }
-      if (useTranslator) {
-        // resolve() validates size and language before any network call.
-        const spec = translator.resolve({ text: chunk, targetLanguage });
-        pieces.push(await translator.translate(spec, signal));
-      } else {
-        pieces.push(await complete({ text: chunk, targetLanguage, signal }));
-      }
-      calls += 1;
+    signal?.throwIfAborted();
+    if (hit !== undefined) {
+      report(0, 0, 'cache');
+      return { content: hit, cached: true, calls: 0, backend: 'cache' };
     }
   }
+
+  if (!useTranslator && typeof complete !== 'function') {
+    throw new Error('Translation is unavailable: this profile has no translator service and no model route.');
+  }
+  const limit = Number(translator?.maxTextChars) > 0 ? Number(translator.maxTextChars) : 4000;
+  const chunks = splitMarkdown(text).flatMap((segment) => segment.code ? [segment]
+    : chunkProse(segment.text, limit).map((chunk) => ({ code: false, text: chunk })));
+  const total = chunks.filter((chunk) => !chunk.code && chunk.text.trim() !== '').length;
+  const backend = useTranslator ? 'translator' : 'model';
+  const pieces = [];
+  let calls = 0;
+  report(0, total, backend);
+  for (const chunk of chunks) {
+    signal?.throwIfAborted();
+    if (chunk.code || chunk.text.trim() === '') { pieces.push(chunk.text); continue; }
+    // Providers commonly trim output. Own the original segment separators here
+    // so paragraphs and fences cannot be glued together on reassembly.
+    const [, leading, prose, trailing] = chunk.text.match(/^(\s*)([\s\S]*?)(\s*)$/);
+    let translated;
+    if (useTranslator) {
+      // resolve() validates size and language before any network call.
+      const spec = translator.resolve({ text: prose, targetLanguage });
+      translated = await translator.translate(spec, signal);
+    } else {
+      translated = await complete({ text: prose, targetLanguage, signal });
+    }
+    if (typeof translated !== 'string' || translated.trim() === '') {
+      throw new Error('The translation provider returned no text; no result was cached.');
+    }
+    pieces.push(leading + translated.trim() + trailing);
+    signal?.throwIfAborted();
+    calls += 1;
+    report(calls, total, backend);
+  }
   const content = pieces.join('');
+  signal?.throwIfAborted();
   await writeCache(dir, key, content);
-  return { content, cached: false, calls, backend: useTranslator ? 'translator' : 'model' };
+  return { content, cached: false, calls, backend };
 }
 
 // Cheap language probe for the UI: "should I offer translation at all?"

@@ -26,7 +26,7 @@ window.__ModuleLoader__.load({
         pageSize: 'Items per page', pagination: 'Pagination', marketHint: 'Use owner/repository, an HTTP(S)/SSH URL, or an absolute directory.', pluginHint: 'Enter a plugin name or name@marketplace.',
         import: 'Import and continue', open: 'Open in DSH', imported: 'Already imported', snapshot: 'Create a separate snapshot',
         range: 'Background range', all: 'Full conversation', recent200: 'Recent 200 turns', recent50: 'Recent 50 turns',
-        source: 'Claude configuration', pluginRoot: 'Plugin directory', version: 'Bridge version',
+        source: 'Claude configuration', pluginRoot: 'Plugin directory', version: 'Bridge version', pluginVersion: 'Plugin version',
         noSessions: 'No Claude Code sessions in this project. Choose another directory or refresh.',
         next: 'Next page', previous: 'Previous page', archiveNote: 'Send the conversation file path to DSH and ask for its background, current task state and next steps. DSH reads the file as needed.',
         userScope: 'User scope', result: 'Operation details', noCli: 'Installation and updates use the Claude CLI.',
@@ -34,22 +34,25 @@ window.__ModuleLoader__.load({
         available: 'Available', unavailable: 'Unavailable', nativeSessions: 'History archive', contextHandoff: 'Context handoff',
         skills: 'Skills', rules: 'Rules', hooks: 'Hooks', mcp: 'MCP', pluginMcp: 'Plugin MCP',
         commandResults: 'Command results', show: 'Show manager', hide: 'Collapse manager', permissions: 'Only the DSH owner can manage Claude Code configuration.',
-        bridge: 'Claude bridge', invTitle: 'Claude bridge inventory', invHint: 'Everything the Claude bridge loads into DSH for this project. Switches apply to DSH injection only and persist in the project state file.',
-        invPlugins: 'Plugins', invSkills: 'Skills', invCommands: 'Commands', invAgents: 'Agents', allKinds: 'All',
+        bridge: 'Claude bridge', invTitle: 'Claude bridge inventory', invHint: 'Claude configuration discovered for this project, including plugin declarations. A declaration does not confirm runtime activation. Switches control DSH injection and persist in the project state file.',
+        globalCounts: 'All project items', parentDisabled: 'Disabled by the owning plugin. Enable the plugin to use this item.', claudeDisabled: 'The owning plugin is disabled in Claude. Enable it in Claude to use this item.', declarationOnly: 'Configuration declaration only; runtime activation has not been verified.', pluginToggleScope: 'Controls DSH skill, command and agent injection; it does not change running MCP servers or hooks.', invPlugins: 'Plugins', invSkills: 'Skills', invCommands: 'Commands', invAgents: 'Agents', allKinds: 'All',
         srcProject: 'project .claude', srcUser: 'user ~/.claude', srcPlugin: 'plugin', srcMcp: 'mcp config',
         shadowed: 'Not effective — a same-name item with a higher priority wins', displayOnly: 'Display-only',
         dshState: 'In DSH', claudeState: 'In Claude', stateFile: 'State file', offCount: 'disabled',
         writeBack: 'Write back to Claude', upcoming: 'Planned for the next milestone', openInventory: 'Open inventory page',
-        updateAll: 'Update all plugins',
+        updateAll: 'Update all plugins', alreadyPending: 'Already pending', waitingForCapacity: 'Waiting for running tasks to finish…', sourceChanged: 'The file changed since it was opened. Reload it to view the matching translation.',
         updating: 'Queueing plugin updates…', updateQueued: 'Update tasks queued', updateProgress: 'Updates',
-        trash: 'Trash', restore: 'Restore', moveToTrash: 'Move to trash', confirmTrash: 'Move to trash? You can restore it later.',
+        trash: 'Trash', trashEmpty: 'Trash is empty.', restore: 'Restore', moveToTrash: 'Move to trash', confirmTrash: 'Move to trash? You can restore it later.',
         writeBackDisable: 'Write back to Claude: disable', writeBackEnable: 'Write back to Claude: enable',
         clear: 'Clear', uninstallPlugin: 'Uninstall plugin (Claude side)',
         ownedBy: 'Owning plugin',
         filePath: 'File path', backToDetail: 'Back to details',
         copied: 'Copied', copyFailed: 'Copy failed — select the path manually', retranslate: 'Translate again', byModel: 'translated by model', originalPane: 'Original', translatedPane: 'Translation', translate: 'Translate', showOriginal: 'Show original', translateTo: 'to', translating: 'Translating…',
         fromCache: 'cached', translateNote: 'View only — the original file is never modified; code blocks are left as-is.', viewContent: 'View content', copyPath: 'Copy path', truncated: 'Large file — only the beginning is shown.', reload: 'Reload',
-        provides: 'What this plugin provides', providesNone: 'No skills, commands or agents — it may only ship configuration or MCP.',
+        lastUpdated: 'Last updated', updateTimeUnknown: 'No update time in Claude’s install record',
+        checkingTranslation: 'Checking translation task…', translationChunks: 'chunks completed', translationProgress: 'Translation progress',
+        translationContinues: 'You can leave this view; translation continues. Reopening restores its progress without starting another request.',
+        provides: 'What this plugin provides', providesNone: 'No supported content was found in this installation. View the plugin manifest to inspect it.',
         providesDrill: 'Show this plugin\'s items of this kind', filteredByPlugin: 'Plugin only: ', clearFilter: 'Show all',
         shadowTitle: 'Duplicate — DSH did not load this copy',
         duplicates: 'Duplicates', back: 'Back', backEmpty: 'No previous view', duplicateShort: 'Duplicate', usedKind: 'uses', usedFrom: 'uses',
@@ -98,7 +101,7 @@ window.__ModuleLoader__.load({
         pageSize: '每页条数', pagination: '分页', marketHint: '支持 owner/repository、HTTP(S)/SSH 地址或本地绝对目录。', pluginHint: '输入插件名称，或使用 插件名@市场名。',
         import: '导入并继续', open: '在 DSH 中打开', imported: '已导入', snapshot: '另建独立快照',
         range: '背景范围', all: '完整对话', recent200: '最近 200 轮', recent50: '最近 50 轮',
-        source: 'Claude 配置目录', pluginRoot: '插件目录', version: '兼容插件版本',
+        source: 'Claude 配置目录', pluginRoot: '插件目录', version: '兼容插件版本', pluginVersion: '插件版本',
         noSessions: '此项目没有 Claude Code 会话，可选择其他目录或刷新。',
         next: '下一页', previous: '上一页', archiveNote: '只发送会话文件路径，请 DSH 阅读后简述背景、当前任务状态和下一步计划；文件内容由 DSH 按需读取。',
         userScope: '用户级', result: '操作详情', noCli: '安装与更新通过 Claude CLI 执行。',
@@ -106,22 +109,25 @@ window.__ModuleLoader__.load({
         available: '可用', unavailable: '不可用', nativeSessions: '历史归档', contextHandoff: '上下文接续',
         skills: '技能', rules: '规则', hooks: 'Hooks', mcp: 'MCP', pluginMcp: '插件 MCP',
         commandResults: '命令结果', show: '展开管理界面', hide: '收起管理界面', permissions: '仅 DSH 所有者可管理 Claude Code 配置。',
-        bridge: 'Claude 桥接', invTitle: 'Claude 桥接总览', invHint: '本项目中 Claude 桥接进 DSH 的全部内容。开关只作用于 DSH 注入，持久化在项目状态文件里。',
-        invPlugins: '插件', invSkills: '技能', invCommands: '命令', invAgents: 'Agents', allKinds: '全部',
+        bridge: 'Claude 桥接', invTitle: 'Claude 桥接总览', invHint: '本项目发现的 Claude 配置及插件声明；声明不代表已经在运行。开关控制 DSH 注入，持久化在项目状态文件里。',
+        globalCounts: '项目全部条目', parentDisabled: '所属插件已在 DSH 中禁用，启用该插件后才能使用此项。', claudeDisabled: '所属插件已在 Claude 中禁用，请先启用该插件。', declarationOnly: '仅展示配置声明，未验证实际运行状态。', pluginToggleScope: '只控制 DSH 技能、命令和 Agent 注入，不改变运行中的 MCP 或 Hook。', invPlugins: '插件', invSkills: '技能', invCommands: '命令', invAgents: 'Agents', allKinds: '全部',
         srcProject: '项目 .claude', srcUser: '用户 ~/.claude', srcPlugin: '插件', srcMcp: 'MCP 配置',
         shadowed: '未生效——被更高优先级的同名项覆盖', displayOnly: '仅展示',
         dshState: 'DSH 内', claudeState: 'Claude 侧', stateFile: '状态文件', offCount: '已禁用',
         writeBack: '回写 Claude', upcoming: '下一里程碑实现', openInventory: '打开总览页',
-        updateAll: '一键更新插件',
+        updateAll: '一键更新插件', alreadyPending: '已在处理中', waitingForCapacity: '等待正在执行的任务释放队列容量…', sourceChanged: '文件已在打开后发生变化，请重新读取以显示对应译文。',
         updating: '正在排队插件更新任务…', updateQueued: '已排队更新任务', updateProgress: '更新进度',
-        trash: '回收站', restore: '恢复', moveToTrash: '移入回收站', confirmTrash: '确认移入回收站？之后可在回收站恢复。',
+        trash: '回收站', trashEmpty: '回收站为空。', restore: '恢复', moveToTrash: '移入回收站', confirmTrash: '确认移入回收站？之后可在回收站恢复。',
         writeBackDisable: '回写 Claude：禁用', writeBackEnable: '回写 Claude：启用',
         clear: '清除', uninstallPlugin: '卸载插件（Claude 侧）',
         ownedBy: '所属插件',
         filePath: '文件路径', backToDetail: '返回详情',
         copied: '已复制', copyFailed: '复制失败，请手动选择路径', retranslate: '重新翻译', byModel: '由模型翻译', originalPane: '原文', translatedPane: '译文', translate: '翻译', showOriginal: '看原文', translateTo: '译为', translating: '正在翻译…',
         fromCache: '来自缓存', translateNote: '仅用于查看，不会修改原文件；代码块保持原样。', viewContent: '查看内容', copyPath: '复制路径', truncated: '文件较大，只显示前面一部分。', reload: '重新读取',
-        provides: '这个插件提供了什么', providesNone: '这个插件没有提供技能、命令或 Agents（可能只提供配置或 MCP）。',
+        lastUpdated: '最后更新时间', updateTimeUnknown: 'Claude 安装记录未提供时间',
+        checkingTranslation: '正在检查翻译任务…', translationChunks: '段已完成', translationProgress: '翻译进度',
+        translationContinues: '可以返回详情，翻译会在后台继续；再次打开将恢复进度，不会重复发起请求。',
+        provides: '这个插件提供了什么', providesNone: '当前安装目录未发现可识别的内容，可点击“查看内容”检查插件清单。',
         providesDrill: '点击查看该插件的这一类内容', filteredByPlugin: '只看插件：', clearFilter: '显示全部',
         shadowTitle: '这条是重复项，DSH 没有加载它',
         duplicates: '重复项', back: '返回', backEmpty: '没有可返回的上一步', duplicateShort: '重复项', usedKind: '已用', usedFrom: '已用',
@@ -159,12 +165,12 @@ window.__ModuleLoader__.load({
 .dcc-inv-split{cursor:col-resize;position:relative;background:transparent;transition:background .15s;z-index:2}
 .dcc-inv-split::after{content:"";position:absolute;inset:0 -3px}
 .dcc-inv-split:hover,.dcc-inv-split.dcc-dragging{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent)}
-.dcc-inv-page .dcc button{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
-.dcc-inv-page .dcc button:hover{background:color-mix(in srgb,var(--dsw-alias-label-primary) 9%,var(--dsw-alias-bg-layer-2))}
-.dcc-inv-page .dcc button[aria-pressed=true]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,var(--dsw-alias-bg-layer-2));border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary);font-weight:600}
-.dcc-inv-page .dcc .dcc-primary{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);font-weight:600}
-.dcc-inv-page .dcc .dcc-primary:hover{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 20%,var(--dsw-alias-bg-layer-2))}
-.dcc-inv-page .dcc input,.dcc-inv-page .dcc select{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.dcc.dcc-inv-page button{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.dcc.dcc-inv-page button:hover{background:color-mix(in srgb,var(--dsw-alias-label-primary) 9%,var(--dsw-alias-bg-layer-2))}
+.dcc.dcc-inv-page button[aria-pressed=true]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,var(--dsw-alias-bg-layer-2));border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary);font-weight:600}
+.dcc.dcc-inv-page .dcc-primary{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);font-weight:600}
+.dcc.dcc-inv-page .dcc-primary:hover{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 20%,var(--dsw-alias-bg-layer-2))}
+.dcc.dcc-inv-page input,.dcc.dcc-inv-page select{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .dcc-inv-nav{border-right:1px solid var(--dsw-alias-border-l1);overflow:auto;padding:10px 8px;background:var(--dsw-alias-bg-layer-1);min-width:0}
 .dcc-inv-nav .dcc-inv-sec{font-size:11px;color:var(--dsw-alias-label-secondary);padding:8px 10px 4px}
 .dcc-inv-nav button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:6px;text-align:left;border:none;background:none;padding:7px 10px;border-radius:8px;min-height:34px;cursor:pointer;color:inherit;font-size:13px}
@@ -200,7 +206,7 @@ button into a full-width slab, which read as one giant control. */
 .dcc-inv-actions>button{flex:0 0 auto;width:auto;padding:7px 14px;font-size:13px}
 .dcc-inv-actions>p{flex:1 0 100%;margin:4px 0 0}
 .dcc-header-actions{display:flex;align-items:center;gap:8px}
-.dcc-inv-page .dcc .dcc-header-actions button{min-height:32px;padding:5px 12px}
+.dcc.dcc-inv-page .dcc-header-actions button{min-height:32px;padding:5px 12px}
 .dcc-translate-note{margin:6px 0;padding:6px 10px;border-radius:7px;font-size:12px;
   background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,transparent);color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
 /* File viewer covers the whole three-column area: a document is not a sidebar
@@ -236,7 +242,7 @@ button into a full-width slab, which read as one giant control. */
 .dcc-provides{margin:12px 0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px}
 .dcc-provides h4{font-size:12px;margin:0 0 8px;color:var(--dsw-alias-label-secondary);font-weight:600}
 .dcc-provides-grid{display:flex;flex-wrap:wrap;gap:8px}
-.dcc-inv-page .dcc .dcc-provides-item{display:flex;align-items:center;gap:6px;padding:5px 10px;min-height:0;border-radius:7px;font-size:12px}
+.dcc.dcc-inv-page .dcc-provides-item{display:flex;align-items:center;gap:6px;padding:5px 10px;min-height:0;border-radius:7px;font-size:12px}
 .dcc-provides-icon{font-size:13px;line-height:1}
 .dcc-provides-count{font-weight:700;font-size:13px;color:var(--dsw-alias-label-primary)}
 .dcc-provides-label{color:var(--dsw-alias-label-secondary)}
@@ -263,7 +269,9 @@ button into a full-width slab, which read as one giant control. */
     // Item identity is the Host operationKey wire contract; actions on one row
     // share identity, while independent plugin/marketplace targets stay usable.
     function operationKey(request) {
-      if (request.action === 'inventory.toggle') return JSON.stringify(['inventory', request.id ?? '*']);
+      if (request.action === 'inventory.translate') return JSON.stringify(['translation', request.cwd ?? '', request.id ?? '', request.lang || 'en']);
+      if (request.action === 'inventory.toggle') return JSON.stringify(['inventory', request.cwd ?? '', request.id ?? '*']);
+      if (['inventory.trash', 'inventory.restore'].includes(request.action)) return JSON.stringify(['trash', request.cwd ?? '', request.id ?? '*']);
       if (request.action.startsWith('plugins.marketplace-')) return JSON.stringify(['marketplace', request.target ?? '*']);
       if (request.action.startsWith('plugins.')) return JSON.stringify(['plugin', request.target ?? '*']);
       if (request.action === 'sessions.resume') return JSON.stringify(['handoff', request.cwd ?? '', request.sessionId ?? '', request.targetSessionId ?? 'new']);
@@ -274,7 +282,9 @@ button into a full-width slab, which read as one giant control. */
     function sameItem(left, right) {
       if (left === right) return true;
       const a = JSON.parse(left), b = JSON.parse(right);
-      return a[0] === b[0] && ['marketplace', 'plugin', 'inventory'].includes(a[0]) && (a[1] === '*' || b[1] === '*');
+      if (a[0] !== b[0]) return false;
+      if (['inventory', 'trash'].includes(a[0])) return a[1] === b[1] && (a[2] === '*' || b[2] === '*');
+      return ['marketplace', 'plugin'].includes(a[0]) && (a[1] === '*' || b[1] === '*');
     }
     return {
       inject: ['slots', 'connection', 'locale'],
@@ -321,6 +331,7 @@ button into a full-width slab, which read as one giant control. */
           const [jobs, setJobs] = useState([]);
           const [starting, setStarting] = useState([]);
           const [error, setError] = useState('');
+          const [pollError, setPollError] = useState('');
           const jobsRef = useRef([]), pending = useRef(new Map());
           const watched = useRef(new Set()), notified = useRef(new Set()), baselined = useRef(false);
           const latestRevision = useRef(-1), generation = useRef(null), retired = useRef(new Set());
@@ -392,9 +403,9 @@ button into a full-width slab, which read as one giant control. */
                   }
                   commit(snapshot.items);
                 }
-                setError('');
+                setPollError('');
                 delay = jobsRef.current.some(pendingJob) || pending.current.size ? 700 : 5000;
-              } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
+              } catch (failure) { if (!controller.signal.aborted) setPollError(failure.message); }
               finally { if (!controller.signal.aborted) timer = setTimeout(poll, delay); }
             }
             void poll();
@@ -411,7 +422,7 @@ button into a full-width slab, which read as one giant control. */
             return matching.find(pendingJob) || [...pending.current.values()].find((job) => sameItem(job.key, key)) || matching.at(-1);
           }
           async function run(request) {
-            if (busyFor(request)) return;
+            if (!mounted.current || busyFor(request)) return;
             const key = operationKey(request);
             const controller = new AbortController();
             requests.current.add(controller);
@@ -428,6 +439,7 @@ button into a full-width slab, which read as one giant control. */
               watched.current.add(next.id);
               if (latestImport.current === id) latestImport.current = next.id;
               mergeJob(next);
+              return next;
             } catch (failure) { if (mounted.current && !controller.signal.aborted) setError(failure.message); }
             finally {
               requests.current.delete(controller);
@@ -445,7 +457,7 @@ button into a full-width slab, which read as one giant control. */
             finally { requests.current.delete(controller); }
           }
           return { jobs: [...jobs, ...starting.filter((local) => !jobs.some((job) => job.id === local.id))],
-            error, run, cancel, busyFor, forItem, reportError: setError,
+            error: error || pollError, run, cancel, busyFor, forItem, reportError: setError, isMounted: () => mounted.current,
             shouldOpen: (id) => latestImport.current === id, stopAutoOpen: () => { latestImport.current = null; } };
         }
         function ItemProgress({ job, operation }) {
@@ -627,7 +639,8 @@ button into a full-width slab, which read as one giant control. */
           'project-claude': 'srcProject', 'user-claude': 'srcUser', 'claude-plugin': 'srcPlugin', mcp: 'srcMcp',
         };
         function Switch({ checked, disabled, onChange, label }) {
-          return h('label', { className: 'dcc-switch' },
+          return h('label', { className: 'dcc-switch', onClick: (event) => event.stopPropagation(),
+            onKeyDown: (event) => event.stopPropagation() },
             h('input', { type: 'checkbox', checked, disabled, onChange, 'aria-label': label }),
             h('i', { 'aria-hidden': 'true' }));
         }
@@ -672,6 +685,9 @@ button into a full-width slab, which read as one giant control. */
         // so component state alone reset the whole view. Persist it: re-entering
         // the bridge page returns to the tab, filter and row last looked at.
         const VIEW_KEY = 'dcc-inv-view';
+        function readStorage(key) {
+          try { return localStorage.getItem(key); } catch { return null; }
+        }
         function loadView() {
           try {
             const parsed = JSON.parse(localStorage.getItem(VIEW_KEY) || '{}');
@@ -682,26 +698,26 @@ button into a full-width slab, which read as one giant control. */
           try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* storage may be full or blocked */ }
         }
         function InvTasks({ operation, batchNote, dismissed, onDismiss }) {
-          // Only IN-PROGRESS and FAILED update jobs: completed ones vanish, so
-          // the panel returns to the empty state by itself once work is done.
-          const { jobs, error } = operation;
-          const relevant = jobs.filter((job) => job.action === 'plugins.update'
+          // Pending and failed inventory tasks remain visible while details are selected;
+          // completed tasks remain available in the selected item's progress.
+          const { jobs } = operation;
+          const relevant = jobs.filter((job) => (job.action.startsWith('plugins.') || job.action.startsWith('inventory.'))
+            && job.action !== 'inventory.translate'
             && (pendingJob(job) || (job.state === 'failed' && !dismissed.has(job.id))));
           if (relevant.length === 0 && !batchNote) return null;
           const anyFailed = relevant.some((job) => job.state === 'failed');
           return h('section', { className: 'dcc-inv-tasks-panel' },
-            h('h3', null, t('updateProgress'), anyFailed && ' ',
+            h('h3', null, t('tasks'), anyFailed && ' ',
               anyFailed && h(Button, { onClick: () => onDismiss(relevant.filter((job) => job.state === 'failed').map((job) => job.id)) }, t('clear'))),
             batchNote && h('p', { className: 'dcc-subtle' }, batchNote),
-            h(Notice, { error: true }, error),
             h('ul', null, relevant.map((job) => h('li', { key: job.id },
               h('span', { className: 'dcc-inv-job-name', title: job.result?.error || job.progress || '' },
-                job.target || job.id),
+                job.target || job.itemId || job.action),
               h('span', { className: `dcc-tag${job.state === 'failed' ? ' dcc-error' : ''}` }, t(job.state)),
               ['queued', 'running'].includes(job.state)
                 && h(Button, { onClick: () => operation.cancel(job.id), 'aria-label': `${t('cancel')} ${job.target || job.id}` }, t('cancel')),
               job.state === 'failed' && job.result?.error
-                && h('span', { className: 'dcc-inv-job-err', title: job.result.error }, job.result.error)))));
+                && h('span', { className: 'dcc-inv-job-err', role: 'alert', title: job.result.error }, job.result.error)))));
         }
         // Explains a hidden duplicate in terms of what actually differs: which
         // KIND of copy won, and whether it is even a different plugin. The old
@@ -724,9 +740,75 @@ button into a full-width slab, which read as one giant control. */
         // The viewer is a full-area layer, so its state lives in Inventory and it
         // renders as a grid sibling — inside the scrolling detail column it would
         // be clipped to that 340px column.
+        function useTranslationTask({ itemId, cwd, lang, enabled }) {
+          const [task, setTask] = useState({ checking: true, job: null, error: '', now: Date.now() });
+          const starting = useRef(false);
+          const requestEpoch = useRef(0);
+          const current = useRef('');
+          const identity = JSON.stringify([enabled, cwd, itemId, lang]);
+          current.current = identity;
+          useEffect(() => {
+            if (!enabled || !itemId) return undefined;
+            let stopped = false;
+            let timer;
+            let cachedJob = null;
+            setTask({ identity, checking: true, job: null, error: '', now: Date.now() });
+            async function poll() {
+              if (typeof document !== 'undefined' && document.hidden) {
+                if (!stopped) timer = setTimeout(poll, 5000);
+                return;
+              }
+              const epoch = requestEpoch.current;
+              try {
+                const list = await api({ action: 'operation.list' });
+                const matching = (list?.items ?? []).filter((job) => job.action === 'inventory.translate'
+                  && job.itemId === itemId && (job.cwd ?? '') === cwd && job.lang === lang);
+                const job = matching.find(pendingJob) ?? matching.sort((a, b) => b.createdAt - a.createdAt)[0]
+                  ?? (cachedJob && !pendingJob(cachedJob) ? cachedJob : null);
+                // Fetch the full result only for this viewer, rather than relying
+                // on the operation list's potentially abbreviated representation.
+                const unchanged = job && cachedJob && !pendingJob(job) && job.id === cachedJob.id
+                  && job.revision === cachedJob.revision && job.state === cachedJob.state;
+                const full = job ? (unchanged ? cachedJob : await api({ action: 'operation.status', id: job.id })) : null;
+                cachedJob = full;
+                if (!stopped && !starting.current && epoch === requestEpoch.current) {
+                  setTask({ identity, checking: false, job: full, error: '', now: Date.now() });
+                }
+              } catch (error) {
+                if (!stopped && epoch === requestEpoch.current) setTask((old) => ({ ...old, checking: true, error: error.message, now: Date.now() }));
+              } finally {
+                if (!stopped) timer = setTimeout(poll, cachedJob && !pendingJob(cachedJob) ? 5000 : 1000);
+              }
+            }
+            poll();
+            return () => { stopped = true; clearTimeout(timer); };
+          }, [enabled, itemId, cwd, lang]);
+          async function start(force = false) {
+            if (starting.current || task.checking || (task.job && pendingJob(task.job))) return;
+            starting.current = true;
+            requestEpoch.current += 1;
+            const token = identity;
+            setTask((old) => ({ ...old, checking: true, error: '' }));
+            try {
+              const job = await api({ action: 'operation.start', request: {
+                action: 'inventory.translate', id: itemId, cwd, lang, ...(force ? { force: true } : {}),
+              } });
+              if (current.current === token) setTask({ identity: token, checking: false, job, error: '', now: Date.now() });
+            } catch (error) {
+              if (current.current === token) setTask((old) => ({ ...old, checking: false, error: error.message }));
+            } finally { starting.current = false; }
+          }
+          return { ...(task.identity === identity ? task : { checking: true, job: null, error: '', now: Date.now() }), start };
+        }
         function FileViewer({ view, onClose, onReload, onTranslate, targetLanguage }) {
+          const closeRef = useRef(null);
+          useEffect(() => {
+            const previous = typeof document !== 'undefined' ? document.activeElement : null;
+            closeRef.current?.focus();
+            return () => { if (previous?.isConnected) previous.focus(); };
+          }, []);
           const translated = view.translation !== undefined;
-          return h('section', { className: 'dcc-file-view dcc-file-full' },
+          return h('section', { className: 'dcc-file-view dcc-file-full', 'aria-label': view.name },
             h('header', null,
               h('h3', null, view.name),
               h('div', { className: 'dcc-header-actions' },
@@ -742,8 +824,8 @@ button into a full-width slab, which read as one giant control. */
                 view.data && translated && h(Button, {
                   onClick: () => onTranslate({ revert: true }), disabled: view.translating,
                 }, `↩ ${t('showOriginal')}`),
-                h(Button, { onClick: onReload, disabled: view.loading }, t('reload')),
-                h(Button, { onClick: onClose }, t('backToDetail')))),
+                h(Button, { onClick: onReload, disabled: view.loading || view.translating }, t('reload')),
+                h('button', { type: 'button', ref: closeRef, onClick: onClose }, t('backToDetail')))),
             h('p', { className: 'dcc-subtle' }, view.path,
               view.data && ` · ${formatBytes(view.data.bytes)} · ${new Date(view.data.mtime).toLocaleString()}`),
             // Translation is a view, never a write: say so where the button is.
@@ -753,8 +835,18 @@ button into a full-width slab, which read as one giant control. */
               view.backend === 'model' ? ` · ${t('byModel')}` : ''),
             view.error && h(Notice, { error: true }, view.error),
             view.translateError && h(Notice, { error: true }, view.translateError),
-            (view.loading || view.translating) && h('p', { className: 'dcc-subtle', role: 'status' },
-              view.translating ? t('translating') : t('loading')),
+            view.translating && h('div', { className: 'dcc-translate-note', role: 'status', 'aria-live': 'polite' },
+              h('span', null, view.checkingTranslation ? t('checkingTranslation') : t('translating'),
+                view.translationProgress?.total > 0
+                  ? ` ${view.translationProgress.completed}/${view.translationProgress.total} ${t('translationChunks')}` : '',
+                view.elapsedSeconds > 0 ? ` · ${view.elapsedSeconds}s` : '',
+                view.backend === 'model' ? ` · ${t('byModel')}` : ''),
+              view.translationProgress?.total > 0 && h('progress', {
+                max: view.translationProgress.total, value: view.translationProgress.completed,
+                'aria-label': t('translationProgress'), style: { display: 'block', width: '100%', marginTop: 6 },
+              }),
+              h('div', null, t('translationContinues'))),
+            view.loading && h('p', { className: 'dcc-subtle', role: 'status' }, t('loading')),
             // Translated text sits BESIDE the original, not instead of it:
             // comparing a machine translation against its source is the only way
             // to trust it, and switching back and forth lost the place.
@@ -786,7 +878,10 @@ button into a full-width slab, which read as one giant control. */
             item.rank !== undefined && [t('rankLabel'), `${rankText(item.rank)}（rank ${item.rank}）`],
             item.path && [t(item.kind === 'plugin' ? 'installPath' : 'filePath'), item.path],
             item.plugin?.marketplace && [t('marketplace'), item.plugin.marketplace],
-            item.plugin?.version && [t('version'), item.plugin.version],
+            item.plugin?.version && [t('pluginVersion'), item.plugin.version],
+            item.kind === 'plugin' && [t('lastUpdated'),
+              item.plugin?.lastUpdated && Number.isFinite(Date.parse(item.plugin.lastUpdated))
+                ? new Date(item.plugin.lastUpdated).toLocaleString() : t('updateTimeUnknown')],
             item.whenToUse && ['whenToUse', item.whenToUse],
           ].filter(Boolean);
           const kindLabel = t((INV_KINDS.find(([value]) => value === item.kind) ?? [null, 'invTitle'])[1]);
@@ -798,9 +893,12 @@ button into a full-width slab, which read as one giant control. */
           return h('section', null,
             h('h3', null, item.name, ' ', h('span', { className: 'dcc-tag' }, kindLabel)),
             item.description && h('p', { className: 'dcc-subtle' }, item.description),
+            operation && h(ItemProgress, { operation, job: operation.forItem(item.kind === 'plugin'
+              ? { action: 'plugins.update', target: item.plugin?.key, cwd }
+              : { action: 'inventory.toggle', id: item.id, cwd }) }),
             h(ShadowNotice, {
               item,
-              onJump: onShadowJump && item.overriddenByName === item.pluginName ? undefined : onShadowJump,
+              onJump: onShadowJump,
             }),
             provides && h('div', { className: 'dcc-provides' },
               h('h4', null, t('provides')),
@@ -818,8 +916,11 @@ button into a full-width slab, which read as one giant control. */
               item.hookEvents?.length > 0 && h('p', { className: 'dcc-subtle' }, `Hooks: ${item.hookEvents.join(', ')}`)),
             h('dl', null, rows.map(([key, value]) => h('div', { className: 'dcc-inv-kv', key: key }, h('dt', null, key), h('dd', null, String(value))))),
             h('div', { className: 'dcc-inv-kv' }, h('dt', null, t('dshState')),
-              h('dd', null, item.toggleable === false ? t('displayOnly') : t(item.disabledInDsh ? 'disabled' : 'enabled')),
-              item.toggleable !== false && h('dd', { className: 'dcc-subtle' }, t('toggleScope'))),
+              h('dd', null, item.disabledByPlugin || item.disabledInClaude || item.disabledInDsh ? t('disabled') : item.toggleable === false ? t('displayOnly') : t('enabled')),
+              item.toggleable !== false && h('dd', { className: 'dcc-subtle' }, t(item.kind === 'plugin' ? 'pluginToggleScope' : 'toggleScope'))),
+            item.disabledByPlugin && h('p', { className: 'dcc-subtle' }, t('parentDisabled')),
+            item.disabledInClaude && h('p', { className: 'dcc-subtle' }, t('claudeDisabled')),
+            item.declarationOnly && h('p', { className: 'dcc-subtle' }, t('declarationOnly')),
             item.plugin && h('div', { className: 'dcc-inv-kv' }, h('dt', null, t('claudeState')),
               h('dd', null, t(item.plugin.enabledInClaude ? 'enabled' : 'disabled'))),
             item.path && h('div', { className: 'dcc-inv-filebar' },
@@ -867,20 +968,20 @@ button into a full-width slab, which read as one giant control. */
           // A drill-down belongs to the tab it was made in: carrying it into
           // another tab silently filtered that tab to nothing.
           const [pluginFilter, setPluginFilter] = useState(savedView.pluginFilter ?? { key: '', name: '', forKind: '' });
-          const [query, setQuery] = useState(savedView.query ?? '');
+          const [query, setQuery] = useState(savedView.search ?? '');
           const [search, setSearch] = useState(savedView.search ?? '');
           const [offset, setOffset] = useState(savedView.offset ?? 0);
           const [pageSize, setPageSize] = useState(savedView.pageSize ?? 20);
           const [revision, setRevision] = useState(0);
           const [selectedId, setSelectedId] = useState(savedView.selectedId ?? null);
-          const [cwdOverride, setCwdOverride] = useState('');
+          const [cwdOverride, setCwdOverride] = useState(savedView.cwd ?? '');
           // Draggable column widths (px), persisted so the layout survives reloads.
           // Absolute caps proved wrong: a dragged 640px detail panel starves the
           // middle list at small window sizes. Cap by CONTAINER share instead —
           // at drag time AND against the persisted value once the grid measures.
           const gridRef = useRef(null);
-          const [navWidth, setNavWidth] = useState(() => clamp(Number(localStorage.getItem('dcc-inv-nav')) || 190, 140, 320));
-          const [detWidth, setDetWidth] = useState(() => clamp(Number(localStorage.getItem('dcc-inv-det')) || 340, 220, 640));
+          const [navWidth, setNavWidth] = useState(() => clamp(Number(readStorage('dcc-inv-nav')) || 190, 140, 320));
+          const [detWidth, setDetWidth] = useState(() => clamp(Number(readStorage('dcc-inv-det')) || 340, 220, 640));
           const [measured, setMeasured] = useState(false);
           useEffect(() => {
             if (measured || !gridRef.current) return;
@@ -916,8 +1017,10 @@ button into a full-width slab, which read as one giant control. */
           // Persist on release, not on every pointermove.
           useEffect(() => {
             if (dragging) return;
-            if (navWidth !== 190) localStorage.setItem('dcc-inv-nav', String(navWidth));
-            if (detWidth !== 340) localStorage.setItem('dcc-inv-det', String(detWidth));
+            try {
+              localStorage.setItem('dcc-inv-nav', String(navWidth));
+              localStorage.setItem('dcc-inv-det', String(detWidth));
+            } catch { /* Optional layout persistence may be unavailable. */ }
           }, [dragging, navWidth, detWidth]);
           // One-click update: enqueue plugins.update for every installed plugin.
           const [updatingAll, setUpdatingAll] = useState(false);
@@ -927,11 +1030,38 @@ button into a full-width slab, which read as one giant control. */
             if (updatingAll) return;
             setUpdatingAll(true);
             setBatchNote(t('updating'));
+            const activeView = () => operation.isMounted() && currentCwd.current === cwd;
             try {
-              const all = await api({ action: 'inventory.list', cwd, kind: 'plugin', limit: 300 }, undefined);
-              const targets = (all?.items ?? []).map((item) => item.plugin?.key).filter(Boolean);
-              for (const key of targets) operation.run({ action: 'plugins.update', target: key, cwd });
-              setBatchNote(`${t('updateQueued')}: ${targets.length}`);
+              const targets = new Set();
+              let offset = 0;
+              while (true) {
+                if (!activeView()) return;
+                const page = await api({ action: 'inventory.list', cwd, kind: 'plugin', limit: 100, offset });
+                for (const item of page?.items ?? []) if (item.plugin?.key) targets.add(item.plugin.key);
+                if (!page?.hasMore) break;
+                if (!page.items?.length) throw new Error(t('failed'));
+                offset += page.items.length;
+              }
+              let accepted = 0, failed = 0, skipped = 0;
+              const activeCount = async () => ((await api({ action: 'operation.list' })).items ?? []).filter(pendingJob).length;
+              let active = await activeCount();
+              for (const key of targets) {
+                if (!activeView()) return;
+                const request = { action: 'plugins.update', target: key, cwd };
+                if (operation.busyFor(request)) { skipped++; continue; }
+                // The Host admits at most 20 active jobs across all operation types.
+                while (active >= 20) {
+                  if (!activeView()) return;
+                  setBatchNote(`${t('waitingForCapacity')} ${t('updateQueued')}: ${accepted}`);
+                  await new Promise((resolve) => setTimeout(resolve, 700));
+                  if (!activeView()) return;
+                  active = await activeCount();
+                }
+                if (!activeView()) return;
+                const job = await operation.run(request);
+                if (job) { accepted++; if (pendingJob(job)) active++; } else failed++;
+              }
+              setBatchNote(`${t('updateQueued')}: ${accepted} · ${t('failed')}: ${failed} · ${t('alreadyPending')}: ${skipped}`);
             } catch (error) { setBatchNote(`${t('failed')}: ${error.message}`); }
             finally { setUpdatingAll(false); }
           }
@@ -947,8 +1077,7 @@ button into a full-width slab, which read as one giant control. */
               clear: () => { remember(); setSource(''); setOffset(0); setSelectedId(null); } },
             drillActive && { key: 'plugin', label: `${t('filteredByPlugin')} ${pluginFilter.name || pluginFilter.key}`,
               clear: () => { remember(); setPluginFilter({ key: '', name: '', forKind: '' }); setOffset(0); setSelectedId(null); } },
-            showDuplicates && { key: 'duplicates', label: t('duplicates'),
-              clear: () => { remember(); setShowDuplicates(false); setOffset(0); setSelectedId(null); } },
+
           ].filter(Boolean);
           const clearAllFilters = () => {
             remember();
@@ -961,31 +1090,48 @@ button into a full-width slab, which read as one giant control. */
             error: '', translating: false, translation: undefined, translateError: '', cached: false, backend: '' };
           const [fileView, setFileView] = useState(emptyView);
           const targetLanguage = () => {
-            try { return ctx.get('locale')?.getLocale?.()?.id ?? 'zh-CN'; } catch { return 'zh-CN'; }
+            try { return ctx.get('locale')?.getLocale?.()?.active ?? 'en'; } catch { return 'en'; }
           };
-          const openFile = (item) => {
-            setFileView({ ...emptyView, open: true, id: item.id, name: item.name, path: item.path ?? '', loading: true });
-            Promise.resolve()
-              .then(() => api({ action: 'inventory.read', id: item.id, cwd }, undefined))
-              .then((data) => setFileView((v) => (v.id === item.id ? { ...v, loading: false, data } : v)))
-              .catch((error) => setFileView((v) => (v.id === item.id ? { ...v, loading: false, error: error.message } : v)));
+          const fileEpoch = useRef(0);
+          const currentCwd = useRef(cwd);
+          currentCwd.current = cwd;
+          useEffect(() => () => { fileEpoch.current++; }, []);
+          const closeFile = () => { fileEpoch.current++; setFileView(emptyView); };
+          const readFile = (item, opening) => {
+            const epoch = ++fileEpoch.current;
+            const project = cwd;
+            if (opening) setFileView({ ...emptyView, open: true, id: item.id, name: item.name, path: item.path ?? '', loading: true });
+            else setFileView((v) => ({ ...v, loading: true, error: '', data: null }));
+            api({ action: 'inventory.read', id: item.id, cwd: project }).then(
+              (data) => { if (epoch === fileEpoch.current && project === currentCwd.current) setFileView((v) => ({ ...v, loading: false, data })); },
+              (error) => { if (epoch === fileEpoch.current && project === currentCwd.current) setFileView((v) => ({ ...v, loading: false, error: error.message })); });
           };
-          const reloadFile = () => {
-            setFileView((v) => ({ ...v, loading: true, error: '', translation: undefined }));
-            Promise.resolve()
-              .then(() => api({ action: 'inventory.read', id: fileView.id, cwd }, undefined))
-              .then((data) => setFileView((v) => ({ ...v, loading: false, data })))
-              .catch((error) => setFileView((v) => ({ ...v, loading: false, error: error.message })));
+          const openFile = (item) => readFile(item, true);
+          const reloadFile = () => readFile(fileView, false);
+          const translationTask = useTranslationTask({
+            itemId: fileView.id, cwd, lang: targetLanguage(), enabled: fileView.open,
+          });
+          const translationJob = translationTask.job;
+          const translationResult = translationJob?.state === 'done'
+            && translationJob.result?.sourceHash === fileView.data?.contentHash
+            ? translationJob.result : undefined;
+          const viewer = {
+            ...fileView,
+            translating: translationTask.checking || Boolean(translationJob && pendingJob(translationJob)),
+            checkingTranslation: translationTask.checking,
+            translation: fileView.translationHidden ? undefined : translationResult?.content,
+            cached: translationResult?.cached === true,
+            backend: translationResult?.backend ?? translationJob?.translationProgress?.backend,
+            translateError: translationTask.error || (translationJob?.state === 'done' && fileView.data && !translationResult ? t('sourceChanged') : '') || (['failed', 'cancelled'].includes(translationJob?.state)
+              ? (translationJob.result?.error || t('failed')) : ''),
+            translationProgress: translationJob?.translationProgress,
+            elapsedSeconds: translationJob && pendingJob(translationJob)
+              ? Math.max(0, Math.floor((translationTask.now - translationJob.createdAt) / 1000)) : 0,
           };
           const translateFile = (options = {}) => {
-            if (options.revert === true) { setFileView((v) => ({ ...v, translation: undefined })); return; }
-            setFileView((v) => ({ ...v, translating: true, translateError: '' }));
-            Promise.resolve()
-              .then(() => api({ action: 'inventory.translate', id: fileView.id, lang: targetLanguage(),
-                ...(options.force === true ? { force: true } : {}), cwd }, undefined))
-              .then((data) => setFileView((v) => ({ ...v, translating: false, translation: data.content,
-                cached: data.cached, backend: data.backend })))
-              .catch((error) => setFileView((v) => ({ ...v, translating: false, translateError: error.message })));
+            if (options.revert === true) { setFileView((v) => ({ ...v, translationHidden: true })); return; }
+            setFileView((v) => ({ ...v, translationHidden: false }));
+            translationTask.start(options.force === true);
           };
           const state = useLoad(kind === 'trash'
             ? { action: 'inventory.trash-list', cwd }
@@ -1006,31 +1152,36 @@ button into a full-width slab, which read as one giant control. */
           // Jump target for "go to the copy in use": switch to that kind, then
           // select the row once it appears in the reloaded page.
           const [pendingSelect, setPendingSelect] = useState('');
-          const counts = state.data?.counts ?? {};
+          const counts = state.data?.counts;
           const selected = items.find((item) => item.id === selectedId) ?? null;
           useEffect(() => {
-            saveView({ kind, source, pluginFilter, showDuplicates, search, query, offset, pageSize, groupBy, selectedId });
-          }, [kind, source, pluginFilter, showDuplicates, search, query, offset, pageSize, groupBy, selectedId]);
+            saveView({ kind, source, pluginFilter, showDuplicates, search, query: search, offset, pageSize, groupBy, selectedId, cwd });
+          }, [kind, source, pluginFilter, showDuplicates, search, offset, pageSize, groupBy, selectedId, cwd]);
           // A restored page offset can point past the end after the data changed.
           useEffect(() => {
             if (offset === 0 || state.loading || state.data === undefined) return;
             if (items.length === 0) setOffset(0);
           }, [offset, state.loading, state.data, items.length]);
           useEffect(() => {
-            if (!pendingSelect) return;
+            if (!pendingSelect || state.loading || !state.data) return;
             const hit = items.find((item) => item.id === pendingSelect);
-            if (hit === undefined) return;
+            if (hit === undefined) {
+              if (state.data.hasMore) setOffset((value) => value + pageSize);
+              else { setPendingSelect(''); operation.reportError(t('unavailable')); }
+              return;
+            }
             setSelectedId(hit.id);
             setPendingSelect('');
-          }, [pendingSelect, items]);
+          }, [pendingSelect, items, state.loading, state.data, pageSize]);
           // View history: every navigation (tab, drill-down, filter, page, row)
           // pushes the state it is leaving, so Back can restore it. Capped at 10.
           const historyRef = useRef([]);
           const [historyDepth, setHistoryDepth] = useState(0);
           function snapshot() {
-            return { kind, source, pluginFilter, showDuplicates, search, query, offset, selectedId };
+            return { kind, source, pluginFilter, showDuplicates, search, query: search, offset, selectedId, pageSize, groupBy, cwd };
           }
           function remember() {
+            setPendingSelect(''); setConfirm(null);
             const snap = snapshot();
             const last = historyRef.current[historyRef.current.length - 1];
             if (last !== undefined && JSON.stringify(last) === JSON.stringify(snap)) return;
@@ -1042,6 +1193,8 @@ button into a full-width slab, which read as one giant control. */
             if (previous === undefined) return;
             historyRef.current = historyRef.current.slice(0, -1);
             setHistoryDepth(historyRef.current.length);
+            closeFile(); setConfirm(null); setPendingSelect('');
+            setPageSize(previous.pageSize); setGroupBy(previous.groupBy); setCwdOverride(previous.cwd);
             setKind(previous.kind);
             setSource(previous.source);
             setPluginFilter(previous.pluginFilter);
@@ -1055,14 +1208,20 @@ button into a full-width slab, which read as one giant control. */
           // keystrokes and short enough to feel immediate.
           useEffect(() => {
             if (query === search) return undefined;
-            const timer = setTimeout(() => { setSearch(query); setOffset(0); }, 220);
+            const timer = setTimeout(() => { remember(); setSearch(query); setOffset(0); setSelectedId(null); }, 220);
             return () => clearTimeout(timer);
-          }, [query]);
+          }, [query, search]);
           const refresh = () => setRevision((n) => n + 1);
           async function chooseDirectory() {
-            try { const dir = await ctx.get('uiWorkspace')?.pickDirectory(); if (dir) { setCwdOverride(dir); setOffset(0); setSelectedId(null); } }
+            try { const dir = await ctx.get('uiWorkspace')?.pickDirectory(); if (dir && dir !== cwd) {
+              closeFile(); setConfirm(null); setPendingSelect('');
+              historyRef.current = []; setHistoryDepth(0);
+              setQuery(''); setSearch(''); setSource(''); setPluginFilter({ key: '', name: '', forKind: '' });
+              setCwdOverride(dir); setOffset(0); setSelectedId(null);
+            } }
             catch (error) { operation.reportError(error.message); }
           }
+          const covered = fileView.open ? { inert: '', 'aria-hidden': true } : {};
           return h('div', { className: 'dcc dcc-inv-page' }, h('style', null, css),
             h('header', null, h('h2', null, t('invTitle')),
               h('div', { className: 'dcc-header-actions' },
@@ -1076,28 +1235,26 @@ button into a full-width slab, which read as one giant control. */
               state.data?.statePath && h('span', { className: 'dcc-subtle', style: { overflowWrap: 'anywhere' } }, ` · ${t('stateFile')}: ${state.data.statePath} · ${t('offCount')}: ${state.data.disabledCount ?? 0}`),
               kind === 'plugin' && h(Button, { className: 'dcc-primary', disabled: updatingAll, onClick: updateAll }, t('updateAll'))),
             h('p', { className: 'dcc-subtle' }, t('invHint')),
+            h(Notice, { error: true }, operation.error),
             confirm && h('div', { className: 'dcc-confirm', role: 'group', 'aria-label': t('confirm') },
               h('p', null, confirm.label),
               h('div', { className: 'dcc-actions' },
                 h(Button, { className: confirm.danger ? 'dcc-danger' : 'dcc-primary', disabled: operation.busyFor(confirm.request),
                   onClick: () => { operation.run(confirm.request); setConfirm(null); } }, t('confirm')),
                 h(Button, { onClick: () => setConfirm(null) }, t('cancel')))),
-            h('div', { ref: gridRef, className: 'dcc-inv', style: { '--dcc-inv-nav': `${navWidth}px`, '--dcc-inv-det': `${detWidth}px` } },
-              h('nav', { className: 'dcc-inv-nav', 'aria-label': t('invTitle') },
-                h('div', { className: 'dcc-inv-sec' }, t('invTitle')),
+            h('div', { ref: gridRef, className: 'dcc-inv', style: { '--dcc-inv-nav': `${navWidth}px`, '--dcc-inv-det': `${detWidth}px`, ...(fileView.open ? { height: 'min(78vh,860px)' } : {}) } },
+              h('nav', { ...covered, className: 'dcc-inv-nav', 'aria-label': t('invTitle') },
+                h('div', { className: 'dcc-inv-sec' }, t('globalCounts')),
                 INV_KINDS.map(([value, label]) => h(Button, { key: value, 'aria-pressed': kind === value,
                   onClick: () => { remember(); setKind(value); setOffset(0); setSelectedId(null); } },
-                t(label), h('span', { className: 'dcc-inv-cnt' }, counts[value] ?? 0))),
+                t(label), h('span', { className: 'dcc-inv-cnt' }, counts?.[value] ?? (counts ? 0 : '—')))),
                 h(Button, { key: 'trash', 'aria-pressed': kind === 'trash',
                   onClick: () => { remember(); setKind('trash'); setOffset(0); setSelectedId(null); } },
                 `🗑 ${t('trash')}`)),
-              h('div', { className: `dcc-inv-split${dragging === 'nav' ? ' dcc-dragging' : ''}`, role: 'separator',
+              h('div', { ...covered, className: `dcc-inv-split${dragging === 'nav' ? ' dcc-dragging' : ''}`, role: 'separator',
                 'aria-orientation': 'vertical', 'aria-label': t('invTitle'),
                 onPointerDown: (event) => startResize(event, 'nav') }),
-              h('div', { className: 'dcc-inv-list' },
-                drillActive && h('div', { className: 'dcc-inv-filterbar' },
-                  h('span', null, `${t('filteredByPlugin')}${pluginFilter.name}`),
-                  h(Button, { onClick: () => { remember(); setPluginFilter({ key: '', name: '', forKind: '' }); setOffset(0); setSelectedId(null); } }, t('clearFilter'))),
+              h('div', { ...covered, className: 'dcc-inv-list' },
                 // Typing searches: there is no confirm step to forget, and no
                 // stale applied query left behind after the box is cleared.
                 kind !== 'trash' && h('div', { className: 'dcc-toolbar' },
@@ -1109,16 +1266,16 @@ button into a full-width slab, which read as one giant control. */
                     key: entry.key, className: 'dcc-filter-chip', onClick: entry.clear,
                     title: t('removeFilter'),
                   }, `${entry.label} ✕`)),
-                  h(Button, { onClick: clearAllFilters }, t('clearFilters'))),
+                  activeFilters.length > 1 && h(Button, { onClick: clearAllFilters }, t('clearFilters'))),
                 h(LoadState, { state, retry: refresh,
                   empty: items.length === 0
-                    ? (activeFilters.length > 0 ? `${t('noMatchFor')} ${activeFilters.map((entry) => entry.label).join(' · ')}` : t('empty'))
+                    ? (kind === 'trash' ? t('trashEmpty') : activeFilters.length > 0 ? `${t('noMatchFor')} ${activeFilters.map((entry) => entry.label).join(' · ')}` : t('empty'))
                     : '' }),
                 kind === 'trash' && h('ul', { className: 'dcc-list', 'aria-busy': state.loading }, items.map((entry) => {
                   const request = { action: 'inventory.restore', id: entry.id, cwd };
                   return h('li', { key: `${entry.id}:${entry.trashedAt}`, className: `dcc-inv-item${selectedId === entry.id ? ' dcc-inv-sel' : ''}`,
                     role: 'button', tabIndex: 0, onClick: () => { remember(); setSelectedId(entry.id); },
-                    onKeyDown: (event) => { if (event.key === 'Enter') { remember(); setSelectedId(entry.id); } } },
+                    onKeyDown: (event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') { remember(); setSelectedId(entry.id); } } },
                   h('span', { className: 'dcc-inv-ico', 'aria-hidden': 'true' }, '🗑'),
                   h('span', { className: 'dcc-inv-tx' },
                     h('span', { className: 'dcc-inv-nm' }, entry.name),
@@ -1130,7 +1287,7 @@ button into a full-width slab, which read as one giant control. */
                     h(Button, { key: value || 'all', 'aria-pressed': source === value,
                       onClick: () => { remember(); setSource(value); setOffset(0); setSelectedId(null); } }, t(label))),
                   h('span', { style: { flex: 1 } }),
-                  h(Button, { 'aria-pressed': groupBy, title: t('groupByPlugin'), onClick: () => setGroupBy((value) => !value) },
+                  h(Button, { 'aria-pressed': groupBy, title: t('groupByPlugin'), onClick: () => { remember(); setGroupBy((value) => !value); } },
                     `☰ ${t('groupByPlugin')}`),
                   (() => {
                     const dupCount = state.data?.shadowedCounts?.[kind] ?? 0;
@@ -1139,13 +1296,13 @@ button into a full-width slab, which read as one giant control. */
                       onClick: () => { remember(); setShowDuplicates((value) => !value); setOffset(0); setSelectedId(null); } },
                     `${t('duplicates')} ${dupCount}`);
                   })()),
-                (() => {
+                kind !== 'trash' && (() => {
                   const row = (item) => {
                     const icon = (INV_KINDS.find(([value]) => value === item.kind) ?? [null, null, '📄'])[2];
                     const request = { action: 'inventory.toggle', id: item.id, kind: item.kind, disabled: !item.disabledInDsh, cwd };
                     return h('li', { key: item.id, className: `dcc-inv-item${selectedId === item.id ? ' dcc-inv-sel' : ''}${item.disabledInDsh ? ' dcc-off' : ''}`,
                       role: 'button', tabIndex: 0, onClick: () => { remember(); setSelectedId(item.id); },
-                      onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); remember(); setSelectedId(item.id); } } },
+                      onKeyDown: (event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); remember(); setSelectedId(item.id); } } },
                     h('span', { className: 'dcc-inv-ico', 'aria-hidden': 'true' }, icon),
                     h('span', { className: 'dcc-inv-tx' },
                       h('span', { className: 'dcc-inv-nm' }, item.name, ' ',
@@ -1159,7 +1316,8 @@ button into a full-width slab, which read as one giant control. */
                           ? `${t('duplicateShort')} · ${t('usedKind')} ${item.overriddenByKind}`
                           : `${t('duplicateShort')} · ${t('usedFrom')} ${item.overriddenByName || (item.overriddenByPath || '').split('/').slice(-2, -1)[0] || ''}`)),
                       h('span', { className: 'dcc-inv-ds' }, item.description || '')),
-                    h(Switch, { checked: !item.disabledInDsh, disabled: item.toggleable === false || operation.busyFor(request),
+                    item.toggleable === false ? h('span', { className: 'dcc-tag', title: item.toggleBlockedReason },
+                      t(item.disabledByPlugin || item.disabledInClaude ? 'disabled' : 'displayOnly')) : h(Switch, { checked: !item.disabledInDsh, disabled: operation.busyFor(request),
                       label: `${t(item.disabledInDsh ? 'enable' : 'disable')} ${item.name}`,
                       onChange: () => operation.run(request) }));
                   };
@@ -1177,13 +1335,13 @@ button into a full-width slab, which read as one giant control. */
                         '🧩 ', label, ' ', h('span', { className: 'dcc-tag' }, group.length)),
                       h('ul', { className: 'dcc-list', style: { margin: '6px 0 0' } }, group.map(row)))));
                 })(),
-                h(Pagination, { state, offset, pageSize, changePage: (next) => { remember(); setOffset(next); setSelectedId(null); },
+                kind !== 'trash' && h(Pagination, { state, offset, pageSize, changePage: (next) => { remember(); setOffset(next); setSelectedId(null); },
                   changeSize: (size) => { remember(); setPageSize(size); setOffset(0); setSelectedId(null); } })),
-              h('div', { className: `dcc-inv-split${dragging === 'det' ? ' dcc-dragging' : ''}`, role: 'separator',
+              h('div', { ...covered, className: `dcc-inv-split${dragging === 'det' ? ' dcc-dragging' : ''}`, role: 'separator',
                 'aria-orientation': 'vertical', 'aria-label': t('invTitle'),
                 onPointerDown: (event) => startResize(event, 'det') }),
-              h('aside', { className: 'dcc-inv-detail', 'aria-label': t('invTitle') },
-                !selected && kind !== 'trash' && h(InvTasks, { operation, batchNote, dismissed,
+              h('aside', { ...covered, className: 'dcc-inv-detail', 'aria-label': t('invTitle') },
+                h(InvTasks, { operation, batchNote, dismissed,
                   onDismiss: (ids) => setDismissed((old) => new Set([...old, ...ids])) }),
                 kind === 'trash'
                   ? (selected ? h('section', null, h('h3', null, selected.name),
@@ -1198,20 +1356,21 @@ button into a full-width slab, which read as one giant control. */
                     // The callee passes what it knows; this scope has no `item`.
                     onDrill: (pluginKey, kindName, pluginName) => {
                       remember();
-                      setSource(''); setOffset(0); setSelectedId(null);
+                      setSource(''); setShowDuplicates(true); setOffset(0); setSelectedId(null);
                       setSearch(''); setQuery('');
                       setPluginFilter({ key: pluginKey, name: pluginName || pluginKey, forKind: kindName });
                       setKind(kindName);
                     },
                     onShadowJump: (source) => {
                       remember();
-                      const winnerKind = String(source.overriddenBy || '').split('#')[1];
+                      const winnerKind = source.overriddenByKind || String(source.overriddenBy || '').split('#')[1];
+                      setSource(''); setPluginFilter({ key: '', name: '', forKind: '' }); setShowDuplicates(false);
                       setSearch(''); setQuery(''); setOffset(0); setSelectedId(null);
                       if (winnerKind && winnerKind !== kind) setKind(winnerKind);
                       setPendingSelect(source.overriddenBy);
-                    } }),
-              fileView.open && h(FileViewer, { view: fileView, targetLanguage,
-                onClose: () => setFileView(emptyView), onReload: reloadFile, onTranslate: translateFile }))));
+                    } })),
+              fileView.open && h(FileViewer, { view: viewer, targetLanguage,
+                onClose: closeFile, onReload: reloadFile, onTranslate: translateFile })));
         }
         function BridgeStatus({ status, refresh, operation }) {
           const data = status.data;
@@ -1348,10 +1507,8 @@ button into a full-width slab, which read as one giant control. */
           name: 'sidebar.panellist', id: 'claude-compat', order: 20,
           label: () => t('bridge'), locale: 'claudeCompat',
         }, (owner = {}) => h('svg', { width: owner.size ?? 18, height: owner.size ?? 18, viewBox: '0 0 24 24',
-          fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'aria-hidden': 'true' },
-          h('path', { d: 'M4 12h4m8 0h4' }),
-          h('rect', { x: 2, y: 8, width: 6, height: 8, rx: 2 }),
-          h('rect', { x: 16, y: 8, width: 6, height: 8, rx: 2 })));
+          fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+          h('path', { d: 'M10 13a5 5 0 0 0 7 .5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7' })));
         ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: 'dsh-claude-compat',
           locale: 'claudeCompat' }, wrapped(() => h(Manager, { initialMode: 'status' }))));
         ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({

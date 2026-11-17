@@ -17,10 +17,10 @@
 #
 # Usage: bash scripts/dsh-reload.sh            # deploy + recompose
 #        bash scripts/dsh-reload.sh --no-deploy   # only recompose
-set -uo pipefail
+set -euo pipefail
 
 PROFILE="${DSH_PROFILE:-desktop}"
-PATCH="$DSH_HOME/profiles/$PROFILE/cordis.patch.yml"
+PATCH="${DSH_HOME:-$HOME/.dsh}/profiles/$PROFILE/cordis.patch.yml"
 [ -f "$PATCH" ] || PATCH="$HOME/.dsh/profiles/$PROFILE/cordis.patch.yml"
 
 if [ "${1:-}" != "--no-deploy" ]; then
@@ -50,8 +50,8 @@ io.open(path, 'w', encoding='utf-8').write(text)
 print(f'· recomposition trigger written to {path}')
 PY
 
-# HMR debounces 100 ms and awaits write stability, so give it a moment.
-sleep 6
+# Writing the trigger is not proof that the running Host has recomposed.
+# Verify a changed response through claude_compat or runtime inspection.
 echo
-echo "✓ 宿主侧已热重载（App 未重启，会话未中断）"
+echo "✓ 已部署并发出热重载触发信号（未执行 App 重启）；需通过运行中接口核验生效"
 echo "  UI 改动还需要：刷新页面（Cmd+R）"

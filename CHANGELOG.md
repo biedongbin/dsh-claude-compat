@@ -4,6 +4,26 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [2.0.0] — 2026-11-17
+
+### Upgrade notes and corrections to 1.3.0
+- **Inventory means discovery, not runtime mounting.** MCP rows show selected declarations; inspection does not execute `headersHelper` or prove startup policy approval or a successful mount. Plugin hooks and rules are declaration-only and are not injected by this bridge. Disabled Claude plugins remain inspectable.
+- **DSH switches cover skills, commands and agents only.** Per-item switches and the grouping plugin switch filter those entries from the bridge's skill catalog, with per-project state in `.dsh/claude-compat-state.json`. Rules, hooks and MCP rows are view-only. A plugin switch does not unmount integrations or change Claude Code's enablement. This supersedes 1.3.0's claim that every item has a working switch.
+- **Translation is view-only and may cost model tokens.** The target is the current DSH interface locale. Original files remain unchanged; fenced code stays intact and is excluded from provider requests. A disk cache keyed by source content and target language avoids repeat calls; **Translate again** requests fresh translation. When the translator service is absent, the configured default model translates prose chunks; large files can require multiple calls and incur charges. This clarifies 1.3.0's “one-shot” wording: it is per chunk, not necessarily per file.
+- Install the updated package and restart DSH to load its manifest and runtime dependencies. Skills can subsequently refresh in the current session; MCP and hook configuration retain their startup lifecycle.
+
+### Fixed
+- Align plugin capability totals and drill-down rows, preserve discovery kind for manifest paths, include installed-record timestamps, and inspect declarations without executing MCP helpers.
+- Select same-name winners from enabled candidates; show parent-plugin and Claude-side disablement separately. Keep global visible counts separate from duplicate counts under the current filters, and navigate drill-down results across pages.
+- Serialize same-project state changes, write state atomically, reject corrupt trash manifests, roll back failed trash metadata writes and refuse restore overwrites.
+- Deduplicate translation jobs by project, item and language; restore progress when reopening the viewer and bind results to the source hash. Preserve paragraph separators and reject empty, truncated, timed-out or cancelled output as successful translations.
+- Prevent late file responses from replacing newer selections, clear stale state when changing directories, keep failures visible and apply bulk updates across all pages within the host queue limit.
+- Return inventory data as lossless JSON for the strict tool transport. Reload tooling now reports the reload signal without claiming that script completion proves runtime activation.
+
+### Verification
+- The final source audit recorded `npm run check`: **863 tests, 861 passed, 0 failed, 2 skipped**. The skipped cases require the optional matching AgentLoop testkit. See [audit evidence and limits](docs/AUDIT-2026-11-17.md).
+- Browser visual acceptance and real paid translation were not verified in that audit; mocked providers and React interaction tests cover local behavior. The earlier 1.3.0 verification counts and hot-reload statement below are historical, not evidence for the complete 2.0.0 package.
+
 ## [1.3.0] — 2026-11-17
 
 ### Added

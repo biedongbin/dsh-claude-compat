@@ -211,21 +211,25 @@ test('a plugin item reports what it provides, per kind', async () => {
   writeFileSync(join(installPath, 'skills', 'one', 'SKILL.md'), '---\nname: one\ndescription: s\n---\nb\n');
   mkdirSync(join(installPath, 'commands'), { recursive: true });
   writeFileSync(join(installPath, 'commands', 'go.md'), '---\ndescription: c\n---\nb\n');
-  mkdirSync(join(installPath, 'agents'), { recursive: true });
-  writeFileSync(join(installPath, 'agents', 'helper.md'), '---\nname: helper\ndescription: a\n---\nb\n');
+  mkdirSync(join(installPath, 'personas'), { recursive: true });
+  writeFileSync(join(installPath, 'personas', 'helper.md'), '---\nname: helper\ndescription: a\n---\nb\n');
   mkdirSync(join(installPath, 'rules'), { recursive: true });
   writeFileSync(join(installPath, 'rules', 'r.md'), '# r\n');
   mkdirSync(join(installPath, '.claude-plugin'), { recursive: true });
-  // Real manifests declare their content dirs; discovery reads them from here.
+  // Minimal manifests rely on conventional directories (as claude-code-setup does).
   writeFileSync(join(installPath, '.claude-plugin', 'plugin.json'), JSON.stringify({
-    name: 'demo', skills: './skills', commands: './commands', agents: './agents',
+    name: 'demo', agents: './personas',
     mcpServers: { demo: { command: 'node' } },
   }));
-  writeFileSync(join(pluginsRoot, 'installed_plugins.json'), JSON.stringify({ plugins: { 'demo@m': [{ scope: 'user', installPath, version: '1.0.0' }] } }));
+  const lastUpdated = '2026-11-13T06:33:24.994Z';
+  writeFileSync(join(pluginsRoot, 'installed_plugins.json'), JSON.stringify({ plugins: { 'demo@m': [{
+    scope: 'user', installPath, version: '1.0.0', lastUpdated,
+  }] } }));
   const cfg = { projectRootMarkers: ['.dsh'], userClaudeDir: userDir, pluginsRoot };
   const inventory = await buildInventory({ cwd: root, config: cfg });
   const plugin = inventory.items.find((i) => i.kind === 'plugin' && i.plugin?.key === 'demo@m');
   assert.ok(plugin, 'plugin row present');
+  assert.equal(plugin.plugin.lastUpdated, lastUpdated, 'preserve the install record update time');
   assert.deepEqual(plugin.provides.skill, 1);
   assert.deepEqual(plugin.provides.command, 1);
   assert.deepEqual(plugin.provides.agent, 1);
