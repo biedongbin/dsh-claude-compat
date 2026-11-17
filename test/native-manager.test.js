@@ -167,7 +167,9 @@ test('native tool registration and full-access execution use the actual DSH regi
   const definition = ctx.tools.get('claude_compat');
   assert.ok(definition);
   const result = await definition.execute({ action: 'status' }, { signal: signal() });
-  assert.equal(result.ok, true); assert.match(result.version, /^1\.2\./);
+  const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(result.ok, true);
+  assert.equal(result.version, version, 'the bridge reports the manifest version');
   await ctx.fiber.dispose();
 });
 

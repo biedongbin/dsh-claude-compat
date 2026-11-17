@@ -59,6 +59,7 @@ import {
 import { registerHooks } from './hooks.js';
 import { extraServers, loadMcpServers, mountMcpConfigs } from './mcp.js';
 import { registerManagerCommands } from './commands.js';
+import { filterCandidatesByState } from './inventory.js';
 import { registerCompatibilityService } from './compat-service.js';
 import { discoverPluginContent, readInstalledClaudePlugins, translatePluginMcp } from './plugins.js';
 import {
@@ -302,7 +303,10 @@ class ClaudeCompatSkillProvider {
         { enableAgents: this.config.enableAgents, userClaudeDir: this.config.userClaudeDir, ...this.aliasOptions });
       candidates.push(...pluginCandidates);
     }
-    return candidates;
+    // Per-project DSH-side switches (.dsh/claude-compat-state.json): items the
+    // user toggled off on the inventory page stay out of the catalog. Hot —
+    // the inventory toggle invalidates the catalog, the next list() lands here.
+    return filterCandidatesByState(candidates, options?.cwd, this.config);
   }
 
   // Invalidate fires when the definition is actually loaded (get()), not at

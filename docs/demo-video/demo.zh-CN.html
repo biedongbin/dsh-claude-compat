@@ -1,0 +1,1895 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="3b1b" data-mode="dark" data-style="80" data-video>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="Answer me with HTML 0.5.0">
+<title>dsh-claude-compat</title>
+<style>
+html[data-theme="blueprint"], html[data-theme="blueprint"][data-mode="light"] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 0px;
+  --shadow: none;
+  --bw: 1.5px;
+  --head-font: var(--font-sans);
+  --bg: #f6f6f3;
+  --paper: #ffffff;
+  --ink: #16181d;
+  --ink-2: #4b5260;
+  --ink-3: #8b929e;
+  --line: #1d2026;
+  --line-2: #d6dae1;
+  --fill: #f3f5f8;
+  --accent: #1d5fbf;
+  --accent-bg: #e4ecf8;
+  --ok: #1d5fbf;
+  --ok-bg: #e4ecf8;
+  --err: #c62828;
+  --err-bg: #fbeaea;
+  --warn: #a8620a;
+  --warn-bg: #fdf3e2;
+  --head-bg: #16181d;
+  --head-fg: #ffffff;
+}
+html[data-theme="blueprint"][data-mode="dark"] {
+  --bg: #081322;
+  --paper: #0d1c31;
+  --ink: #e6edf7;
+  --ink-2: #a9b8cc;
+  --ink-3: #6b7f99;
+  --line: #c9d6e8;
+  --line-2: #23385a;
+  --fill: #12253f;
+  --accent: #6ea8ff;
+  --accent-bg: #16305a;
+  --ok: #6ea8ff;
+  --ok-bg: #16305a;
+  --err: #ff7070;
+  --err-bg: #3b1620;
+  --warn: #f0b14a;
+  --warn-bg: #3a2a10;
+  --head-bg: #e6edf7;
+  --head-fg: #081322;
+}
+@media (prefers-color-scheme: dark) {
+html[data-theme="blueprint"][data-mode="auto"] {
+  --bg: #081322;
+  --paper: #0d1c31;
+  --ink: #e6edf7;
+  --ink-2: #a9b8cc;
+  --ink-3: #6b7f99;
+  --line: #c9d6e8;
+  --line-2: #23385a;
+  --fill: #12253f;
+  --accent: #6ea8ff;
+  --accent-bg: #16305a;
+  --ok: #6ea8ff;
+  --ok-bg: #16305a;
+  --err: #ff7070;
+  --err-bg: #3b1620;
+  --warn: #f0b14a;
+  --warn-bg: #3a2a10;
+  --head-bg: #e6edf7;
+  --head-fg: #081322;
+}
+}
+
+html[data-theme="shadcn"], html[data-theme="shadcn"][data-mode="light"] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 8px;
+  --shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
+  --bw: 1px;
+  --head-font: var(--font-sans);
+  --bg: #fafafa;
+  --paper: #ffffff;
+  --ink: #09090b;
+  --ink-2: #71717a;
+  --ink-3: #a1a1aa;
+  --line: #e4e4e7;
+  --line-2: #f0f0f2;
+  --fill: #f4f4f5;
+  --accent: #2563eb;
+  --accent-bg: #eff6ff;
+  --ok: #16a34a;
+  --ok-bg: #f0fdf4;
+  --err: #dc2626;
+  --err-bg: #fef2f2;
+  --warn: #d97706;
+  --warn-bg: #fffbeb;
+  --head-bg: #18181b;
+  --head-fg: #fafafa;
+}
+html[data-theme="shadcn"][data-mode="dark"] {
+  --bg: #09090b;
+  --paper: #121215;
+  --ink: #fafafa;
+  --ink-2: #a1a1aa;
+  --ink-3: #71717a;
+  --line: #27272a;
+  --line-2: #1c1c1f;
+  --fill: #18181b;
+  --accent: #60a5fa;
+  --accent-bg: #172554;
+  --ok: #4ade80;
+  --ok-bg: #052e16;
+  --err: #f87171;
+  --err-bg: #450a0a;
+  --warn: #fbbf24;
+  --warn-bg: #451a03;
+  --head-bg: #fafafa;
+  --head-fg: #18181b;
+}
+@media (prefers-color-scheme: dark) {
+html[data-theme="shadcn"][data-mode="auto"] {
+  --bg: #09090b;
+  --paper: #121215;
+  --ink: #fafafa;
+  --ink-2: #a1a1aa;
+  --ink-3: #71717a;
+  --line: #27272a;
+  --line-2: #1c1c1f;
+  --fill: #18181b;
+  --accent: #60a5fa;
+  --accent-bg: #172554;
+  --ok: #4ade80;
+  --ok-bg: #052e16;
+  --err: #f87171;
+  --err-bg: #450a0a;
+  --warn: #fbbf24;
+  --warn-bg: #451a03;
+  --head-bg: #fafafa;
+  --head-fg: #18181b;
+}
+}
+
+html:lang(zh-Hant)[data-theme][data-mode], html:lang(zh-TW)[data-theme][data-mode], html:lang(zh-HK)[data-theme][data-mode], html:lang(zh-MO)[data-theme][data-mode] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Heiti TC", "Microsoft JhengHei", "Noto Sans CJK TC", "Noto Sans TC", "PingFang SC", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html:lang(ja)[data-theme][data-mode] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans CJK JP", "Noto Sans JP", "PingFang SC", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html:lang(he)[data-theme][data-mode] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Arial, Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* Answer me with HTML base — uses theme variables only, never hard-coded colors (theme tokens and decorations: themes/<name>.js). Exception: the var() fallbacks of diagrams (flow / sequence) equal the blueprint light tokens, guarded by a test. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-sans); font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, kbd { font-family: var(--font-mono); }
+
+/* ── Toolbar ─────────────────────────────── */
+.am-toolbar {
+  position: fixed; top: 12px; inset-inline-end: 12px; z-index: 10; display: flex; gap: 6px;
+}
+.am-btn {
+  font: 12px/1 var(--font-sans); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line-2); border-radius: var(--radius); padding: 7px 10px; cursor: pointer;
+}
+.am-btn:hover { border-color: var(--ink-3); }
+.am-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Theme and mode lists: a label and a native select inside one button-like box */
+.am-pick {
+  display: flex; align-items: center; gap: 6px; font: 12px/1 var(--font-sans); color: var(--ink-2); background: var(--paper);
+  border: 1px solid var(--line-2); border-radius: var(--radius); padding-block: 0; padding-inline: 10px 4px;
+}
+.am-pick:hover { border-color: var(--ink-3); }
+.am-pick:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.am-pick select {
+  font: inherit; color: var(--ink); background: transparent; border: 0; padding: 6px 2px; cursor: pointer; outline: none;
+}
+.am-pick option { color: var(--ink); background: var(--paper); }
+
+/* ── Header ───────────────────────────────── */
+.am-head { margin: 0 0 20px; padding-inline-end: 300px; }
+.am-head h1 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: -0.01em; }
+.am-sub { margin: 4px 0 0; color: var(--ink-2); }
+.am-head-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.am-head-meta b { font-family: var(--font-mono); font-weight: 400; color: var(--ink-3); margin-inline-end: 6px; }
+.am-intro { margin-top: 12px; max-width: 80ch; }
+
+/* ── sheet template ────────────────────────── */
+.am-sheet { max-width: 1680px; margin: 0 auto; padding: 32px 28px 40px; }
+.am-frame { position: relative; }
+.am-grid {
+  display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+  gap: 20px; align-items: start;
+}
+.am-ruler { display: none; }
+.am-ruler span { flex: 1; display: flex; align-items: center; justify-content: center; }
+.am-ruler--top, .am-ruler--bottom { left: 18px; right: 18px; height: 18px; }
+.am-ruler--top { top: 0; }
+.am-ruler--bottom { bottom: 0; }
+.am-ruler--left, .am-ruler--right { top: 18px; bottom: 18px; width: 18px; flex-direction: column; }
+.am-ruler--left { left: 0; }
+.am-ruler--right { right: 0; }
+.am-ruler--top span + span, .am-ruler--bottom span + span { border-inline-start: 1px solid var(--line); }
+.am-ruler--left span + span, .am-ruler--right span + span { border-top: 1px solid var(--line); }
+
+/* ── Panels ───────────────────────────────── */
+.am-panel {
+  background: var(--paper); border: var(--bw) solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); min-width: 0; overflow: hidden;
+}
+.am-panel-head {
+  display: flex; align-items: stretch; gap: 0; border-bottom: var(--bw) solid var(--line); min-height: 34px;
+}
+.am-panel-id {
+  display: flex; align-items: center; justify-content: center; min-width: 34px; padding: 0 8px;
+  background: var(--head-bg); color: var(--head-fg); font-weight: 600; font-size: 14px;
+}
+.am-panel-head h2 { margin: 0; padding: 7px 12px; font-size: 15px; font-weight: 600; flex: 1; display: flex; align-items: center; }
+.am-panel-meta { align-self: center; padding: 0 12px; font: 11px/1.3 var(--font-mono); color: var(--ink-2); text-align: end; }
+.am-panel-body { padding: 14px 16px 16px; }
+.am-panel-body > * + * { margin-top: 12px; }
+
+/* ── Markdown body ───────────────────────── */
+.am-md > :first-child { margin-top: 0; }
+.am-md > :last-child { margin-bottom: 0; }
+.am-md p { margin: 0 0 8px; }
+.am-md ul, .am-md ol { margin: 0 0 8px; padding-inline-start: 20px; }
+.am-md li + li { margin-top: 3px; }
+.am-md h3, .am-md h4 { margin: 14px 0 6px; font-size: 13px; }
+.am-md a { color: var(--accent); }
+.am-md blockquote { margin: 0 0 8px; padding: 2px 12px; border-inline-start: 3px solid var(--line-2); color: var(--ink-2); }
+.am-md :not(pre) > code { font-size: 0.9em; background: var(--fill); padding: 1px 5px; border-radius: 4px; }
+.am-md hr { border: 0; border-top: 1px solid var(--line-2); margin: 12px 0; }
+.am-md table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.am-md th {
+  text-align: start; font: 11px/1.3 var(--font-mono); color: var(--ink-2); font-weight: 400;
+  padding: 6px 10px; border-bottom: 1px solid var(--line-2);
+}
+/* th { text-align: start } outranks the align attribute from Markdown alignment, so restore right and center columns explicitly. */
+.am-md th[align="right"] { text-align: right; }
+.am-md th[align="center"] { text-align: center; }
+.am-md td { padding: 7px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+.am-md tbody tr:nth-child(even) td { background: var(--fill); }
+.am-table-wrap { overflow-x: auto; }
+/* Images scale down to the panel and never past 70% of the window height, keeping their shape. */
+.am-md img { max-width: 100%; max-height: 70vh; height: auto; }
+.am-figure { margin: 0; text-align: center; }
+.am-figure img { display: block; margin: 0 auto; border: 1px solid var(--line-2); border-radius: var(--radius); }
+.am-figure figcaption { margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+.am-code {
+  margin: 0; padding: 12px 14px; background: var(--fill); border: 1px solid var(--line-2);
+  border-radius: var(--radius); overflow-x: auto; font-size: 12.5px; line-height: 1.5;
+}
+/* Ask: a decision the reader makes; the suggested option starts selected */
+.am-ask { margin: 10px 0; padding: 10px 12px 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--fill); min-width: 0; }
+/* The question floats inside the box, so a long question wraps like text instead of riding on the border */
+.am-ask-q { float: left; width: 100%; padding: 0; margin-bottom: 4px; font-weight: 600; }
+/* Two columns: the control, then the label, tag and note, which wrap under the label and never under the control */
+.am-ask-opt { clear: both; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; align-items: baseline; padding: 5px 2px; cursor: pointer; }
+.am-ask-opt input { margin: 0; accent-color: var(--accent); position: relative; top: 2px; }
+.am-ask-tag { display: inline-block; font-size: 11px; line-height: 1.5; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+.am-ask-note { display: block; color: var(--ink-2); }
+/* Comment box under each panel, and the Reply sheet */
+.am-comment-btn {
+  display: flex; flex-shrink: 0; align-self: center; margin-block: 0; margin-inline: auto 6px; color: var(--ink-3); background: transparent;
+  border: 1px solid transparent; border-radius: var(--radius); padding: 3px; cursor: pointer;
+}
+.am-panel-meta + .am-comment-btn { margin-inline-start: 0; }
+.am-panel:hover .am-comment-btn, .am-comment-btn:focus-visible, .am-comment-btn[aria-expanded="true"] { border-color: var(--line-2); color: var(--ink-2); }
+.am-panel .am-comment-btn.am-comment-btn--on { color: var(--accent); border-color: var(--accent); }
+.am-panel--bare { position: relative; }
+.am-panel--bare > .am-comment-btn { position: absolute; top: 4px; inset-inline-end: 0; }
+.am-comment { padding: 0 14px 12px; }
+.am-comment textarea, .am-reply textarea {
+  width: 100%; font: 13px/1.5 var(--font-sans); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line-2); border-radius: var(--radius); padding: 8px 10px; resize: vertical;
+}
+.am-comment textarea:focus-visible, .am-reply textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.am-btn--reply { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.am-btn--reply:hover { opacity: .88; }
+.am-reply {
+  width: min(640px, calc(100vw - 32px)); padding: 16px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+.am-reply::backdrop { background: rgba(0,0,0,.35); }
+.am-reply-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
+.am-reply-head span { color: var(--ink-2); font-size: 13px; }
+.am-reply textarea { font-family: var(--font-mono); font-size: 12.5px; }
+.am-reply-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.am-reply .am-btn:disabled { opacity: .5; cursor: default; }
+/* Code block: a header (title or path:lines, language, copy), then one span per line; numbered blocks show the line number in a gutter */
+.am-codeblock { margin: 10px 0; min-width: 0; }
+.am-codeblock .am-code { border-top-left-radius: 0; border-top-right-radius: 0; padding: 10px 0; }
+.am-code-head {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px; font: 12px/1.3 var(--font-sans); color: var(--ink-2);
+  background: var(--paper); border: 1px solid var(--line-2); border-bottom: 0; border-radius: var(--radius) var(--radius) 0 0;
+}
+.am-code-title { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.am-code-lang { margin-left: auto; color: var(--ink-3); text-transform: lowercase; }
+.am-code-copy { font: 12px/1 var(--font-sans); color: var(--ink-2); background: transparent; border: 1px solid var(--line-2); border-radius: var(--radius); padding: 4px 8px; cursor: pointer; margin-left: auto; }
+.am-code-lang + .am-code-copy { margin-left: 0; }
+.am-code-copy:hover { border-color: var(--ink-3); color: var(--ink); }
+.am-code-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.am-code code { display: block; min-width: max-content; }
+.am-ln { display: block; padding: 0 14px; min-height: 1.5em; white-space: pre; }
+.am-ln--hl { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.am-code--num .am-ln::before {
+  content: attr(data-n); display: inline-block; width: 3.5ch; margin-right: 12px; text-align: right; color: var(--ink-3);
+  user-select: none; -webkit-user-select: none;
+}
+
+/* ── Status badges ok / no / warn ──────────────── */
+.am-status { white-space: nowrap; font-weight: 500; }
+.am-status--ok { color: var(--ok); }
+.am-status--no { color: var(--err); }
+.am-status--warn { color: var(--warn); }
+.am-status-icon { display: inline-block; width: 1.1em; font-weight: 700; }
+
+/* ── callout ─────────────────────────────── */
+.am-callout {
+  border: 1px solid var(--line-2); border-inline-start: 3px solid var(--accent); background: var(--accent-bg);
+  padding: 10px 14px; border-radius: var(--radius);
+}
+.am-callout--ok { border-inline-start-color: var(--ok); background: var(--ok-bg); }
+.am-callout--warn { border-inline-start-color: var(--warn); background: var(--warn-bg); }
+.am-callout--err { border-inline-start-color: var(--err); background: var(--err-bg); }
+.am-callout-title { font-weight: 600; margin-bottom: 4px; }
+
+/* ── kv title block ─────────────────────────── */
+.am-kv {
+  display: grid; grid-template-columns: repeat(var(--kv-cols, 2), minmax(0, 1fr)); margin: 0;
+  border-top: var(--bw) solid var(--line); border-inline-start: var(--bw) solid var(--line);
+}
+.am-kv-cell { border-inline-end: var(--bw) solid var(--line); border-bottom: var(--bw) solid var(--line); padding: 6px 10px 8px; min-width: 0; }
+.am-kv-cell--wide { grid-column: 1 / -1; }
+.am-kv dt { font: 11px/1.4 var(--font-mono); color: var(--ink-2); }
+.am-kv dd { margin: 2px 0 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.am-kv-cell--wide dd { font-size: 17px; font-weight: 600; }
+
+/* ── timeline ────────────────────────────── */
+.am-timeline { list-style: none; margin: 0; padding: 0; }
+.am-timeline--h { display: grid; grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr)); padding-top: 4px; }
+.am-timeline--h li { position: relative; text-align: center; padding: 0 6px; }
+.am-timeline--h li::before {
+  content: ""; position: absolute; top: 31px; left: 0; right: 0; border-top: var(--bw) solid var(--line);
+}
+.am-timeline--h li:first-child::before { inset-inline-start: 50%; }
+.am-timeline--h li:last-child::before { inset-inline-end: 50%; }
+.am-tl-when { display: block; font-size: 15px; font-weight: 500; height: 24px; }
+.am-tl-dot {
+  position: relative; display: block; width: 11px; height: 11px; margin: 2px auto 8px;
+  border: var(--bw) solid var(--line); border-radius: 50%; background: var(--paper);
+}
+.am-tl-item--hi .am-tl-dot { background: var(--accent); border-color: var(--accent); }
+.am-tl-title { display: block; font-size: 12.5px; font-weight: 500; }
+.am-tl-text { display: block; font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+.am-timeline--v li { position: relative; padding: 0 0 14px; padding-inline-start: 22px; }
+.am-timeline--v li::before { content: ""; position: absolute; inset-inline-start: 5px; top: 6px; bottom: -6px; border-inline-start: var(--bw) solid var(--line-2); }
+.am-timeline--v li:last-child::before { display: none; }
+.am-timeline--v .am-tl-dot { position: absolute; inset-inline-start: 0; top: 4px; margin: 0; }
+.am-timeline--v .am-tl-when { display: inline; height: auto; font: 12px var(--font-mono); color: var(--ink-2); margin-inline-end: 8px; }
+.am-timeline--v .am-tl-title { display: inline; font-size: 14px; }
+.am-timeline--v .am-tl-text { margin-top: 2px; }
+/* .am-tl-wrap is the container (src/components/timeline.js): a horizontal timeline answers to the width it has, not to the width of the window, since a
+   sheet puts panels two or three to a row. Below 560 px (about 90 px for each of the six items a timeline has by default) its dates
+   wrap and the dots cover them, so it lays out like timeline v: line and dots at the start, text beside them. */
+.am-tl-wrap { container-type: inline-size; }
+@container (max-width: 560px) {
+  .am-timeline--h { display: block; padding-top: 0; }
+  .am-timeline--h li { text-align: start; padding: 0 0 14px; padding-inline-start: 22px; }
+  .am-timeline--h li::before, .am-timeline--h li:first-child::before {
+    top: 6px; bottom: -6px; inset-inline-start: 5px; inset-inline-end: auto; border-top: 0; border-inline-start: var(--bw) solid var(--line-2);
+  }
+  .am-timeline--h li:last-child::before { display: none; }
+  .am-timeline--h .am-tl-dot { position: absolute; inset-inline-start: 0; top: 4px; margin: 0; }
+  .am-timeline--h .am-tl-when { display: inline; height: auto; font: 12px var(--font-mono); color: var(--ink-2); margin-inline-end: 8px; }
+  .am-timeline--h .am-tl-title { display: inline; font-size: 14px; }
+  .am-timeline--h .am-tl-text { margin-top: 2px; }
+}
+
+/* ── annot sentence notes ──────────────────────── */
+.am-annot + .am-annot { border-top: 1px solid var(--line-2); padding-top: 12px; }
+.am-annot-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.am-annot-meta { font: 11px var(--font-mono); font-weight: 400; color: var(--ink-2); }
+.am-annot-scroll { overflow-x: auto; }
+.am-annot-line {
+  position: relative; display: inline-block; white-space: pre; font: 14px/1.6 var(--font-mono);
+  padding-bottom: calc(var(--rows, 0) * 17px + 14px);
+}
+.am-annot-line--wrap { display: block; white-space: normal; padding-bottom: 10px; }
+.am-annot-line--wrap .am-seg { white-space: nowrap; }
+.am-seg { position: relative; }
+.am-seg::after {
+  content: ""; position: absolute; left: 1px; right: 1px; top: calc(100% + 1px); height: 5px;
+  border: 1px solid var(--accent); border-top: 0;
+}
+.am-seg-n {
+  position: absolute; inset-inline-start: 0; top: calc(100% + 8px + var(--row, 0) * 17px);
+  font: 11px/16px var(--font-sans); color: var(--accent); white-space: nowrap;
+}
+.am-seg--err { color: var(--err); }
+.am-seg--err::after { border-color: var(--err); }
+.am-seg--err .am-seg-n { color: var(--err); }
+.am-annot-caption { font-size: 12px; color: var(--ink-2); }
+
+/* ── limits bars ───────────────────────── */
+.am-lim + .am-lim { margin-top: 14px; }
+.am-lim-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 4px; }
+.am-lim-val { font: 12px var(--font-mono); color: var(--accent); white-space: nowrap; }
+.am-lim-track { position: relative; height: 12px; border: 1px solid var(--line-2); background: var(--fill); border-radius: calc(var(--radius) / 2); }
+.am-lim-fill { position: absolute; inset-inline-start: 0; top: 0; bottom: 0; background: var(--accent-bg); border-inline-end: 1px solid var(--accent); }
+.am-lim-mark { position: absolute; top: -4px; bottom: -4px; border-left: 2px solid var(--accent); }
+.am-lim.is-over .am-lim-fill { background: var(--err-bg); border-inline-end-color: var(--err); }
+.am-lim.is-over .am-lim-val { color: var(--err); }
+.am-lim-ticks { position: relative; height: 16px; font: 10px/16px var(--font-mono); color: var(--ink-3); }
+.am-lim-ticks span { position: absolute; transform: translateX(-50%); }
+.am-lim-ticks span:first-child { transform: none; }
+.am-lim-note { font-size: 11px; color: var(--ink-2); margin-inline-start: 6px; }
+
+/* ── tree ─────────────────────────── */
+.am-tree { font-size: 13px; }
+.am-tree-root { display: flex; justify-content: center; position: relative; padding-bottom: 18px; }
+.am-tree-root::after { content: ""; position: absolute; bottom: 0; left: 50%; height: 18px; border-left: var(--bw) solid var(--line); }
+.am-tree-root--solo { padding-bottom: 12px; }
+.am-tree-root--solo::after { display: none; }
+.am-tree-box {
+  border: var(--bw) solid var(--line); background: var(--paper); padding: 6px 14px; text-align: center;
+  border-radius: var(--radius); font-weight: 600;
+}
+.am-tree-box small { display: block; font-weight: 400; color: var(--ink-2); font-size: 12px; }
+.am-tree-box--root { background: var(--accent-bg); font-size: 15px; padding: 8px 28px; }
+.am-tree-cols { display: grid; grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr)); }
+.am-tree-col { position: relative; padding: 18px 8px 0; min-width: 0; }
+.am-tree-col::before { content: ""; position: absolute; top: 0; left: 0; right: 0; border-top: var(--bw) solid var(--line); }
+.am-tree-col:first-child::before { inset-inline-start: 50%; }
+.am-tree-col:last-child::before { inset-inline-end: 50%; }
+.am-tree-col::after { content: ""; position: absolute; top: 0; left: 50%; height: 18px; border-left: var(--bw) solid var(--line); }
+.am-tree-list, .am-tree-list ul { list-style: none; margin: 0; padding: 0; }
+.am-tree-col > .am-tree-list { margin: 8px 0 0; margin-inline-start: 14px; }
+.am-tree-list ul { margin-inline-start: 16px; }
+.am-tree-list li { position: relative; padding: 3px 0; padding-inline-start: 18px; }
+.am-tree-list li::before { content: ""; position: absolute; inset-inline-start: 0; top: 0.95em; width: 12px; border-top: 1px solid var(--ink-3); }
+.am-tree-list li::after { content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; border-inline-start: 1px solid var(--ink-3); }
+.am-tree-list li:last-child::after { bottom: auto; height: 0.95em; }
+.am-tree-tag { font: 11px var(--font-mono); color: var(--ink-3); margin-inline-end: 4px; }
+.am-tree code { font: 12px var(--font-mono); }
+.am-tree-sub { display: block; font-size: 11.5px; color: var(--ink-2); }
+.am-tree-hi > .am-tree-label { color: var(--accent); font-weight: 600; }
+
+/* ── Diagrams (flow / sequence) ───────────────── */
+.am-diagram { margin: 0; overflow-x: auto; text-align: center; }
+/* Embedded previews can lose html[data-theme]; the fallbacks keep diagrams readable, and defined theme variables still win. */
+.am-diagram svg { max-width: 100%; height: auto; font-family: var(--font-sans, sans-serif); }
+.am-diagram text { fill: var(--ink, #16181d); font-size: 13px; }
+.am-node-shape { fill: var(--paper, #ffffff); stroke: var(--line, #1d2026); stroke-width: var(--bw, 1.5px); }
+.am-node--hi .am-node-shape { fill: var(--accent-bg, #e4ecf8); stroke: var(--accent, #1d5fbf); }
+.am-node--hi text { fill: var(--accent, #1d5fbf); font-weight: 600; }
+.am-edge { fill: none; stroke: var(--ink-2, #4b5260); stroke-width: 1.3; }
+.am-edge--dashed { stroke-dasharray: 5 4; }
+.am-arrow { fill: var(--ink-2, #4b5260); }
+.am-edge-label rect { fill: var(--paper, #ffffff); }
+.am-diagram .am-edge-label text { fill: var(--accent, #1d5fbf); font-size: 11.5px; }
+.am-cluster { fill: var(--fill, #f3f5f8); stroke: var(--line-2, #d6dae1); stroke-width: 1; stroke-dasharray: 4 3; }
+.am-diagram .am-cluster-label { fill: var(--ink-2, #4b5260); font: 11px var(--font-mono, monospace); }
+.am-lifeline { stroke: var(--ink-3, #8b929e); stroke-width: 1; stroke-dasharray: 4 4; }
+.am-actor { fill: var(--paper, #ffffff); stroke: var(--line, #1d2026); stroke-width: var(--bw, 1.5px); }
+.am-note { fill: var(--warn-bg, #fdf3e2); stroke: var(--warn, #a8620a); stroke-width: 1; }
+.am-diagram .am-step { fill: var(--ink-3, #8b929e); font: 10px var(--font-mono, monospace); }
+
+.am-diagram-expand {
+  /* In flow and sticky: it sits at the end edge (right on a left-to-right page) and stays in view when the diagram scrolls sideways.
+     It takes its own row above the drawing, so it never covers a node at the top-right corner of the drawing. */
+  position: sticky; inset-inline-start: calc(100% - 36px); z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; margin: 0 0 4px; margin-inline: auto 8px;
+  color: var(--ink-2); background: var(--paper);
+  border: var(--bw, 1px) solid var(--line-2); border-radius: var(--radius);
+  cursor: pointer; opacity: 0.72;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
+}
+.am-diagram:hover .am-diagram-expand,
+.am-diagram-expand:focus-visible { opacity: 1; }
+.am-diagram-expand:hover {
+  opacity: 1; color: var(--ink); border-color: var(--accent); background: var(--fill);
+}
+.am-diagram-expand:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Diagram Lightbox and Pan-Zoom Viewer ─────────── */
+.am-lightbox {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column;
+  touch-action: none;
+}
+.am-lightbox[hidden] { display: none !important; }
+
+.am-lightbox-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.am-lightbox-header {
+  position: absolute; top: 12px; left: 24px; right: 24px; height: 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 10; pointer-events: none;
+}
+.am-lightbox-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font: 13px/1 var(--font-sans, sans-serif); font-weight: 500;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw;
+}
+.am-lightbox-title svg { stroke: rgba(255, 255, 255, 0.85); flex-shrink: 0; }
+.am-lightbox-actions {
+  display: flex; align-items: center; gap: 8px; pointer-events: auto;
+}
+.am-lightbox-close {
+  width: 32px; height: 32px;
+  background: var(--paper);
+  border: var(--bw, 1px) solid var(--line-2);
+  border-radius: 50%;
+  color: var(--ink);
+  font-size: 15px; line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: background 0.15s, color 0.15s, transform 0.15s, border-color 0.15s;
+}
+.am-lightbox-close:hover {
+  color: var(--accent); border-color: var(--accent); background: var(--fill); transform: scale(1.05);
+}
+.am-lightbox-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.am-lightbox-stage {
+  position: absolute;
+  top: 54px; bottom: 20px; left: 24px; right: 24px;
+  background: var(--paper);
+  border: var(--bw, 1px) solid var(--line-2);
+  border-radius: max(var(--radius), 14px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.am-lightbox-stage.am-panning { cursor: grabbing; }
+
+.am-lightbox-canvas {
+  position: absolute; left: 0; top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+.am-lightbox-canvas svg {
+  max-width: none !important;
+  max-height: none !important;
+  display: block;
+  font-family: var(--font-sans, sans-serif);
+}
+
+/* ── doc template ────────────────────────── */
+.am-doc { max-width: 1120px; margin: 0 auto; padding: 40px 28px 64px; }
+.am-doc-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
+.am-doc-layout--notoc { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
+.am-toc { position: sticky; top: 24px; font-size: 13px; }
+.am-toc a { display: block; color: var(--ink-2); text-decoration: none; padding: 4px 0; padding-inline-start: 10px; border-inline-start: 2px solid var(--line-2); }
+.am-toc a:hover { color: var(--ink); border-inline-start-color: var(--accent); }
+.am-doc-body > .am-panel + .am-panel { margin-top: 20px; }
+
+/* ── Responsive and print ─────────────────────────── */
+@media (max-width: 1100px) {
+  .am-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .am-grid > .am-panel { grid-column: auto !important; }
+  .am-grid > .am-panel.am-span-wide { grid-column: 1 / -1 !important; }
+}
+@media (max-width: 760px) {
+  .am-sheet, .am-doc { padding: 56px 12px 24px; }
+  .am-head { padding-inline-end: 0; }
+  .am-grid { grid-template-columns: minmax(0, 1fr); }
+  .am-grid > .am-panel.am-span-wide { grid-column: auto !important; }
+  .am-doc-layout { grid-template-columns: minmax(0, 1fr); }
+  .am-toc { position: static; }
+  .am-tree-cols { grid-template-columns: minmax(0, 1fr); }
+  /* Tables and diagrams keep their size: the wrapper scrolls horizontally when they overflow. A cell is never narrower than about
+     two short words, so a phone does not stack them one per line. On wider screens the sheet layout (src/runtime/layout-dom.js)
+     gives a table panel the width its columns read well at. */
+  .am-md th, .am-md td { min-width: 8em; }
+  .am-diagram svg { max-width: none; }
+  .am-lightbox-header { top: 8px; left: 12px; right: 12px; }
+  .am-lightbox-stage { top: 46px; bottom: 12px; left: 12px; right: 12px; border-radius: max(var(--radius), 10px); }
+}
+.am-colophon { text-align: center; padding: 0 0 28px; font: 11px var(--font-mono); color: var(--ink-3); }
+.am-colophon a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+@media print {
+  .am-toolbar, .am-diagram-expand, .am-lightbox, .am-code-copy, .am-comment-btn, .am-comment, .am-reply { display: none !important; }
+  body { background: var(--paper); }
+  .am-panel { break-inside: avoid; box-shadow: none; }
+}
+/* Printed on paper narrower than three columns, the two-column grid left a hole beside every panel next to a full-width one
+   (a wide table, a wide diagram): one panel per row instead. */
+@media print and (max-width: 1100px) {
+  .am-grid { grid-template-columns: minmax(0, 1fr); }
+  .am-grid > .am-panel { grid-column: auto !important; }
+}
+.am-panel--bare { border: 0; background: transparent; box-shadow: none; }
+.am-panel--bare > .am-panel-body { padding: 0; }
+.am-panel--bare .am-kv { background: var(--paper); }
+
+
+html[data-theme="blueprint"] .am-frame { border: 1px solid var(--line); padding: 30px; }
+html[data-theme="blueprint"] .am-frame::before {
+  content: ""; position: absolute; inset: 18px; border: 1px solid var(--line); pointer-events: none;
+}
+html[data-theme="blueprint"] .am-ruler {
+  display: flex; position: absolute; font: 10px/1 var(--font-mono); color: var(--ink-3);
+}
+@media (max-width: 760px) {
+  html[data-theme="blueprint"] .am-frame { padding: 0; border: 0; }
+  html[data-theme="blueprint"] .am-frame::before, html[data-theme="blueprint"] .am-ruler { display: none; }
+}
+
+html[data-theme="shadcn"] .am-panel-id { border-radius: 6px; min-width: 24px; height: 24px; margin: 9px 0 9px 14px; font-size: 12px; }
+html[data-theme="shadcn"] .am-panel-head { border-bottom-width: 1px; }
+html[data-theme="shadcn"] .am-kv { border-color: var(--line); border-radius: var(--radius); overflow: hidden; }
+
+/* Video player: the 1920×1080 stage scales to the window. All colors come from theme variables.
+   Theme-specific video tokens and decorations live in each theme's definition (themes/<name>.js). */
+html[data-video] {
+  /* Player controls stay out of the picture and ignore the theme: one fixed set of dark tokens */
+  --v-ctl-bg: #0b0d11; --v-ctl-line: #1d2330; --v-ctl-fg: #c9d1dc; --v-ctl-muted: #5b6576;
+  --v-ctl-btn: #141922; --v-ctl-btn-line: #2a3240; --v-ctl-accent: #58c4dd; --v-ctl-white: #fff;
+  --v-letterbox: #000;
+  --v-stage: var(--bg);
+  --v-cap-fg: var(--ink); --v-cap-bg: var(--paper); --v-cap-border: var(--line);
+  --v-title-font: var(--head-font);
+  --v-glow: none;
+}
+html[data-video], html[data-video] body { background: var(--v-letterbox); height: 100%; overflow: hidden; }
+html[data-video] body { font-size: 22px; }
+
+.amv-viewport { position: fixed; inset: 0 0 56px 0; overflow: hidden; }
+/* A video with more than one scene keeps a chapter strip above the controls (the player sets the attribute before anything measures). */
+html[data-chapters] .amv-viewport { bottom: 96px; }
+.amv-stage {
+  position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--v-stage); color: var(--ink); transform-origin: 50% 50%;
+}
+.amv-camera { position: absolute; inset: 0; transform-origin: 0 0; }
+.amv-overlay { position: absolute; inset: 0; pointer-events: none; }
+.amv-ghost { position: absolute; left: 0; top: 0; transform-origin: 0 0; margin: 0; }
+.amv-ghost svg { display: block; max-width: none; overflow: visible; }
+
+/* ── Sheet frame (hidden unless a theme shows it) ── */
+.amv-sheet { display: none; }
+.amv-ruler { position: absolute; display: flex; font: 13px/1 var(--font-mono); color: var(--ink-3); }
+.amv-ruler span { flex: 1; display: flex; align-items: center; justify-content: center; }
+.amv-ruler--top, .amv-ruler--bottom { left: 24px; right: 24px; height: 24px; }
+.amv-ruler--top { top: 0; }
+.amv-ruler--bottom { bottom: 0; }
+.amv-ruler--left, .amv-ruler--right { top: 24px; bottom: 24px; width: 24px; flex-direction: column; }
+.amv-ruler--left { left: 0; }
+.amv-ruler--right { right: 0; }
+.amv-ruler--top span + span, .amv-ruler--bottom span + span { border-left: 1px solid var(--line); }
+.amv-ruler--left span + span, .amv-ruler--right span + span { border-top: 1px solid var(--line); }
+
+/* ── Scenes ── */
+.amv-scene { position: absolute; inset: 0; visibility: hidden; }
+.amv-scene-head {
+  position: absolute; left: 72px; right: 72px; top: 72px; height: 64px; visibility: hidden;
+  display: flex; align-items: stretch; border: var(--bw) solid var(--line); background: var(--paper);
+  border-radius: var(--radius); overflow: hidden; color: var(--ink);
+}
+.amv-scene-n {
+  display: flex; align-items: center; justify-content: center; min-width: 64px; padding: 0 14px;
+  background: var(--head-bg); color: var(--head-fg); font: 700 30px var(--font-sans);
+}
+.amv-scene-title { flex: 1; display: flex; align-items: center; padding: 0 22px; font: 600 32px var(--v-title-font); }
+.amv-scene-meta { display: flex; align-items: center; padding: 0 22px; font: 16px var(--font-mono); color: var(--ink-2); letter-spacing: 0.06em; }
+
+.amv-body { position: absolute; left: 96px; right: 96px; top: 160px; height: 760px; display: grid; place-items: center; }
+.amv-fit { width: max-content; max-width: 1100px; transform-origin: 50% 50%; display: flex; flex-direction: column; gap: 28px; }
+.amv-fit .am-diagram { overflow: visible; }
+.amv-fit .am-diagram svg { max-width: none; overflow: visible; }
+/* The stage sizes .amv-fit to its content, which a size container would collapse to nothing; the stage is 1920 px wide, so a timeline stays horizontal. */
+.amv-fit .am-tl-wrap { container-type: normal; }
+.amv-fit .am-md { font-size: 26px; line-height: 1.6; }
+.amv-fit table { font-size: 24px; }
+.amv-fit th { font-size: 17px; }
+
+/* ── Title card ── */
+.amv-scene--title { display: grid; place-items: center; text-align: center; }
+.amv-title-wrap { max-width: 1500px; display: flex; flex-direction: column; align-items: center; }
+.amv-title { margin: 0; font: 700 96px/1.15 var(--v-title-font); color: var(--ink); letter-spacing: -0.01em; text-wrap: balance; }
+.amv-subtitle { margin: 26px 0 0; font: 36px var(--v-title-font); color: var(--accent); }
+.amv-intro { margin-top: 36px; font-size: 28px; color: var(--ink-2); }
+.amv-titleblock {
+  display: flex; margin-top: 56px; border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: var(--paper); text-align: left; overflow: hidden;
+}
+.amv-titleblock div { padding: 16px 30px; display: flex; flex-direction: column; gap: 6px; }
+.amv-titleblock div + div { border-left: 1px solid var(--line); }
+.amv-titleblock b { font: 600 16px var(--font-mono); color: var(--ink-3); letter-spacing: 0.08em; }
+.amv-titleblock span { font: 28px var(--font-sans); color: var(--ink); }
+
+/* ── Captions ── */
+.amv-caption {
+  position: absolute; left: 0; right: 0; bottom: 76px; display: flex; justify-content: center; pointer-events: none;
+}
+.amv-caption span {
+  max-width: 1500px; padding: 12px 28px; border-radius: var(--radius); text-align: center;
+  font: 500 38px/1.45 var(--font-sans); color: var(--v-cap-fg); background: var(--v-cap-bg);
+  border: var(--bw) solid var(--v-cap-border);
+}
+.amv-caption span:empty { display: none; }
+.amv-caption b { color: var(--accent); font-weight: 700; }
+
+/* ── Highlight when narration names an element; edge labels stay grey until named ── */
+html[data-video] .am-diagram .am-edge-label text { fill: var(--ink-2); }
+.amv-hl .am-node-shape, .amv-hl .am-actor {
+  stroke: var(--accent); stroke-width: 3; fill: var(--accent-bg); filter: var(--v-glow);
+}
+html[data-video] .am-diagram .amv-hl text, html[data-video] .am-diagram text.amv-hl { fill: var(--accent); font-weight: 600; }
+.amv-hl .am-edge { stroke: var(--accent); stroke-width: 2.4; }
+.amv-hl.am-tree-box, .amv-hl.am-tl-item, .amv-hl.am-lim, .amv-hl.am-kv-cell, li.amv-hl > .am-tree-label, tr.amv-hl td, .amv-hl.am-seg {
+  color: var(--accent); outline: 2.5px solid var(--accent); outline-offset: 4px; border-radius: 4px;
+}
+
+/* ── Player controls (outside the picture) ── */
+.amv-bigplay {
+  position: absolute; left: 50%; top: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%;
+  border: 2px solid var(--v-ctl-white); background: rgba(0, 0, 0, 0.55); color: var(--v-ctl-white); font-size: 54px; cursor: pointer;
+  padding-left: 10px;
+}
+.amv-bigplay[hidden] { display: none; }
+.amv-controls {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 56px; display: flex; align-items: center; gap: 14px;
+  padding: 0 18px; background: var(--v-ctl-bg); border-top: 1px solid var(--v-ctl-line); color: var(--v-ctl-fg); font: 13px -apple-system, "Segoe UI", sans-serif;
+}
+.amv-btn { width: 36px; height: 32px; border: 1px solid var(--v-ctl-btn-line); border-radius: 6px; background: var(--v-ctl-btn); color: var(--v-ctl-white); cursor: pointer; }
+.amv-time { font-family: ui-monospace, Menlo, monospace; min-width: 96px; }
+.amv-track { position: relative; flex: 1; }
+.amv-seek { width: 100%; accent-color: var(--v-ctl-accent); }
+.amv-marks { position: absolute; left: 0; right: 0; top: -6px; height: 6px; pointer-events: none; }
+.amv-marks i { position: absolute; top: 0; width: 2px; height: 6px; background: var(--v-ctl-accent); pointer-events: auto; cursor: pointer; }
+/* The mark stays 2 px wide; the pseudo element widens what can be clicked. */
+.amv-marks i::before { content: ''; position: absolute; left: -5px; right: -5px; top: -6px; bottom: -4px; }
+.amv-rate { width: auto; min-width: 46px; padding: 0 8px; font: inherit; font-variant-numeric: tabular-nums; }
+.amv-export { width: auto; min-width: 46px; padding: 0 8px; font: inherit; font-variant-numeric: tabular-nums; }
+.amv-export:hover, .amv-export[aria-busy="true"] { border-color: var(--v-ctl-accent); color: var(--v-ctl-accent); }
+.amv-brand { color: var(--v-ctl-muted); font-size: 12px; white-space: nowrap; }
+
+/* ── Export cover: the engine poses every frame behind it, so the picture is out of the way but the controls stay usable ── */
+.amv-exporting {
+  position: fixed; inset: 0; display: grid; place-content: center; gap: 16px; text-align: center; cursor: pointer;
+  background: color-mix(in srgb, var(--v-ctl-bg) 92%, transparent); color: var(--v-ctl-fg);
+  font: 14px -apple-system, "Segoe UI", sans-serif;
+}
+.amv-exporting > span { width: 320px; height: 4px; border-radius: 2px; background: var(--v-ctl-btn); overflow: hidden; }
+.amv-exporting > span > i { display: block; width: 0; height: 100%; background: var(--v-ctl-accent); }
+.amv-exporting > b { font-weight: 600; font-variant-numeric: tabular-nums; }
+html[data-export] .amv-exporting { display: none; }
+
+/* ── Chapter strip (one chip per scene; scrolls when the titles are long) ── */
+.amv-chapters {
+  position: fixed; left: 0; right: 0; bottom: 56px; height: 40px; display: flex; align-items: center; gap: 8px;
+  padding: 0 18px; overflow-x: auto; overscroll-behavior-x: contain; background: var(--v-ctl-bg); border-top: 1px solid var(--v-ctl-line);
+  color: var(--v-ctl-fg); font: 13px -apple-system, "Segoe UI", sans-serif; scrollbar-width: thin;
+}
+.amv-chapters:empty { display: none; }
+.amv-chap {
+  display: flex; align-items: center; gap: 7px; flex: 0 0 auto; max-width: 320px; padding: 5px 12px; cursor: pointer;
+  border: 1px solid var(--v-ctl-btn-line); border-radius: 999px; background: var(--v-ctl-btn); color: var(--v-ctl-white);
+  font: inherit; text-align: left;
+}
+.amv-chap b { font-weight: 700; color: var(--v-ctl-accent); }
+.amv-chap span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amv-chap:hover { border-color: var(--v-ctl-accent); }
+.amv-chap[aria-current="true"] {
+  border-color: var(--v-ctl-accent); color: var(--v-ctl-accent);
+  background: color-mix(in srgb, var(--v-ctl-accent) 18%, var(--v-ctl-btn));
+}
+
+/* Export mode: stage only, 1:1, no scaling */
+html[data-export] .amv-controls, html[data-export] .amv-bigplay, html[data-export] .amv-chapters { display: none; }
+html[data-export] .amv-viewport { inset: 0; }
+html[data-export] .amv-stage { left: 0; top: 0; transform: none !important; }
+
+
+html[data-video][data-theme="blueprint"], html[data-video][data-theme="blueprint"][data-mode="light"] {
+  --v-stage: linear-gradient(var(--line-2) 1px, transparent 1px) 0 0 / 40px 40px,
+             linear-gradient(90deg, var(--line-2) 1px, transparent 1px) 0 0 / 40px 40px, var(--paper);
+}
+html[data-video][data-theme="blueprint"][data-mode="dark"] {
+  --v-stage: linear-gradient(rgba(201, 214, 232, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
+             linear-gradient(90deg, rgba(201, 214, 232, 0.07) 1px, transparent 1px) 0 0 / 40px 40px, var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+html[data-video][data-theme="blueprint"][data-mode="auto"] {
+  --v-stage: linear-gradient(rgba(201, 214, 232, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
+             linear-gradient(90deg, rgba(201, 214, 232, 0.07) 1px, transparent 1px) 0 0 / 40px 40px, var(--bg);
+}
+}
+
+html[data-video][data-theme="blueprint"] .amv-sheet {
+  display: block; position: absolute; inset: 24px; border: 1.5px solid var(--line); pointer-events: none;
+}
+html[data-video][data-theme="blueprint"] .amv-sheet::before {
+  content: ""; position: absolute; inset: 24px; border: 1.5px solid var(--line);
+}
+
+html[data-video][data-theme="shadcn"] .amv-scene-n { margin: 12px 0 12px 14px; min-width: 40px; border-radius: 8px; font-size: 22px; }
+html[data-video][data-theme="shadcn"] .amv-scene-head { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+
+html[data-video][data-theme="3b1b"], html[data-video][data-theme="3b1b"][data-mode="light"] {
+  --bg: #0e1015;
+  --paper: #141922;
+  --ink: #eceff4;
+  --ink-2: #a9b4c4;
+  --ink-3: #6c7789;
+  --line: #58c4dd;
+  --line-2: #2a3444;
+  --fill: #171d27;
+  --accent: #f7d96f;
+  --accent-bg: rgba(247, 217, 111, 0.12);
+  --ok: #83c167;
+  --ok-bg: rgba(131, 193, 103, 0.14);
+  --err: #fc6255;
+  --err-bg: rgba(252, 98, 85, 0.14);
+  --warn: #f7d96f;
+  --warn-bg: rgba(247, 217, 111, 0.12);
+  --head-bg: #eceff4;
+  --head-fg: #0e1015;
+  --radius: 6px;
+  --bw: 1.6px;
+  --shadow: none;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --head-font: var(--font-sans);
+  --v-stage: radial-gradient(ellipse at 50% 40%, #151a23 0%, #0e1015 70%);
+  --v-cap-fg: #fff;
+  --v-cap-bg: rgba(8, 10, 14, 0.55);
+  --v-cap-border: transparent;
+  --v-title-font: "CMU Serif", "Latin Modern Roman", "Iowan Old Style", "Palatino", "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  --v-glow: drop-shadow(0 0 6px rgba(247, 217, 111, 0.55));
+}
+
+html[data-video][data-theme="3b1b"]:lang(zh-Hant)[data-mode], html[data-video][data-theme="3b1b"]:lang(zh-TW)[data-mode], html[data-video][data-theme="3b1b"]:lang(zh-HK)[data-mode], html[data-video][data-theme="3b1b"]:lang(zh-MO)[data-mode] { --v-title-font: "CMU Serif", "Latin Modern Roman", "Iowan Old Style", "Palatino", "Songti TC", "PMingLiU", "MingLiU", "Noto Serif CJK TC", "Noto Serif TC", "Source Han Serif TC", "Songti SC", serif; }
+html[data-video][data-theme="3b1b"]:lang(ja)[data-mode] { --v-title-font: "CMU Serif", "Latin Modern Roman", "Iowan Old Style", "Palatino", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", "Noto Serif JP", "Songti SC", serif; }
+html[data-video][data-theme="3b1b"]:lang(he)[data-mode] { --v-title-font: "CMU Serif", "Latin Modern Roman", "Iowan Old Style", "Palatino", "Noto Serif Hebrew", "Frank Ruehl CLM", David, "Times New Roman", serif; }
+html[data-video][data-theme="3b1b"] .amv-scene-head { left: 96px; top: 56px; border: 0; background: none; align-items: baseline; gap: 22px; }
+html[data-video][data-theme="3b1b"] .amv-scene-n { background: none; color: var(--line); padding: 0; min-width: 0; font: 500 30px var(--font-mono); }
+html[data-video][data-theme="3b1b"] .amv-scene-title { padding: 0; font-weight: 400; font-size: 46px; }
+html[data-video][data-theme="3b1b"] .amv-scene-meta { display: none; }
+html[data-video][data-theme="3b1b"] .amv-title { font-weight: 400; font-size: 104px; letter-spacing: 0.005em; }
+html[data-video][data-theme="3b1b"] .amv-subtitle { color: var(--line); }
+html[data-video][data-theme="3b1b"] .amv-titleblock { display: none; }
+html[data-video][data-theme="3b1b"] .amv-caption { bottom: 56px; }
+html[data-video][data-theme="3b1b"] .amv-caption span { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); font-size: 40px; }
+</style>
+</head>
+<body>
+<div class="amv-viewport">
+<div class="amv-stage">
+<div class="amv-sheet" aria-hidden="true"><div class="amv-ruler amv-ruler--top"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div><div class="amv-ruler amv-ruler--bottom"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div><div class="amv-ruler amv-ruler--left"><span>A</span><span>B</span><span>C</span><span>D</span></div><div class="amv-ruler amv-ruler--right"><span>A</span><span>B</span><span>C</span><span>D</span></div></div>
+<div class="amv-camera">
+<section class="amv-scene amv-scene--title" data-i="0">
+<div class="amv-title-wrap"><h1 class="amv-title">dsh-claude-compat</h1><p class="amv-subtitle">在 DSH 中复用 Claude Code 配置 · v1.2.1 · 功能示意</p><div class="amv-titleblock"><div><b>制图</b><span>Answer me with HTML</span></div><div><b>日期</b><span>2026-11-10</span></div><div><b>场景</b><span>4</span></div><div><b>时长</b><span>0:41</span></div></div></div>
+</section>
+<section class="amv-scene" data-i="1">
+<header class="amv-scene-head"><span class="amv-scene-n">A</span><span class="amv-scene-title">一套配置，继续使用</span><span class="amv-scene-meta">图 01 / 04</span></header>
+<div class="amv-body"><div class="amv-fit"><figure class="am-diagram am-flow"><svg viewBox="0 0 475 63" width="475" height="63" role="img" aria-label="流程图：Claude配置、兼容桥、DSH" xmlns="http://www.w3.org/2000/svg"><defs><marker id="am1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="am-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><g></g><g><g data-step="0"><path class="am-edge" d="M110.1,31.5 L130.4,31.5 Q150.6,31.5 170.9,31.5 L191.1,31.5" marker-end="url(#am1-arrow)"/><g class="am-edge-label"><rect x="134.1" y="22.5" width="33" height="18" rx="3"/><text x="150.6" y="31.5" text-anchor="middle" dominant-baseline="central">读取</text></g></g><g data-step="1"><path class="am-edge" d="M258.1,31.5 L292.7,31.5 Q327.4,31.5 362,31.5 L396.6,31.5" marker-end="url(#am1-arrow)"/><g class="am-edge-label"><rect x="282.1" y="22.5" width="90.5" height="18" rx="3"/><text x="327.4" y="31.5" text-anchor="middle" dominant-baseline="central">暴露支持的内容</text></g></g></g><g><g class="am-node am-node--rect" data-key="Claude配置" data-step="0"><rect class="am-node-shape" x="14" y="14" width="96.1" height="35" rx="3"/><text x="62.1" y="31.5" text-anchor="middle" dominant-baseline="central">Claude配置</text></g><g class="am-node am-node--rect" data-key="兼容桥" data-step="0"><rect class="am-node-shape" x="191.1" y="14" width="67" height="35" rx="3"/><text x="224.6" y="31.5" text-anchor="middle" dominant-baseline="central">兼容桥</text></g><g class="am-node am-node--rect" data-key="DSH" data-step="1"><rect class="am-node-shape" x="396.6" y="14" width="64" height="35" rx="3"/><text x="428.6" y="31.5" text-anchor="middle" dominant-baseline="central">DSH</text></g></g></svg></figure></div></div>
+</section>
+<section class="amv-scene" data-i="2">
+<header class="amv-scene-head"><span class="amv-scene-n">B</span><span class="amv-scene-title">从命令开始</span><span class="amv-scene-meta">图 02 / 04</span></header>
+<div class="amv-body"><div class="amv-fit"><div class="am-md"><ul>
+<li>/cc-plugin：管理插件与市场</li>
+<li>/reload-skills：刷新当前会话技能</li>
+</ul>
+</div></div></div>
+</section>
+<section class="amv-scene" data-i="3">
+<header class="amv-scene-head"><span class="amv-scene-n">C</span><span class="amv-scene-title">让历史成为下一步的背景</span><span class="amv-scene-meta">图 03 / 04</span></header>
+<div class="amv-body"><div class="amv-fit"><figure class="am-diagram am-flow"><svg viewBox="0 0 590 63" width="590" height="63" role="img" aria-label="流程图：选择历史、发送文件引用、DSH按需阅读" xmlns="http://www.w3.org/2000/svg"><defs><marker id="am2-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="am-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><g></g><g><g data-step="0"><path class="am-edge" d="M94,31.5 L123.2,31.5 Q152.3,31.5 181.5,31.5 L210.7,31.5" marker-end="url(#am2-arrow)"/><g class="am-edge-label"><rect x="118" y="22.5" width="68.7" height="18" rx="3"/><text x="152.3" y="31.5" text-anchor="middle" dominant-baseline="central">cc-resume</text></g></g><g data-step="1"><path class="am-edge" d="M316.7,31.5 L354.2,31.5 Q391.7,31.5 429.2,31.5 L466.6,31.5" marker-end="url(#am2-arrow)"/><g class="am-edge-label"><rect x="340.7" y="22.5" width="102" height="18" rx="3"/><text x="391.7" y="31.5" text-anchor="middle" dominant-baseline="central">总结背景与下一步</text></g></g></g><g><g class="am-node am-node--rect" data-key="选择历史" data-step="0"><rect class="am-node-shape" x="14" y="14" width="80" height="35" rx="3"/><text x="54" y="31.5" text-anchor="middle" dominant-baseline="central">选择历史</text></g><g class="am-node am-node--rect" data-key="发送文件引用" data-step="0"><rect class="am-node-shape" x="210.7" y="14" width="106" height="35" rx="3"/><text x="263.7" y="31.5" text-anchor="middle" dominant-baseline="central">发送文件引用</text></g><g class="am-node am-node--rect" data-key="DSH按需阅读" data-step="1"><rect class="am-node-shape" x="466.6" y="14" width="108.9" height="35" rx="3"/><text x="521.1" y="31.5" text-anchor="middle" dominant-baseline="central">DSH按需阅读</text></g></g></svg></figure></div></div>
+</section>
+<section class="amv-scene" data-i="4">
+<header class="amv-scene-head"><span class="amv-scene-n">D</span><span class="amv-scene-title">带着明确的边界迁移</span><span class="amv-scene-meta">图 04 / 04</span></header>
+<div class="amv-body"><div class="amv-fit"><div class="am-md"><ul>
+<li>技能目录支持当前会话刷新</li>
+<li>MCP 与 hooks 配置变化需要重启 DSH</li>
+<li>agents 通过委派 shim skill 暴露</li>
+</ul>
+</div></div></div>
+</section>
+<div class="amv-overlay"></div>
+</div>
+<div class="amv-caption"><span></span></div>
+<button class="amv-bigplay" type="button" aria-label="播放">▶</button>
+</div>
+</div>
+<div class="amv-controls">
+<button class="amv-btn" type="button" data-amv="toggle" data-play="播放" data-pause="暂停" aria-label="播放">▶</button>
+<span class="amv-time">0:00 / 0:00</span>
+<div class="amv-track"><input class="amv-seek" type="range" min="0" step="0.01" value="0" aria-label="seek"><div class="amv-marks"></div></div>
+<button class="amv-btn amv-rate" type="button" data-amv="rate" data-speed="速度" aria-label="速度">1×</button>
+<button class="amv-btn amv-export" type="button" data-amv="export" data-label="导出" data-icon="&#8681;" aria-label="导出">&#8681;</button>
+<span class="amv-brand">Answer me with HTML 0.5.0 · 2026-11-10 14:57</span>
+</div>
+<nav class="amv-chapters" aria-label="章节"></nav>
+<script type="application/json" id="amv-data">{"duration":41.295,"fps":30,"segments":[{"start":0,"end":2.4,"id":"","title":"dsh-claude-compat","beats":[]},{"start":2.4,"end":12.156,"id":"A","title":"一套配置，继续使用","beats":[{"text":"把已有的 Claude Code 配置带到 DSH。","focus":null,"start":3.3,"end":6.897,"html":"把已有的 Claude Code 配置带到 DSH。"},{"text":"复用技能、命令、规则与代理定义。","focus":null,"start":7.247,"end":11.356,"html":"复用技能、命令、规则与代理定义。"}]},{"start":12.156,"end":20.905,"id":"B","title":"从命令开始","beats":[{"text":"用 cc-plugin 管理插件与市场。","focus":null,"start":13.056,"end":15.884,"html":"用 cc-plugin 管理插件与市场。"},{"text":"新增技能后，刷新当前会话目录。","focus":null,"start":16.234,"end":20.105,"html":"新增技能后，刷新当前会话目录。"}]},{"start":20.905,"end":30.185,"id":"C","title":"让历史成为下一步的背景","beats":[{"text":"用 cc-resume 选择 Claude 历史会话。","focus":null,"start":21.805,"end":24.779,"html":"用 cc-resume 选择 Claude 历史会话。"},{"text":"交给 DSH 按需阅读，再总结任务状态。","focus":null,"start":25.129,"end":29.385,"html":"交给 DSH 按需阅读，再总结任务状态。"}]},{"start":30.185,"end":39.795,"id":"D","title":"带着明确的边界迁移","beats":[{"text":"技能可刷新，MCP 与 hooks 变化需重启。","focus":null,"start":31.085,"end":35.25,"html":"技能可刷新，MCP 与 hooks 变化需重启。"},{"text":"代理定义通过委派技能接入。","focus":null,"start":35.6,"end":38.995,"html":"代理定义通过委派技能接入。"}]}]}</script>
+
+<textarea id="am-source" hidden readonly aria-hidden="true">---
+title: dsh-claude-compat
+subtitle: 在 DSH 中复用 Claude Code 配置 · v1.2.1 · 功能示意
+lang: zh
+theme: 3b1b
+mode: dark
+---
+
+## 一套配置，继续使用
+```flow LR
+Claude配置 -&gt; 兼容桥: 读取
+兼容桥 -&gt; DSH: 暴露支持的内容
+```
+&gt; 把已有的 Claude Code 配置带到 DSH。
+&gt; 复用技能、命令、规则与代理定义。
+
+## 从命令开始
+- /cc-plugin：管理插件与市场
+- /reload-skills：刷新当前会话技能
+&gt; 用 cc-plugin 管理插件与市场。
+&gt; 新增技能后，刷新当前会话目录。
+
+## 让历史成为下一步的背景
+```flow LR
+选择历史 -&gt; 发送文件引用: cc-resume
+发送文件引用 -&gt; DSH按需阅读: 总结背景与下一步
+```
+&gt; 用 cc-resume 选择 Claude 历史会话。
+&gt; 交给 DSH 按需阅读，再总结任务状态。
+
+## 带着明确的边界迁移
+- 技能目录支持当前会话刷新
+- MCP 与 hooks 配置变化需要重启 DSH
+- agents 通过委派 shim skill 暴露
+&gt; 技能可刷新，MCP 与 hooks 变化需重启。
+&gt; 代理定义通过委派技能接入。
+</textarea>
+<script>
+// Minimal WebM (Matroska) writer for the export path that has no ffmpeg: the browser encodes the frames (WebCodecs,
+// see src/runtime/video.js) and this module writes the container. One VP8/VP9 video track and an optional Opus audio
+// track. The blocks are buffered, sorted by time and cut into clusters of about a second, so the sound and the
+// picture of a moment sit next to each other in the file. The Segment and the Clusters carry the unknown size, which
+// is how a stream is written: nothing needs to be measured first and nothing is patched afterwards.
+// Plain bytes only (no Buffer, no imports), so the same source runs in Node and inside a page (scripts/inline-assets.mjs
+// turns it into a script for the player page).
+const APP = 'answer-me-with-html';   // MuxingApp / WritingApp
+const CLUSTER_MS = 1000;              // how much time one cluster holds
+const SEEK_PRE_ROLL_NS = 80_000_000;  // what the Opus specification asks for
+
+const ID = {
+  EBML: [0x1a, 0x45, 0xdf, 0xa3],
+  EBMLVersion: [0x42, 0x86], EBMLReadVersion: [0x42, 0xf7], EBMLMaxIDLength: [0x42, 0xf2], EBMLMaxSizeLength: [0x42, 0xf3],
+  DocType: [0x42, 0x82], DocTypeVersion: [0x42, 0x87], DocTypeReadVersion: [0x42, 0x85],
+  Segment: [0x18, 0x53, 0x80, 0x67], Info: [0x15, 0x49, 0xa9, 0x66], TimecodeScale: [0x2a, 0xd7, 0xb1],
+  MuxingApp: [0x4d, 0x80], WritingApp: [0x57, 0x41], Duration: [0x44, 0x89],
+  Tracks: [0x16, 0x54, 0xae, 0x6b], TrackEntry: [0xae], TrackNumber: [0xd7], TrackUID: [0x73, 0xc5], FlagLacing: [0x9c],
+  CodecID: [0x86], TrackType: [0x83], Video: [0xe0], PixelWidth: [0xb0], PixelHeight: [0xba],
+  Audio: [0xe1], SamplingFrequency: [0xb5], Channels: [0x9f], CodecPrivate: [0x63, 0xa2],
+  CodecDelay: [0x56, 0xaa], SeekPreRoll: [0x56, 0xbb],
+  Cluster: [0x1f, 0x43, 0xb6, 0x75], Timecode: [0xe7], SimpleBlock: [0xa3],
+};
+const UNKNOWN_SIZE = new Uint8Array([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+
+const concat = (parts) => {
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+};
+const bytes = (id) => new Uint8Array(id);
+const text = (s) => new TextEncoder().encode(s);
+
+// Element size as a variable-size integer, in the shortest length that fits; the all-ones value is reserved.
+function size(n) {
+  for (let len = 1; len <= 8; len++) {
+    if (len === 8 || n < 2 ** (7 * len) - 1) {
+      const out = new Uint8Array(len);
+      let v = n;
+      for (let i = len - 1; i >= 0; i--) {
+        out[i] = v & 0xff;
+        v = Math.floor(v / 256);
+      }
+      out[0] |= 0x80 >> (len - 1);
+      return out;
+    }
+  }
+}
+
+// Unsigned integer, big endian, as short as it can be (a Matroska integer drops leading zero bytes).
+function uint(n) {
+  const out = [];
+  let v = Math.round(n);
+  do {
+    out.unshift(v & 0xff);
+    v = Math.floor(v / 256);
+  } while (v > 0);
+  return new Uint8Array(out);
+}
+
+function f64(x) {
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setFloat64(0, x);
+  return out;
+}
+
+const elem = (id, payload) => concat([bytes(id), size(payload.length), payload]);
+
+// WebM writer. video: { width, height, codec } with codec 'V_VP9' or 'V_VP8'; audio: null or
+// { channels, codecPrivate, preSkipSamples }. Duration is written up front, so a player knows the length at once.
+class WebmWriter {
+  constructor({ width, height, durationMs, videoCodec = 'V_VP9', audio = null }) {
+    this.width = width;
+    this.height = height;
+    this.durationMs = durationMs;
+    this.videoCodec = videoCodec;
+    this.audio = audio;
+    this.blocks = [];
+  }
+
+  // track 1 is the picture, track 2 the sound. key marks a key frame; tsUs is the time in microseconds.
+  block({ track, key, tsUs, data }) {
+    this.blocks.push({ track, key: Boolean(key), ms: Math.round(tsUs / 1000), data });
+  }
+
+  count(track) {
+    return this.blocks.reduce((n, b) => n + (b.track === track ? 1 : 0), 0);
+  }
+
+  build() {
+    const parts = [
+      elem(ID.EBML, concat([
+        elem(ID.EBMLVersion, uint(1)),
+        elem(ID.EBMLReadVersion, uint(1)),
+        elem(ID.EBMLMaxIDLength, uint(4)),
+        elem(ID.EBMLMaxSizeLength, uint(8)),
+        elem(ID.DocType, text('webm')),
+        elem(ID.DocTypeVersion, uint(4)),
+        elem(ID.DocTypeReadVersion, uint(2)),
+      ])),
+      concat([bytes(ID.Segment), UNKNOWN_SIZE]),
+      elem(ID.Info, concat([
+        elem(ID.TimecodeScale, uint(1_000_000)),
+        elem(ID.MuxingApp, text(APP)),
+        elem(ID.WritingApp, text(APP)),
+        elem(ID.Duration, f64(this.durationMs)),
+      ])),
+      elem(ID.Tracks, concat([this.#videoTrack(), ...(this.audio ? [this.#audioTrack()] : [])])),
+    ];
+    for (const cluster of this.#clusters()) parts.push(cluster);
+    return concat(parts);
+  }
+
+  #track(num, type, codecId, extra) {
+    return elem(ID.TrackEntry, concat([
+      elem(ID.TrackNumber, uint(num)),
+      elem(ID.TrackUID, uint(num)),
+      elem(ID.FlagLacing, uint(0)),
+      elem(ID.CodecID, text(codecId)),
+      elem(ID.TrackType, uint(type)),
+      ...extra,
+    ]));
+  }
+
+  #videoTrack() {
+    return this.#track(1, 1, this.videoCodec, [
+      elem(ID.Video, concat([elem(ID.PixelWidth, uint(this.width)), elem(ID.PixelHeight, uint(this.height))])),
+    ]);
+  }
+
+  #audioTrack() {
+    const { channels, codecPrivate, preSkipSamples } = this.audio;
+    const extra = [elem(ID.Audio, concat([elem(ID.SamplingFrequency, f64(48000)), elem(ID.Channels, uint(channels))]))];
+    if (codecPrivate) extra.unshift(elem(ID.CodecPrivate, codecPrivate));
+    // The encoder adds pre-skip samples of silence; CodecDelay tells the player to drop them again.
+    extra.push(elem(ID.CodecDelay, uint((preSkipSamples / 48000) * 1e9)), elem(ID.SeekPreRoll, uint(SEEK_PRE_ROLL_NS)));
+    return this.#track(2, 2, 'A_OPUS', extra);
+  }
+
+  #clusters() {
+    const blocks = [...this.blocks].sort((a, b) => a.ms - b.ms || a.track - b.track);
+    const out = [];
+    for (let i = 0; i < blocks.length; ) {
+      const start = blocks[i].ms;
+      const body = [elem(ID.Timecode, uint(start))];
+      while (i < blocks.length && blocks[i].ms - start <= CLUSTER_MS) {
+        body.push(this.#block(blocks[i], start));
+        i++;
+      }
+      out.push(concat([bytes(ID.Cluster), UNKNOWN_SIZE, ...body]));
+    }
+    return out;
+  }
+
+  #block(b, clusterStart) {
+    const head = new Uint8Array(4);
+    head[0] = 0x80 | b.track;                 // the track number as a variable-size integer
+    new DataView(head.buffer).setInt16(1, b.ms - clusterStart);
+    head[3] = b.key ? 0x80 : 0x00;
+    return elem(ID.SimpleBlock, concat([head, b.data]));
+  }
+}
+
+window.__amvWebm = { WebmWriter };
+</script>
+<script>
+// The export engine for the path that has no ffmpeg: the player page drives its own render(t), rasterizes the stage
+// into a canvas, encodes the picture and the narration with WebCodecs and muxes the WebM container with the writer
+// from src/video/webm.js (injected ahead of this script as window.__amvWebm). Every video page carries it: the export
+// button in the controls drives it, and `am video --mp4` drives the same code through the DevTools protocol.
+//
+// The page hands out the finished file in slices (window.__amvEnc.bytes(at, len), base64) so no bytes travel twice.
+(() => {
+  const W = 1920;
+  const H = 1080;
+  const CODECS = ['vp09.00.31.08', 'vp09.00.10.08', 'vp8'];   // the first one the browser really encodes
+  const AUDIO_FRAME_SECONDS = 0.02;    // Opus encodes 20 ms frames
+  const KEY_SECONDS = 5;               // a key frame every 5 s, so seeking stays cheap
+  const BITRATE = 3_500_000;           // VP9 at 1080p30: flat slides stay clean at this rate
+  const QUEUE_LIMIT = 8;               // frames in flight; a software encoder runs slower than the page renders
+
+  const state = { running: false, done: 0, total: 0, error: null, bytes: null, codec: '', audio: false, cancel: false };
+
+  const yieldToPage = () => new Promise((r) => {
+    // A timer is clamped in a hidden tab; a message port keeps the export running at full speed in the background.
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => r();
+    ch.port2.postMessage(0);
+  });
+
+  const asBytes = (x) => (x instanceof ArrayBuffer ? new Uint8Array(x) : new Uint8Array(x.buffer, x.byteOffset, x.byteLength));
+
+  // ── Rasterizing: the stage, with every node's computed style copied into the SVG ──
+  // The clone needs the styles inline: an <img> of an SVG that embeds the page's own stylesheets does not lay out the
+  // page the same way (the fixed-position chain and the html/body height rules break). Computed styles are exact and
+  // cost about 300 ms for the whole stage, so unchanged nodes keep their string from the previous frame: the player
+  // changes only a handful of nodes per frame (14 of 261 measured on a five-scene video).
+  const styles = new Map();
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const image = new Image();
+  let stageEl = null;
+
+  // The picture is always 1920x1080: the stage is pinned at the top left of the SVG and the fit transform the player
+  // applies to the live stage (translate + scale) is dropped, so the frame does not depend on the window size.
+  const PIN = `;position:absolute;left:0;top:0;width:${W}px;height:${H}px;transform:none;`;
+
+  function styleOf(el) {
+    const cs = getComputedStyle(el);
+    let out = '';
+    for (let i = 0; i < cs.length; i++) out += `${cs[i]}:${cs.getPropertyValue(cs[i])};`;
+    return out;
+  }
+
+  function stageSvg(stage) {
+    const animated = new Set();
+    for (const anim of document.getAnimations()) {
+      const target = anim.effect && anim.effect.target;
+      if (target) animated.add(target);
+    }
+    const clone = stage.cloneNode(true);
+    const stamp = `${window.innerWidth}x${window.innerHeight}`;
+    let recomputed = 0;
+    const walk = (src, dst, parentSign) => {
+      const sign = `${parentSign}\u0001${src.getAttribute('class') || ''}\u0001${src.getAttribute('style') || ''}${animated.has(src) ? '\u0001a' : ''}`;
+      let entry = styles.get(src);
+      if (!entry || entry.sign !== sign) {
+        entry = { sign, text: styleOf(src) + (src === stage ? PIN : '') };
+        styles.set(src, entry);
+        recomputed++;
+      }
+      dst.setAttribute('style', entry.text);
+      const a = src.children;
+      const b = dst.children;
+      for (let i = 0; i < a.length; i++) walk(a[i], b[i], sign);
+    };
+    walk(stage, clone, stamp);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${new XMLSerializer().serializeToString(clone)}</foreignObject></svg>`;
+    return { svg, recomputed };
+  }
+
+  async function paint(stage) {
+    const { svg } = stageSvg(stage);
+    // A data URL keeps the canvas origin clean; a blob URL taints it and the encoder then refuses the frame.
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await image.decode();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(image, 0, 0, W, H);
+  }
+
+  // ── The narration the page already carries: encoded from the WAV the player holds as a data URL ──
+  function readWav() {
+    const el = document.getElementById('amv-audio');
+    const src = (el && el.getAttribute('src')) || '';
+    const comma = src.indexOf(',');
+    if (!src.startsWith('data:') || comma < 0) return null;
+    const bin = atob(src.slice(comma + 1));
+    const wav = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) wav[i] = bin.charCodeAt(i);
+    const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+    const tag = (o) => String.fromCharCode(wav[o], wav[o + 1], wav[o + 2], wav[o + 3]);
+    if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('the narration track is not a WAV file');
+    let format = null;
+    let pcm = null;
+    for (let o = 12; o + 8 <= wav.byteLength;) {
+      const id = tag(o);
+      const len = view.getUint32(o + 4, true);
+      if (id === 'fmt ') format = { channels: view.getUint16(o + 10, true), sampleRate: view.getUint32(o + 12, true), bits: view.getUint16(o + 22, true) };
+      else if (id === 'data') pcm = { at: o + 8, len };
+      o += 8 + len + (len % 2);
+    }
+    if (!format || !pcm || format.bits !== 16) throw new Error('the narration track must be 16-bit PCM WAV');
+    return { wav, pcm, ...format };
+  }
+
+  async function encodeAudio(writer) {
+    const sound = readWav();
+    if (!sound) return false;
+    const { wav, pcm, channels, sampleRate } = sound;
+    let head = null;
+    const audio = new AudioEncoder({
+      output(chunk, meta) {
+        if (!head && meta && meta.decoderConfig && meta.decoderConfig.description) head = asBytes(meta.decoderConfig.description).slice();
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        writer.block({ track: 2, key: false, tsUs: chunk.timestamp, data });
+      },
+      error(e) { state.error = String((e && e.message) || e); },
+    });
+    audio.configure({ codec: 'opus', sampleRate, numberOfChannels: channels, bitrate: 64000 * channels });
+    const perBlock = Math.round(sampleRate * AUDIO_FRAME_SECONDS);
+    const total = Math.floor(pcm.len / (2 * channels));
+    for (let i = 0; i < total; i += perBlock) {
+      const samples = perBlock * channels;
+      const data = new Uint8Array(samples * 2);   // zero filled: a short last block becomes a full Opus frame
+      const from = pcm.at + i * channels * 2;
+      data.set(wav.subarray(from, from + Math.min(samples, (total - i) * channels) * 2));
+      const block = new AudioData({
+        format: 's16', sampleRate, numberOfFrames: perBlock, numberOfChannels: channels,
+        timestamp: Math.round((i / sampleRate) * 1e6), data,
+      });
+      audio.encode(block);
+      block.close();
+      while (audio.encodeQueueSize > 16 && !state.error) await yieldToPage();
+      if (state.cancel) break;
+    }
+    await audio.flush();
+    audio.close();
+    if (state.error) throw new Error(state.error);
+    // The encoder adds pre-skip samples of silence; CodecDelay makes the player drop them again.
+    const preSkip = head && head.length >= 19 ? new DataView(head.buffer, head.byteOffset, head.byteLength).getUint16(10, true) : 312;
+    if (!head || head.length < 19) {
+      head = new Uint8Array(19);
+      head.set(new TextEncoder().encode('OpusHead'), 0);
+      head[8] = 1;
+      head[9] = channels;
+      new DataView(head.buffer).setUint16(10, 312, true);
+      new DataView(head.buffer).setUint32(12, sampleRate, true);
+    }
+    writer.audio = { channels, codecPrivate: head, preSkipSamples: preSkip };
+    return true;
+  }
+
+  // ── The whole export, run inside this page ──
+  // start() only validates and kicks the work off: the caller polls progress() and then asks for the bytes, so the
+  // DevTools protocol never has to wait minutes for one call to come back.
+  function start(options = {}) {
+    if (state.running) return { error: 'an export is already running' };
+    const api = window.__amv;
+    const Mux = window.__amvWebm && window.__amvWebm.WebmWriter;
+    if (!Mux) return { error: 'the WebM writer is missing from this page' };
+    if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function') {
+      return { error: 'this browser cannot encode video (WebCodecs is missing)' };
+    }
+    Object.assign(state, { running: true, done: 0, total: Math.ceil(api.duration * api.fps), error: null, bytes: null, cancel: false });
+    run(Mux, options).catch((e) => { state.error = String((e && e.message) || e); }).finally(() => { state.running = false; styles.clear(); });
+    return { total: state.total, fps: api.fps, duration: api.duration };
+  }
+
+  async function run(Mux, options) {
+    const api = window.__amv;
+    const fps = api.fps;
+    const total = state.total;
+    const config = { width: W, height: H, bitrate: options.bitrate || BITRATE, framerate: fps, latencyMode: 'quality' };
+    let codec = null;
+    for (const candidate of CODECS) {
+      try {
+        if ((await VideoEncoder.isConfigSupported({ ...config, codec: candidate })).supported) { codec = candidate; break; }
+      } catch {
+        // an unknown codec string is not an error, try the next one
+      }
+    }
+    if (!codec) throw new Error('this browser encodes neither VP9 nor VP8');
+    state.codec = codec;
+
+    const writer = new Mux({ width: W, height: H, durationMs: api.duration * 1000, videoCodec: codec.startsWith('vp8') ? 'V_VP8' : 'V_VP9' });
+    state.audio = await encodeAudio(writer);
+    if (state.cancel) throw new Error('cancelled');
+
+    // The player keeps its own clock; the export poses every frame itself, so playback is paused first.
+    api.pauseForExport();
+    stageEl = stageEl || document.querySelector('.amv-stage');
+    const video = new VideoEncoder({
+      output(chunk) {
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        writer.block({ track: 1, key: chunk.type === 'key', tsUs: chunk.timestamp, data });
+      },
+      error(e) { state.error = String((e && e.message) || e); },
+    });
+    video.configure({ ...config, codec });
+    const keyEvery = Math.max(1, Math.round(fps * KEY_SECONDS));
+    for (let i = 0; i < total; i++) {
+      if (state.cancel) { video.close(); throw new Error('cancelled'); }
+      if (state.error) throw new Error(state.error);
+      window.render(i / fps);
+      await paint(stageEl);
+      const frame = new VideoFrame(canvas, { timestamp: Math.round((i / fps) * 1e6), duration: Math.round(1e6 / fps) });
+      video.encode(frame, { keyFrame: i % keyEvery === 0 });
+      frame.close();
+      state.done = i + 1;
+      if (video.encodeQueueSize > QUEUE_LIMIT || i % 5 === 0) await yieldToPage();
+    }
+    await video.flush();
+    video.close();
+    if (state.error) throw new Error(state.error);
+    state.bytes = writer.build();
+  }
+
+  const base64 = (from, to) => {
+    let out = '';
+    for (let i = from; i < to; i += 0x8000) out += String.fromCharCode.apply(null, state.bytes.subarray(i, Math.min(to, i + 0x8000)));
+    return btoa(out);
+  };
+
+  window.__amvEnc = {
+    supported() {
+      return typeof VideoEncoder === 'function' && typeof AudioEncoder === 'function' && Boolean(window.__amvWebm && window.__amvWebm.WebmWriter);
+    },
+    start,
+    progress() {
+      return { running: state.running, done: state.done, total: state.total, error: state.error, audio: state.audio, codec: state.codec };
+    },
+    // The caller asks for the file in slices: one big string would travel badly over a debugger protocol.
+    size() { return state.bytes ? state.bytes.length : 0; },
+    bytes(from, len) { return state.bytes ? base64(from, Math.min(from + len, state.bytes.length)) : ''; },
+    cancel() { state.cancel = true; },
+  };
+})();
+</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('amv-data').textContent);
+  const W = 1920;
+  const H = 1080;
+  const T = 0.9;     // scene transition, matches TIMING.transition
+  const R = 0.6;     // one step appearing
+  const CAM = 0.8;   // camera move
+  const root = document.documentElement;
+  const stage = document.querySelector('.amv-stage');
+  const camera = document.querySelector('.amv-camera');
+  const overlay = document.querySelector('.amv-overlay');
+  const caption = document.querySelector('.amv-caption span');
+  const scenes = [...document.querySelectorAll('.amv-scene')];
+  const segs = D.segments;
+  // One chapter per scene (the title card is not a chapter). The strip needs its space before anything measures the viewport,
+  // so the attribute goes on before section 1.
+  const chapterList = segs.slice(1);
+  if (chapterList.length > 1) root.setAttribute('data-chapters', '');
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const ease = (x) => { const v = clamp(x); return v < 0.5 ? 4 * v * v * v : 1 - (-2 * v + 2) ** 3 / 2; };
+  const lerp = (a, b, p) => a + (b - a) * p;
+  const STEP_SEL = '.am-tl-item, .am-lim, .am-seg, tbody tr, .am-kv-cell, .am-md > ul > li, .am-md > ol > li, .am-md > p, .am-md > blockquote, .am-callout';
+
+  // ── 1. Fit each scene's content to the frame ──
+  for (const sc of scenes) {
+    const fit = sc.querySelector('.amv-fit');
+    if (!fit || !fit.children.length) continue;
+    const s = Math.min(1600 / fit.offsetWidth, 740 / fit.offsetHeight, 3.4);
+    fit.style.transform = `scale(${s})`;
+  }
+
+  // Scene titles sit outside the camera, so they stay put when it zooms.
+  const heads = scenes.map((sc) => {
+    const h = sc.querySelector('.amv-scene-head');
+    if (h) stage.insertBefore(h, camera.nextSibling);
+    return h;
+  });
+
+  // Measure elements in stage coordinates (the camera is the identity transform here).
+  const sr = stage.getBoundingClientRect();
+  const k = sr.width / W;
+  const rectOf = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: (r.left - sr.left) / k, y: (r.top - sr.top) / k, w: r.width / k, h: r.height / k };
+  };
+
+  // ── 2. Steps: group by data-step when a component sets it, else one step per row / item ──
+  const items = [];   // { el, at, paths: [{ el, len }] }
+  scenes.forEach((sc, i) => {
+    if (i === 0) return;
+    const groups = [];
+    for (const block of sc.querySelectorAll('.amv-fit > *')) {
+      const marked = [...block.querySelectorAll('[data-step]')];
+      if (marked.length) {
+        const by = new Map();
+        for (const el of marked) {
+          const n = Number(el.dataset.step);
+          if (!by.has(n)) by.set(n, []);
+          by.get(n).push(el);
+        }
+        [...by.keys()].sort((a, b) => a - b).forEach((n) => groups.push(by.get(n)));
+      } else {
+        const found = [...block.querySelectorAll(STEP_SEL)].filter((el) => !el.parentElement.closest(STEP_SEL));
+        if (found.length) found.forEach((el) => groups.push([el]));
+        else groups.push([block]);
+      }
+    }
+    const beats = segs[i].beats;
+    const S = groups.length;
+    const B = beats.length;
+    const perBeat = new Map();
+    groups.forEach((g, gi) => {
+      // With more beats than steps, the extra beats open the scene: steps align to the last beats.
+      const b = S <= B ? gi + (B - S) : Math.floor((gi * B) / S);
+      const rank = perBeat.get(b) ?? 0;
+      perBeat.set(b, rank + 1);
+      const beat = beats[b];
+      const count = S <= B ? 1 : Math.ceil(S / B) || 1;
+      const slot = Math.min(0.45, (beat.end - beat.start) / count);
+      for (const el of g) {
+        const paths = (el.matches('path.am-edge') ? [el] : [...el.querySelectorAll('path.am-edge')])
+          .filter((p) => !p.classList.contains('am-edge--dashed'))
+          .map((p) => ({ el: p, len: p.getTotalLength() }));
+        items.push({ el, scene: i, at: beat.start + rank * slot, paths });
+      }
+    });
+  });
+
+  // ── 3. Morphs: elements with the same data-key in consecutive scenes ──
+  const morphs = [];  // { scene, from, to, ghost, a, b }
+  const keyed = (sc) => {
+    const m = new Map();
+    for (const el of sc.querySelectorAll('[data-key]')) if (!m.has(el.dataset.key)) m.set(el.dataset.key, el);
+    return m;
+  };
+  for (let i = 2; i < scenes.length; i++) {
+    const prev = keyed(scenes[i - 1]);
+    for (const [key, to] of keyed(scenes[i])) {
+      const from = prev.get(key);
+      // Morph only like with like (SVG to SVG, HTML to HTML); otherwise the shapes do not match.
+      if (!from || (from instanceof SVGElement) !== (to instanceof SVGElement)) continue;
+      try {
+        const ghost = makeGhost(from);
+        overlay.append(ghost.node);
+        morphs.push({ scene: i, from, to, ghost: ghost.node, a: ghost.place(rectOf(from)), b: ghost.place(rectOf(to)) });
+      } catch {
+        // Morphs are a nicety: skip an element whose measurement fails; playback is unaffected.
+      }
+    }
+  }
+  const carried = new Set(morphs.map((m) => m.to));
+
+  function makeGhost(el) {
+    const wrap = document.createElement('div');
+    const host = el.closest('.am-diagram, .am-tree, .am-timeline, .am-kv, .am-limits');
+    wrap.className = `amv-ghost ${host ? host.className : ''}`;
+    if (el instanceof SVGGraphicsElement) {
+      const bb = el.getBBox();
+      const pad = 4;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
+      svg.setAttribute('width', bb.width + pad * 2);
+      svg.setAttribute('height', bb.height + pad * 2);
+      const clone = el.cloneNode(true);
+      clone.removeAttribute('style');
+      svg.append(clone);
+      wrap.append(svg);
+      return {
+        node: wrap,
+        place: (r) => {
+          const s = r.w / (bb.width || 1);
+          return { x: r.x - pad * s, y: r.y - pad * s, s };
+        },
+      };
+    }
+    const clone = el.cloneNode(true);
+    clone.removeAttribute('style');
+    clone.querySelectorAll('[data-key], ul').forEach((n) => n.remove());
+    const box = document.createElement(el.tagName === 'LI' ? 'ul' : 'div');
+    box.className = el.tagName === 'LI' ? 'am-tree-list' : '';
+    box.style.margin = '0';
+    box.append(clone);
+    wrap.append(box);
+    wrap.style.width = `${el.offsetWidth}px`;
+    const w0 = el.offsetWidth || 1;
+    return { node: wrap, place: (r) => ({ x: r.x, y: r.y, s: r.w / w0 }) };
+  }
+
+  // ── 4. Camera: the element named by [name] in the narration ──
+  const findKey = (sc, key) => {
+    const all = [...sc.querySelectorAll('[data-key]')];
+    const norm = (s) => s.replace(/[`*]/g, '').trim().toLowerCase();
+    return all.find((el) => norm(el.dataset.key) === norm(key))
+      ?? all.find((el) => norm(el.dataset.key).includes(norm(key)))
+      ?? [...sc.querySelectorAll(`${STEP_SEL}, text`)].find((el) => norm(el.textContent).includes(norm(key)));
+  };
+  const IDENT = { s: 1, x: 0, y: 0 };
+  // Zoom without cropping: the whole diagram must stay in the safe area between title and captions.
+  const SAFE = { left: 60, right: W - 60, top: 150, bottom: H - 200 }; // leave room for captions at the bottom
+  function focusCam(r, sc) {
+    const fit = sc.querySelector('.amv-fit');
+    const c = fit ? rectOf(fit) : { x: 0, y: 0, w: W, h: H };
+    const room = Math.min((SAFE.right - SAFE.left) / c.w, (SAFE.bottom - SAFE.top) / c.h);
+    const s = clamp(Math.min(0.5 * W / r.w, 0.42 * H / r.h, room, 1.4), 1, 1.4);
+    const fitAxis = (want, lo, hi, a, b) => (s * (b - a) <= hi - lo ? clamp(want, lo - s * a, hi - s * b) : want);
+    return {
+      s,
+      x: fitAxis(W / 2 - s * (r.x + r.w / 2), SAFE.left, SAFE.right, c.x, c.x + c.w),
+      y: fitAxis(H * 0.5 - s * (r.y + r.h / 2), SAFE.top, SAFE.bottom, c.y, c.y + c.h),
+    };
+  }
+  const camEvents = [];   // { t, cam, hl }
+  segs.forEach((seg, i) => {
+    camEvents.push({ t: seg.start, cam: IDENT, hl: null });
+    seg.beats.forEach((b) => {
+      const el = b.focus ? findKey(scenes[i], b.focus) : null;
+      let cam = IDENT;
+      if (el) cam = focusCam(rectOf(el), scenes[i]);
+      camEvents.push({ t: b.start, cam, hl: el });
+    });
+  });
+  const hlTargets = new Set(camEvents.map((e) => e.hl).filter(Boolean));
+
+  // Scene and title fades. Titles never overlap: the old one fades out in the first half of the transition, the new one fades in in the second half.
+  const show = (el, op) => {
+    el.style.opacity = op;
+    el.style.visibility = op > 0 ? 'visible' : 'hidden';
+  };
+  function drawScenes(t) {
+    scenes.forEach((sc, i) => {
+      const seg = segs[i];
+      const next = segs[i + 1];
+      const before = t < seg.start;
+      const fadeIn = i === 0 ? ease(t / 0.8) : ease((t - seg.start) / T);
+      const fadeOut = next ? 1 - ease((t - next.start) / T) : 1;
+      show(sc, before ? 0 : Math.min(fadeIn, fadeOut));
+      if (!heads[i]) return;
+      const hin = ease((t - seg.start - T / 2) / (T / 2));
+      const hout = next ? 1 - ease((t - next.start) / (T / 2)) : 1;
+      show(heads[i], before ? 0 : Math.min(hin, hout));
+    });
+  }
+
+  // Steps appear: edges draw in one stroke, other elements fade in and rise slightly.
+  function drawSteps(t) {
+    for (const it of items) {
+      if (carried.has(it.el)) continue;
+      const p = ease((t - it.at) / R);
+      it.el.style.opacity = clamp((t - it.at) / 0.25);
+      if (!it.paths.length) {
+        it.el.style.transform = p < 1 ? `translateY(${(1 - p) * 14}px)` : '';
+        continue;
+      }
+      for (const { el, len } of it.paths) {
+        el.style.strokeDasharray = `${len}`;
+        el.style.strokeDashoffset = `${len * (1 - p)}`;
+        el.style.markerEnd = p < 0.97 ? 'none' : '';
+      }
+    }
+  }
+
+  // Morphs: during the transition a stand-in moves from the old to the new position while the real elements are hidden.
+  // An element can end one morph and start the next; collect the elements to hide first, then apply, so the two do not overwrite each other.
+  const morphed = [...new Set(morphs.flatMap((m) => [m.from, m.to]))];
+  function drawMorphs(t) {
+    const hidden = new Set();
+    for (const m of morphs) {
+      const s0 = segs[m.scene].start;
+      const during = t >= s0 && t < s0 + T;
+      m.ghost.style.display = during ? '' : 'none';
+      if (during) {
+        const p = ease((t - s0) / T);
+        m.ghost.style.transform = `translate(${lerp(m.a.x, m.b.x, p)}px, ${lerp(m.a.y, m.b.y, p)}px) scale(${lerp(m.a.s, m.b.s, p)})`;
+        hidden.add(m.from);
+      }
+      if (t < s0 + T) hidden.add(m.to);
+      m.to.style.opacity = 1;
+    }
+    for (const el of morphed) el.style.visibility = hidden.has(el) ? 'hidden' : '';
+  }
+
+  // Camera and highlight: interpolate between the previous camera position and the current target.
+  function drawCamera(t) {
+    const ev = camEvents.findLastIndex((e) => t >= e.t);
+    const e = ev >= 0 ? camEvents[ev] : null;
+    const prev = ev > 0 ? camEvents[ev - 1].cam : IDENT;
+    const p = e ? ease((t - e.t) / CAM) : 0;
+    const to = e ? e.cam : IDENT;
+    camera.style.transform = `translate(${lerp(prev.x, to.x, p)}px, ${lerp(prev.y, to.y, p)}px) scale(${lerp(prev.s, to.s, p)})`;
+    for (const el of hlTargets) el.classList.toggle('amv-hl', el === e?.hl);
+  }
+
+  function drawCaption(t) {
+    const cur = segs.findLastIndex((s) => t >= s.start);
+    const beats = cur >= 0 ? segs[cur].beats : [];
+    const b = beats.find((x) => t >= x.start && t < x.end + 0.3);
+    const html = b ? b.html : '';
+    if (caption.dataset.html !== html) {
+      caption.innerHTML = html;
+      caption.dataset.html = html;
+    }
+    caption.style.opacity = b ? clamp((t - b.start) / 0.2) : 0;
+  }
+
+  // ── 5. Deterministic rendering: the same time always draws the same frame ──
+  function render(time) {
+    const t = clamp(time, 0, D.duration);
+    drawScenes(t);
+    drawSteps(t);
+    drawMorphs(t);
+    drawCamera(t);
+    drawCaption(t);
+    updateUi(t);
+  }
+
+  // ── 6. Player ──
+  const audio = document.getElementById('amv-audio');
+  const seek = document.querySelector('.amv-seek');
+  const timeEl = document.querySelector('.amv-time');
+  const toggleBtn = document.querySelector('[data-amv="toggle"]');
+  const bigPlay = document.querySelector('.amv-bigplay');
+  const marks = document.querySelector('.amv-marks');
+  const bar = document.querySelector('.amv-chapters');
+  const rateBtn = document.querySelector('[data-amv="rate"]');
+  const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  const fmt = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+  seek.max = D.duration;
+
+  // A tick on the track and a chip in the strip per scene; both jump to the start of the scene and keep playing.
+  const chips = chapterList.map((s, i) => {
+    const mark = document.createElement('i');
+    mark.style.left = `${(s.start / D.duration) * 100}%`;
+    mark.title = `${s.id} ${s.title} · ${fmt(s.start)}`;
+    mark.addEventListener('click', () => jump(s.start));
+    marks.append(mark);
+
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'amv-chap';
+    chip.title = `${s.title} · ${fmt(s.start)}`;
+    const letter = document.createElement('b');
+    letter.textContent = s.id || String.fromCharCode(65 + i);
+    const label = document.createElement('span');
+    label.textContent = s.title;
+    chip.append(letter, label);
+    chip.addEventListener('click', () => jump(s.start));
+    bar.append(chip);
+    return chip;
+  });
+
+  let playing = false;
+  let base = 0;
+  let t0 = 0;
+  let rate = 1;
+  // The clock: the audio element when there is one, otherwise wall-clock time scaled by the playback rate.
+  const now = () => (!playing ? base : audio ? audio.currentTime : base + ((performance.now() - t0) / 1000) * rate);
+
+  function jump(t) {
+    seekTo(t);
+    if (!playing) play();
+  }
+
+  // The chip of the scene the picture is in, kept in view while the strip scrolls.
+  let activeChip = -1;
+  function markChapter(t) {
+    const i = chapterList.findLastIndex((s) => t >= s.start);
+    if (i === activeChip) return;
+    activeChip = i;
+    chips.forEach((c, k) => (k === i ? c.setAttribute('aria-current', 'true') : c.removeAttribute('aria-current')));
+    const chip = chips[i];
+    if (chip && bar.scrollWidth > bar.clientWidth) {
+      // By where the chip is on screen, so the strip scrolls the same in either direction (a right-to-left strip scrolls with negative offsets).
+      const b = bar.getBoundingClientRect();
+      const c = chip.getBoundingClientRect();
+      bar.scrollBy({ left: c.left + c.width / 2 - (b.left + b.width / 2), behavior: 'smooth' });
+    }
+  }
+
+  // Changing the rate must not move the clock: anchor it again at the time it shows now.
+  function setRate(r) {
+    const at = now();
+    rate = r;
+    if (audio) audio.playbackRate = r;
+    rateBtn.textContent = `${r}×`;
+    rateBtn.setAttribute('aria-label', `${rateBtn.dataset.speed ?? 'Speed'} ${r}×`);
+    if (playing) {
+      base = at;
+      t0 = performance.now();
+    }
+  }
+
+  function updateUi(t) {
+    if (document.activeElement !== seek) seek.value = t;
+    timeEl.textContent = `${fmt(t)} / ${fmt(D.duration)}`;
+    markChapter(t);
+  }
+
+  function play() {
+    if (base >= D.duration - 0.05) base = 0;
+    playing = true;
+    bigPlay.hidden = true;
+    toggleBtn.textContent = '❚❚';
+    toggleBtn.setAttribute('aria-label', toggleBtn.dataset.pause);
+    if (audio) {
+      audio.currentTime = base;
+      audio.play().catch(() => {});
+    } else {
+      t0 = performance.now();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    base = now();
+    playing = false;
+    audio?.pause();
+    toggleBtn.textContent = '▶';
+    toggleBtn.setAttribute('aria-label', toggleBtn.dataset.play);
+  }
+
+  function seekTo(x) {
+    base = clamp(x, 0, D.duration);
+    if (audio) audio.currentTime = base;
+    t0 = performance.now();
+    render(base);
+  }
+
+  function tick() {
+    if (!playing) return;
+    const t = now();
+    if (t >= D.duration) {
+      pause();
+      base = D.duration;
+      render(D.duration);
+      return;
+    }
+    render(t);
+    requestAnimationFrame(tick);
+  }
+
+  const toggle = () => (playing ? pause() : play());
+  toggleBtn.addEventListener('click', toggle);
+  bigPlay.addEventListener('click', play);
+  stage.addEventListener('click', (e) => { if (e.target !== bigPlay) toggle(); });
+  seek.addEventListener('input', () => seekTo(Number(seek.value)));
+  rateBtn.addEventListener('click', () => setRate(RATES[(RATES.indexOf(rate) + 1) % RATES.length]));
+
+  // ── Export: the page encodes itself (src/runtime/video-export.js) and offers the file as a download ──
+  // The engine needs no help from the page behind it: the stage is pinned into the frame while it copies styles, so
+  // the picture is 1920x1080 whatever the window shows. The overlay covers the scrubbing stage and the button keeps
+  // its place in the controls, so a second click stops the export.
+  const exportBtn = document.querySelector('[data-amv="export"]');
+  const SLICE = 1_048_572;   // 1 MiB rounded to a multiple of 3, so every base64 slice stands on its own
+  let exporting = false;
+
+  const decode = (b64) => {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+
+  async function runExport() {
+    if (exporting) { window.__amvEnc.cancel(); return; }
+    exporting = true;
+    const label = exportBtn.dataset.label || 'Export';
+    const overlay = document.createElement('div');
+    overlay.className = 'amv-exporting';
+    overlay.innerHTML = '<span><i></i></span><b></b>';
+    overlay.title = label;
+    overlay.addEventListener('click', () => window.__amvEnc.cancel());
+    // After the viewport and before the controls: the cover hides the picture, the controls stay clickable.
+    document.querySelector('.amv-viewport').after(overlay);
+    window.__amv.pauseForExport();
+    try {
+      const started = await window.__amvEnc.start({});
+      if (started.error) throw new Error(started.error);
+      for (;;) {
+        const p = window.__amvEnc.progress();
+        const pct = Math.round((p.done / Math.max(1, p.total)) * 100);
+        exportBtn.textContent = `${pct}%`;
+        overlay.querySelector('b').textContent = `${label} ${pct}%`;
+        overlay.querySelector('i').style.width = `${pct}%`;
+        if (p.error) throw new Error(p.error);
+        if (!p.running) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const size = window.__amvEnc.size();
+      const parts = [];
+      for (let at = 0; at < size; at += SLICE) parts.push(decode(window.__amvEnc.bytes(at, Math.min(SLICE, size - at))));
+      const url = URL.createObjectURL(new Blob(parts, { type: 'video/webm' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${(document.title || 'video').replace(/[\\/:*?"<>|]+/g, '-')}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      exportBtn.textContent = '✕';
+      overlay.querySelector('b').textContent = String((e && e.message) || e);
+      await new Promise((r) => setTimeout(r, 2500));
+    } finally {
+      overlay.remove();
+      exportBtn.textContent = exportBtn.dataset.icon || '⤓';
+      exporting = false;
+      window.__amv.resumeAfterExport();
+    }
+  }
+
+  if (window.__amvEnc && window.__amvEnc.supported()) exportBtn.addEventListener('click', runExport);
+  else exportBtn.remove();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === ' ') { e.preventDefault(); toggle(); }
+    if (e.key === 'ArrowRight') seekTo(now() + 5);
+    if (e.key === 'ArrowLeft') seekTo(now() - 5);
+  });
+  audio?.addEventListener('ended', () => { pause(); base = D.duration; });
+
+  function fitStage() {
+    if (root.hasAttribute('data-export')) return;
+    const vp = stage.parentElement;
+    const s = Math.min(vp.clientWidth / W, vp.clientHeight / H);
+    stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  window.addEventListener('resize', fitStage);
+
+  // Export: place the stage 1:1 at the top left and call render(t) frame by frame. exportMode is for the CLI, which
+  // hides the controls and either screenshots the frames (ffmpeg) or drives the built-in encoder (see video-export.js).
+  window.render = render;
+  let resumeAt;   // undefined: no export ran; null: playback was paused already; a number: carry on there
+  window.__amv = {
+    duration: D.duration,
+    fps: D.fps,
+    exportMode() { root.setAttribute('data-export', ''); stage.style.transform = ''; },
+    // The encoder poses every frame itself, so playback stops for the length of an export and carries on afterwards.
+    // The button and the engine both call this; only the first call decides where playback resumes.
+    pauseForExport() { if (resumeAt === undefined) resumeAt = playing ? now() : null; pause(); return resumeAt; },
+    resumeAfterExport() {
+      if (resumeAt === undefined || resumeAt === null) { resumeAt = undefined; return; }
+      const at = resumeAt;
+      resumeAt = undefined;
+      seekTo(at);
+      if (at < D.duration - 0.05) play();
+    },
+  };
+  fitStage();
+  setRate(rate);   // the button carries the speed on load
+  // Poster: show the fully faded-in title card, but playback still starts at 0.
+  render(Math.min(1, segs[0].end));
+  updateUi(0);
+})();
+</script>
+</body>
+</html>

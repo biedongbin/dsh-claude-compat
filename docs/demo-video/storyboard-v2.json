@@ -1,0 +1,47 @@
+{
+  "status": "awaiting_authenticated_browser_capture",
+  "baseline": "8696e40f9db8cc79764e8ff83a004ca1d0717731",
+  "duration": 20,
+  "fps": 30,
+  "width": 1440,
+  "height": 900,
+  "audio": false,
+  "visualMethod": "Actual DSH UI screenshots with short captions; no diagram substitutes",
+  "captureRequirements": {
+    "language": "Change the actual DSH UI language before each language capture; restore the observed original setting afterward.",
+    "privacy": "Exclude private project names, local paths and real conversation contents. Use a deliberately created demonstration conversation for handoff; do not fabricate a successful result.",
+    "acceptance": "Open every captured image. Verify readable controls, matching UI language, no privacy leaks, no loading/error state, and evidence for each caption.",
+    "missingAssets": "All asset fields remain null until an actual screenshot exists. Do not render or add README media links with missing assets."
+  },
+  "scenes": [
+    {
+      "id": "skills", "start": 0, "duration": 5,
+      "shot": "Actual DSH slash menu showing a known project Claude skill; crop unrelated sidebar content.",
+      "evidence": "README.md:61-73",
+      "zh-CN": {"title": "已有 Claude 技能，在 DSH 继续用", "subtitle": "读取项目与用户级 .claude 配置", "asset": null},
+      "en": {"title": "Bring your Claude skills to DSH", "subtitle": "Reuse project and user-level .claude configuration", "asset": null}
+    },
+    {
+      "id": "plugins", "start": 5, "duration": 5,
+      "shot": "Actual Plugins > Claude Code panel with installed plugins and marketplace navigation. Do not install or mutate plugins for the capture.",
+      "evidence": "src/client.js:465-469; README.md:43-47",
+      "zh-CN": {"title": "插件与市场，在 DSH 直接管理", "subtitle": "已安装插件 · 发现插件 · 插件市场", "asset": null},
+      "en": {"title": "Manage Claude plugins inside DSH", "subtitle": "Installed plugins · Discover · Marketplaces", "asset": null}
+    },
+    {
+      "id": "handoff", "start": 10, "duration": 6,
+      "shot": "Demonstration-only Claude history selection followed by the actual DSH summary. Capture both before and after. If safe demonstration history cannot be prepared, retain history browsing only and rewrite the caption accordingly.",
+      "evidence": "src/session-handoff.js:35-37; README.md:48",
+      "zh-CN": {"title": "选中旧会话，接着理解任务", "subtitle": "按需阅读历史，总结背景与下一步", "asset": null, "resultAsset": null},
+      "en": {"title": "Pick up context from a Claude session", "subtitle": "Read the history, summarize context and next steps", "asset": null, "resultAsset": null}
+    },
+    {
+      "id": "install", "start": 16, "duration": 4,
+      "shot": "Retain a verified product screenshot, overlay the installation command and runtime limitation.",
+      "command": "dsh plugin --profile web add dsh-claude-compat@latest",
+      "evidence": "README.md:26-31; README.md:103",
+      "zh-CN": {"title": "dsh-claude-compat", "subtitle": "技能可刷新；MCP 与 hooks 变更需重启 DSH", "asset": null},
+      "en": {"title": "dsh-claude-compat", "subtitle": "Reload skills; restart DSH for MCP and hook changes", "asset": null}
+    }
+  ]
+}

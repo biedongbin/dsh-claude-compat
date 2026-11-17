@@ -97,14 +97,18 @@ test('missing tool services are reported', async () => {
   }
 });
 
-test('manifest and lockfile explicitly support the two tested DSH releases', async () => {
+test('manifest and lockfile explicitly support the tested DSH releases', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
   const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url)));
-  const range = '0.2.1-rc.2 || 0.2.2-rc.1';
-  assert.equal(manifest.engines.dsh, range);
-  assert.equal(lock.packages[''].engines.dsh, range);
+  // A forward-compatible range: every 0.2.x release is accepted, so a DSH
+  // patch/rc bump does not silently disable the plugin (that kept happening
+  // with an explicit `||` list: rc.2 → rc.3 dropped the whole bridge).
+  const runtime = '>=0.2.1-rc.2 <0.3.0';
+  assert.equal(manifest.engines.dsh, runtime);
+  assert.equal(lock.packages[''].engines.dsh, runtime);
+  const peerRange = '0.2.1-rc.2 || 0.2.2-rc.1';
   for (const name of ['dsh-session', 'dsh-sandbox', 'dsh-client-connection']) {
-    assert.equal(manifest.peerDependencies[`@deepseek-ai/${name}`], range);
-    assert.equal(lock.packages[''].peerDependencies[`@deepseek-ai/${name}`], range);
+    assert.equal(manifest.peerDependencies[`@deepseek-ai/${name}`], peerRange);
+    assert.equal(lock.packages[''].peerDependencies[`@deepseek-ai/${name}`], peerRange);
   }
 });

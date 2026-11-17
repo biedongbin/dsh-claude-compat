@@ -1,0 +1,558 @@
+{
+  "languages": {
+    "en": {
+      "built_at": "2026-11-10T07:54:25.865577+00:00",
+      "source": {
+        "version": "1.2.1",
+        "commit": "8696e40f9db8cc79764e8ff83a004ca1d0717731",
+        "dirty": true,
+        "builder_sha256": "7cb9a225af51b884715dc3025bc1ace29726783196340ee90ef5fa21975662ac",
+        "scenes_sha256": "e8b54dc6b464ce5f25f2f48f427d67362a7ddd9540a8a899f8658b9bf1b3489f"
+      },
+      "tools": {
+        "python": "3.12.14 (main, Sep  1 2026, 14:09:38) [Clang 22.1.3 ]",
+        "pillow": "12.3.0",
+        "ffmpeg": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+        "ffprobe": "ffprobe version 8.1 Copyright (c) 2007-2026 the FFmpeg developers"
+      },
+      "font": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+      "captures": [
+        {
+          "scene": "skills",
+          "start": 0,
+          "end": 5,
+          "path": "docs/demo-video/screenshots/en/skills.png",
+          "sha256": "8492b61def8a86209700ad084f18834844d887375dbe2290dfe1f55ebdbe34a7",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "plugins",
+          "start": 5,
+          "end": 10,
+          "path": "docs/demo-video/screenshots/en/plugins.png",
+          "sha256": "e9a8977f00c953e2bb87c8775ff8b3ae53b19c16bfda49f61614bc99f4d53245",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "history",
+          "start": 10,
+          "end": 16,
+          "path": "docs/demo-video/screenshots/en/history.png",
+          "sha256": "c2afb6886e1cc3cf68daaaa46debf5b8d8d6d266222e78e7a3c20fc39fc7c7fd",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "closing",
+          "start": 16,
+          "end": 20,
+          "path": "docs/demo-video/screenshots/en/plugins.png",
+          "sha256": "e9a8977f00c953e2bb87c8775ff8b3ae53b19c16bfda49f61614bc99f4d53245",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        }
+      ],
+      "media": {
+        "probe": {
+          "streams": [
+            {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640032",
+              "width": 1920,
+              "height": 1200,
+              "coded_width": 1920,
+              "coded_height": 1200,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "8:5",
+              "pix_fmt": "yuv420p",
+              "level": 50,
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "refs": 4,
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 307200,
+              "duration": "20.000000",
+              "bit_rate": "155878",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "600",
+              "nb_read_frames": "600",
+              "extradata_size": 47,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler",
+                "encoder": "Lavc62.28.100 libx264"
+              }
+            }
+          ],
+          "format": {
+            "filename": "docs/videos/dsh-claude-compat-en.mp4",
+            "nb_streams": 1,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "20.000000",
+            "size": "397745",
+            "bit_rate": "159098",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf62.12.100"
+            }
+          }
+        },
+        "checks": {
+          "size": true,
+          "codec": true,
+          "pixel_format": true,
+          "sar": true,
+          "dar": true,
+          "fps": true,
+          "duration": true,
+          "container_duration": true,
+          "start": true,
+          "decoded_frames": true,
+          "no_audio": true,
+          "faststart": true
+        },
+        "start_seconds": 0.0,
+        "duration_seconds": 20.0,
+        "end_seconds": 20.0,
+        "decode_method": "ffprobe -count_frames",
+        "decoded_frames": 600,
+        "sha256": "7ff36d95bfb1f25523f26ad96c66095d7f5fa05dc05a2add4fbbd230fcaca1f5"
+      },
+      "poster": {
+        "path": "docs/videos/dsh-claude-compat-en-poster.png",
+        "seconds": 2,
+        "sha256": "c50d3d454cfda34b3e824f05a07d2dd8cd15564863ade31218712e2e90813926"
+      },
+      "visual_review": {
+        "status": "passed_keyframe_review",
+        "reviewer": "assistant",
+        "seconds": [
+          2,
+          7,
+          13,
+          18
+        ],
+        "checks": [
+          "complete DSH viewport and navigation retained",
+          "correct UI language and corresponding captions",
+          "no missing title glyphs or caption overflow",
+          "multiple actual plugin records visible",
+          "private tree, account identity and paths masked",
+          "installation command readable"
+        ],
+        "limitations": [
+          "No normal-speed end-to-end playback review",
+          "English UI preserves original Chinese conversation title",
+          "No history preview or resume operation demonstrated"
+        ]
+      },
+      "encoded_frame_comparisons": [
+        {
+          "scene": "skills",
+          "seconds": 2,
+          "mean_absolute_pixel_error": 0.6004279513888889
+        },
+        {
+          "scene": "plugins",
+          "seconds": 7,
+          "mean_absolute_pixel_error": 0.6373582175925926
+        },
+        {
+          "scene": "history",
+          "seconds": 13,
+          "mean_absolute_pixel_error": 0.6022899305555556
+        },
+        {
+          "scene": "closing",
+          "seconds": 18,
+          "mean_absolute_pixel_error": 0.6616880787037037
+        }
+      ],
+      "capture": {
+        "method": "Tabbit screenshot of actual DSH Web 0.2.2-rc.1, compat1.2.1",
+        "viewport": [
+          1440,
+          1100
+        ],
+        "ui_language": "en",
+        "masked": [
+          "private workspace/session tree",
+          "account identity",
+          "configuration paths",
+          "history project directory"
+        ],
+        "original_language_restored": "zh",
+        "original_viewport_restored": [
+          1904,
+          889
+        ],
+        "notes": "English UI retains the original Chinese history title; no history preview or resume operation was executed. Installed list shows visible viewport rows, not every installed item."
+      }
+    },
+    "zh-CN": {
+      "built_at": "2026-11-10T07:54:29.685793+00:00",
+      "source": {
+        "version": "1.2.1",
+        "commit": "8696e40f9db8cc79764e8ff83a004ca1d0717731",
+        "dirty": true,
+        "builder_sha256": "7cb9a225af51b884715dc3025bc1ace29726783196340ee90ef5fa21975662ac",
+        "scenes_sha256": "e8b54dc6b464ce5f25f2f48f427d67362a7ddd9540a8a899f8658b9bf1b3489f"
+      },
+      "tools": {
+        "python": "3.12.14 (main, Sep  1 2026, 14:09:38) [Clang 22.1.3 ]",
+        "pillow": "12.3.0",
+        "ffmpeg": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+        "ffprobe": "ffprobe version 8.1 Copyright (c) 2007-2026 the FFmpeg developers"
+      },
+      "font": "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+      "captures": [
+        {
+          "scene": "skills",
+          "start": 0,
+          "end": 5,
+          "path": "docs/demo-video/screenshots/zh-CN/skills.png",
+          "sha256": "bda290799d01c9a1eff5acbb4fd8615341a2209c7988a415f41b7e92cb331f94",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "plugins",
+          "start": 5,
+          "end": 10,
+          "path": "docs/demo-video/screenshots/zh-CN/plugins.png",
+          "sha256": "29a92dfda38b108911e53e9b6f01093e49c274a646d19a08e98db6c8c80c6e32",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "history",
+          "start": 10,
+          "end": 16,
+          "path": "docs/demo-video/screenshots/zh-CN/history.png",
+          "sha256": "6c5480236eb5c88ba2ca06fb8a865034669874a93c3294dcb71697efa0aec2eb",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        },
+        {
+          "scene": "closing",
+          "start": 16,
+          "end": 20,
+          "path": "docs/demo-video/screenshots/zh-CN/plugins.png",
+          "sha256": "29a92dfda38b108911e53e9b6f01093e49c274a646d19a08e98db6c8c80c6e32",
+          "original_size": [
+            1440,
+            1100
+          ],
+          "fit_size": [
+            1231,
+            940
+          ],
+          "position": [
+            344,
+            160
+          ],
+          "crop": null
+        }
+      ],
+      "media": {
+        "probe": {
+          "streams": [
+            {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640032",
+              "width": 1920,
+              "height": 1200,
+              "coded_width": 1920,
+              "coded_height": 1200,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "8:5",
+              "pix_fmt": "yuv420p",
+              "level": 50,
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "refs": 4,
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 307200,
+              "duration": "20.000000",
+              "bit_rate": "143023",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "600",
+              "nb_read_frames": "600",
+              "extradata_size": 47,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler",
+                "encoder": "Lavc62.28.100 libx264"
+              }
+            }
+          ],
+          "format": {
+            "filename": "docs/videos/dsh-claude-compat-zh-CN.mp4",
+            "nb_streams": 1,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "20.000000",
+            "size": "365607",
+            "bit_rate": "146242",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf62.12.100"
+            }
+          }
+        },
+        "checks": {
+          "size": true,
+          "codec": true,
+          "pixel_format": true,
+          "sar": true,
+          "dar": true,
+          "fps": true,
+          "duration": true,
+          "container_duration": true,
+          "start": true,
+          "decoded_frames": true,
+          "no_audio": true,
+          "faststart": true
+        },
+        "start_seconds": 0.0,
+        "duration_seconds": 20.0,
+        "end_seconds": 20.0,
+        "decode_method": "ffprobe -count_frames",
+        "decoded_frames": 600,
+        "sha256": "a401cefdbfcdc410b35f9b83480481b5b9c961632889966099b43bb446dafc38"
+      },
+      "poster": {
+        "path": "docs/videos/dsh-claude-compat-zh-CN-poster.png",
+        "seconds": 2,
+        "sha256": "670302ea608b388f2d9b917fda963b44ec924e1c12c796b38fdc3a39a1a546b9"
+      },
+      "visual_review": {
+        "status": "passed_keyframe_review",
+        "reviewer": "assistant",
+        "seconds": [
+          2,
+          7,
+          13,
+          18
+        ],
+        "checks": [
+          "complete DSH viewport and navigation retained",
+          "correct UI language and corresponding captions",
+          "no missing title glyphs or caption overflow",
+          "multiple actual plugin records visible",
+          "private tree, account identity and paths masked",
+          "installation command readable"
+        ],
+        "limitations": [
+          "No normal-speed end-to-end playback review",
+          "English UI preserves original Chinese conversation title",
+          "No history preview or resume operation demonstrated"
+        ]
+      },
+      "encoded_frame_comparisons": [
+        {
+          "scene": "skills",
+          "seconds": 2,
+          "mean_absolute_pixel_error": 0.5992808159722222
+        },
+        {
+          "scene": "plugins",
+          "seconds": 7,
+          "mean_absolute_pixel_error": 0.621406394675926
+        },
+        {
+          "scene": "history",
+          "seconds": 13,
+          "mean_absolute_pixel_error": 0.5933518518518519
+        },
+        {
+          "scene": "closing",
+          "seconds": 18,
+          "mean_absolute_pixel_error": 0.6470752314814815
+        }
+      ],
+      "capture": {
+        "method": "Tabbit screenshot of actual DSH Web 0.2.2-rc.1, compat1.2.1",
+        "viewport": [
+          1440,
+          1100
+        ],
+        "ui_language": "zh-CN",
+        "masked": [
+          "private workspace/session tree",
+          "account identity",
+          "configuration paths",
+          "history project directory"
+        ],
+        "original_language_restored": "zh",
+        "original_viewport_restored": [
+          1904,
+          889
+        ],
+        "notes": "English UI retains the original Chinese history title; no history preview or resume operation was executed. Installed list shows visible viewport rows, not every installed item."
+      }
+    }
+  }
+}

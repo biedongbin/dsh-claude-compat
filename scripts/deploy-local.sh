@@ -52,6 +52,13 @@ if [[ $BACKUP -eq 1 ]]; then
   echo "备份 → $BK"
 fi
 
+# Gate: never deploy a file that does not parse. A syntax error here loads a
+# broken client half, which silently drops every slot registration.
+for f in "$SRC_DIR"/src/*.js "$SRC_DIR"/src/*.mjs; do
+  node --check "$f" || { echo "✗ syntax error in $f — deploy aborted" >&2; exit 1; }
+done
+echo "✓ syntax ok"
+
 # --delete keeps the deployed src an exact mirror (stale modules would otherwise
 # linger and get imported).
 rsync -a --delete "$SRC_DIR/src/" "$TARGET/src/"
@@ -67,5 +74,7 @@ else
 fi
 
 echo
-echo "⚠ 插件在 DSH 启动时 import，改完必须重启 DSH 进程才生效（不是刷新窗口）。"
-echo "  配置项（cordis.patch.yml）同理。"
+echo "下一步二选一："
+echo "  bash scripts/dsh-reload.sh   → 触发热重载，不重启 App、不中断会话（推荐）"
+echo "  重启 DSH App                 → 仅当热重载失败、或改了 package.json/engines 时"
+echo "  UI 改动（src/client.js）另需刷新页面（Cmd+R）。"

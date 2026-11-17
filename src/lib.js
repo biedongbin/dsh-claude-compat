@@ -2,7 +2,7 @@
 // discovery, reader utilities, frontmatter parsing). Extracted from index.js
 // so mcp.js / hooks.js / agents.js can reuse them without circular imports.
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -206,8 +206,17 @@ export async function readTextSafe(path) {
   catch { return undefined; }
 }
 
+// A missing file is normal (undefined); a programming error is not — without
+// this distinction a typo'd helper returned undefined for EVERY path because the
+// ReferenceError was swallowed here.
 export function readTextSafeSync(path) {
-  try { return readFileSync(path, 'utf8'); } catch { return undefined; }
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'EISDIR' || error?.code === 'ENOTDIR') return undefined;
+    if (error instanceof ReferenceError || error instanceof TypeError) throw error;
+    return undefined;
+  }
 }
 
 export async function listMdFiles(dir) {

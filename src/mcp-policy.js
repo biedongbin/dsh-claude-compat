@@ -32,15 +32,34 @@ function decodeUnreserved(text) {
   });
 }
 
-// Resolve dot segments and escapes the way a URL does, so the pattern compares
-// with the same text as the server URL. `/./a` and `/a` are one path.
-function normalizePath(path) {
-  try {
-    const url = new URL(`http://pattern.invalid${decodeUnreserved(path)}`);
-    return path.includes('?') ? `${url.pathname}${url.search}` : url.pathname;
-  } catch {
-    return path;
+// RFC 3986 §5.2.4 dot-segment removal, implemented here on purpose:
+// Node's URL leaves `/a/.x/..` untouched when the popped segment starts with a
+// dot, which normalized the pattern and the server URL differently and made two
+// spellings of one path disagree.
+export function removeDotSegments(path) {
+  const query = path.indexOf('?');
+  const pathPart = query === -1 ? path : path.slice(0, query);
+  const suffix = query === -1 ? '' : path.slice(query);
+  const output = [];
+  for (const segment of pathPart.split('/')) {
+    if (segment === '.') continue;
+    if (segment === '..') {
+      if (output.length > 1) output.pop();
+      continue;
+    }
+    output.push(segment);
   }
+  let resolved = output.join('/');
+  if (resolved === '') resolved = '/';
+  // `/a/b/.` and `/a/b/..` both end at `/a/`: keep the trailing slash.
+  if (/\/(\.{1,2})?$/.test(pathPart) && !resolved.endsWith('/')) resolved += '/';
+  return `${resolved}${suffix}`;
+}
+
+// Percent-escapes for unreserved characters and dot segments are the same path to
+// an HTTP server, so both sides normalize to one spelling before comparing.
+function normalizePath(path) {
+  return removeDotSegments(decodeUnreserved(path));
 }
 
 // A host is compared in the ASCII form that URL() gives it, so `bücher.example`
@@ -99,8 +118,8 @@ export function urlMatches(pattern, url) {
   const effectivePort = actual.port !== '' ? actual.port : (DEFAULT_PORT.get(scheme) ?? '');
   if (!portAllowed(parsed, effectivePort, scheme)) return false;
   if (parsed.path === undefined || parsed.path === '') return true;
-  const target = decodeUnreserved(parsed.path.includes('?') ? `${actual.pathname}${actual.search}` : actual.pathname);
-  return globToRegExp(parsed.path).test(target);
+  const rawTarget = parsed.path.includes('?') ? `${actual.pathname}${actual.search}` : actual.pathname;
+  return globToRegExp(parsed.path).test(normalizePath(rawTarget));
 }
 
 // One policy entry against one server. `server` carries `label` (the name the

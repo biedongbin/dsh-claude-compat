@@ -96,7 +96,8 @@ test('browser requests reach native compatibility RPC while the Gateway owns /ap
   assert.equal(status.ok, true, status.error?.message);
   assert.equal(status.value.ok, true);
   assert.deepEqual(status.value.transport, { path: '/api/claude-compat', httpStatus: 200, ready: true });
-  assert.match(status.value.version, /^1\.2\./);
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(status.value.version, manifest.version);
   assert.equal(new URL(f.requests[0], f.base).pathname, f.path);
 
   const plugins = await f.call({ action: 'plugins.list', cwd: f.cwd, query: '', limit: 20 });

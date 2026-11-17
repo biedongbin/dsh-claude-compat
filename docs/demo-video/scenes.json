@@ -1,0 +1,31 @@
+{
+  "product": "dsh-claude-compat",
+  "install_command": "dsh plugin --profile web add dsh-claude-compat@latest",
+  "capture_note": "Real captured DSH UI only; review language, privacy and readability before rendering.",
+  "scenes": [
+    {
+      "id": "skills", "start": 0, "duration": 5, "screenshot": "skills.png",
+      "evidence": "README.md:24-31",
+      "en": {"heading": "Your Claude setup, connected to DSH", "subtitle": "See the status of skills, rules, Hooks and MCP in one place"},
+      "zh-CN": {"heading": "Claude 配置接入 DSH，一眼看清", "subtitle": "技能、规则、Hooks、MCP：桥接状态集中可见"}
+    },
+    {
+      "id": "plugins", "start": 5, "duration": 5, "screenshot": "plugins.png",
+      "evidence": "README.md:43-47",
+      "en": {"heading": "Manage Claude plugins inside DSH", "subtitle": "Installed plugins · Discover · Marketplaces"},
+      "zh-CN": {"heading": "插件与市场，在 DSH 直接管理", "subtitle": "已安装插件 · 发现插件 · 插件市场"}
+    },
+    {
+      "id": "history", "start": 10, "duration": 6, "screenshot": "history.png",
+      "evidence": "README.md:48; browsing and preview only, no AI handoff demonstrated",
+      "en": {"heading": "Find your Claude conversation history", "subtitle": "Search by title, with Preview and Quick resume at hand"},
+      "zh-CN": {"heading": "找回 Claude 会话历史", "subtitle": "按标题搜索，直接找到预览与一键恢复入口"}
+    },
+    {
+      "id": "closing", "start": 16, "duration": 4, "screenshot": "plugins.png",
+      "evidence": "README.md:26-31; README.md:24",
+      "en": {"heading": "Keep your tools. Start in DSH.", "subtitle": "Reload skills; restart DSH for MCP and hook changes"},
+      "zh-CN": {"heading": "带上熟悉的工具，从 DSH 开始", "subtitle": "技能可刷新；MCP 与 hooks 变更需重启 DSH"}
+    }
+  ]
+}

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 桥接总览 · 最终交付预览</title>
+<style>
+  :root{
+    --bg:#f2f2f5; --panel:#fff; --panel2:#f6f6f8; --line:#e4e4ea; --line2:#d5d5dd;
+    --ink:#1b1b1f; --ink2:#6b6b74; --ink3:#a0a0aa;
+    --brand:#111; --brandTint:#11111114; --ok:#2f9e5f; --err:#c9433a; --errTint:#c9433a12;
+    --radius:12px; --f:-apple-system,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  html[data-theme="dark"]{
+    --bg:#191919; --panel:#202020; --panel2:#262626; --line:#333; --line2:#3d3d3d;
+    --ink:#ececf0; --ink2:#9b9ba4; --ink3:#6d6d76;
+    --brand:#ececf0; --brandTint:#ffffff14; --ok:#4cc27c; --err:#ff7b72; --errTint:#ff7b7214;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:13px;line-height:1.5;padding:24px}
+  /* ── preview chrome (not part of the plugin) ── */
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .bar b{font-size:12px;color:var(--ink2);margin-right:4px}
+  .bar button{font:inherit;font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer}
+  .bar button.on{background:var(--brand);color:var(--panel);border-color:var(--brand)}
+  .stage{display:none}.stage.on{display:block}
+  /* ── app shell ── */
+  .app{display:flex;gap:0;height:min(84vh,900px);border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+  .rail{width:64px;background:var(--panel2);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;flex-shrink:0}
+  .rail .logo{width:30px;height:30px;border-radius:8px;background:var(--brand);color:var(--panel);display:grid;place-items:center;font-weight:700;font-size:12px;margin-bottom:8px}
+  .rail i{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-style:normal;font-size:15px;color:var(--ink2)}
+  .rail i.on{background:var(--brandTint);color:var(--ink);box-shadow:inset 2px 0 0 var(--brand)}
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  /* ── page header ── */
+  .head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px 6px}
+  .head h1{font-size:17px}
+  .hact{display:flex;gap:8px}
+  button.act{font:inherit;font-size:13px;min-height:32px;padding:5px 13px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer}
+  button.act:hover{background:var(--brandTint)}
+  button.act:disabled{opacity:.45;cursor:default}
+  button.act.primary{background:var(--brandTint);border-color:var(--brand);color:var(--brand);font-weight:600}
+  button.act.danger{color:var(--err)}
+  /* ── meta row ── */
+  .meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 22px 2px;font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+  .hint{padding:0 22px 12px;font-size:12px;color:var(--ink2)}
+  /* ── 3-column grid ── */
+  .grid{position:relative;flex:1;min-height:0;margin:0 22px 20px;display:grid;
+    grid-template-columns:190px 6px minmax(0,1fr) 6px 340px;border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .nav{padding:10px 8px;border-right:1px solid transparent;background:var(--panel2);overflow:auto;min-width:0}
+  .nav .sec{font-size:11px;color:var(--ink3);padding:6px 10px}
+  .nav button{display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;font:inherit;font-size:13px;
+    padding:7px 10px;border:none;background:none;border-radius:8px;cursor:pointer;color:var(--ink);text-align:left}
+  .nav button:hover{background:var(--brandTint)}
+  .nav button.on{background:var(--brandTint);color:var(--brand);font-weight:600;box-shadow:inset 2px 0 0 var(--brand)}
+  .cnt{font-size:11px;padding:0 7px;border:1px solid currentColor;border-radius:9px;opacity:.7}
+  .split{cursor:col-resize;position:relative}
+  .split:hover{background:var(--brandTint)}
+  .split::after{content:"";position:absolute;inset:0 -3px}
+  .list{padding:14px 16px;overflow:auto;min-width:0}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  input[type=search]{flex:1;min-width:140px;font:inherit;font-size:13px;min-height:34px;padding:6px 10px;border-radius:8px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+  .chip{font:inherit;font-size:12px;min-height:30px;padding:4px 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--ink);cursor:pointer}
+  .chip.on{background:var(--brandTint);border-color:var(--brand);color:var(--brand);font-weight:600}
+  .filterbar{display:flex;align-items:center;gap:10px;font-size:12px;padding:6px 10px;margin-bottom:10px;border-radius:8px;background:var(--brandTint)}
+  .row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;min-width:0}
+  .row:hover{background:var(--brandTint)}
+  .row.sel{border-color:var(--brand);background:var(--brandTint)}
+  .ico{width:30px;height:30px;border-radius:8px;background:var(--panel2);display:grid;place-items:center;flex-shrink:0}
+  .tx{flex:1;min-width:0}
+  .nm{display:block;font-weight:600;overflow-wrap:anywhere}
+  .ds{display:block;font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+  .tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:5px;border:1px solid var(--line);color:var(--ink2);margin-left:6px;vertical-align:1px}
+  .tag.dup{border-color:var(--err);color:var(--err);background:var(--errTint)}
+  .sw{width:34px;height:20px;border-radius:11px;background:var(--ok);position:relative;flex-shrink:0}
+  .sw::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;right:2px}
+  .pager{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);margin-top:12px;flex-wrap:wrap}
+  .detail{padding:16px;overflow:auto;border-left:1px solid var(--line);background:var(--panel2);min-width:0}
+  .detail h3{font-size:15px;margin-bottom:2px}
+  .kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .kv dt{color:var(--ink2);font-size:12px}
+  .kv dd{overflow-wrap:anywhere}
+  .provides{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+  .provides h4{font-size:12px;color:var(--ink2);margin-bottom:8px}
+  .pchips{display:flex;gap:8px;flex-wrap:wrap}
+  .pchip{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--ink);cursor:pointer}
+  .pchip:hover{border-color:var(--brand);color:var(--brand)}
+  .pchip b{font-size:13px}
+  .shadow{margin:10px 0;padding:10px 12px;border-radius:9px;border:1px solid var(--err);background:var(--errTint)}
+  .shadow strong{display:block;font-size:13px;color:var(--err);margin-bottom:4px}
+  .shadow p{font-size:12px;color:var(--ink2);margin:4px 0;line-height:1.55}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .filebar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+  .empty{color:var(--ink2);font-size:13px;padding:26px 0;text-align:center}
+  /* ── full-area file viewer ── */
+  .viewer{position:absolute;inset:0;z-index:6;background:var(--panel);display:flex;flex-direction:column;min-height:0;padding:16px 22px 18px}
+  .vhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .vhead h3{font-size:16px}
+  .vpath{font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+  .tnote{margin:8px 0;padding:7px 11px;border-radius:8px;background:var(--brandTint);font-size:12px;color:var(--ink2)}
+  pre{margin-top:10px;flex:1;min-height:0;overflow:auto;padding:16px 18px;border:1px solid var(--line);border-radius:9px;
+    background:var(--panel2);font-family:var(--mono);font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+  .note{padding:8px 0;font-size:12px;color:var(--ink2)}
+  /* narrow */
+  .narrow .grid{grid-template-columns:minmax(0,1fr);height:auto}
+  .narrow .nav{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line);border-right:none}
+  .narrow .nav .sec{display:none}
+  .narrow .nav button{width:auto}
+  .narrow .split{display:none}
+  .narrow .detail{border-left:none;border-top:1px solid var(--line)}
+  .narrow .app{height:auto}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>状态：</b>
+  <button class="on" data-s="list">列表 / 详情</button>
+  <button data-s="drill">插件钻取（提供内容）</button>
+  <button data-s="dup">重复项展开</button>
+  <button data-s="file">文件查看</button>
+  <button data-s="trans">一键翻译</button>
+  <button data-s="trash">回收站</button>
+  <button data-s="empty">空状态</button>
+  <button data-s="narrow">窄窗口</button>
+  <button id="theme">深色 / 浅色</button>
+</div>
+
+<!-- ══════════ 1. 列表 + 详情 ══════════ -->
+<section class="stage on" id="s-list">
+  <div class="app">
+    <div class="rail">
+      <div class="logo">ds</div><i>✚</i><i style="flex:1"></i>
+      <i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i>
+    </div>
+    <div class="main">
+      <div class="head">
+        <h1>Claude 桥接总览</h1>
+        <div class="hact"><button class="act" disabled>← 返回</button><button class="act">刷新</button></div>
+      </div>
+      <div class="meta">
+        <span>项目目录：/Users/you/project</span>
+        <button class="act">选择目录</button>
+        <span>· 状态文件：.dsh/claude-compat-state.json · 已禁用 0</span>
+        <button class="act primary">一键更新插件</button>
+      </div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。开关只作用于 DSH 注入，持久化在项目状态文件里。</div>
+      <div class="grid">
+        <nav class="nav">
+          <div class="sec">Claude 桥接总览</div>
+          <button class="on">插件<span class="cnt">20</span></button>
+          <button>技能<span class="cnt">404</span></button>
+          <button>命令<span class="cnt">4</span></button>
+          <button>Agents<span class="cnt">107</span></button>
+          <button>规则<span class="cnt">6</span></button>
+          <button>Hooks<span class="cnt">0</span></button>
+          <button>MCP<span class="cnt">5</span></button>
+          <button>🗑 回收站</button>
+        </nav>
+        <div class="split"></div>
+        <div class="list">
+          <div class="tools">
+            <input type="search" placeholder="搜索名称或描述">
+            <button class="chip">搜索</button>
+          </div>
+          <div class="row sel">
+            <span class="ico">🧩</span>
+            <span class="tx"><span class="nm">ecc</span><span class="ds">marketplace: ecc · v2.2.3</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="row">
+            <span class="ico">🧩</span>
+            <span class="tx"><span class="nm">oh-my-claudecode</span><span class="ds">marketplace: omc · v5.8.6</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="row">
+            <span class="ico">🧩</span>
+            <span class="tx"><span class="nm">context7</span><span class="ds">marketplace: claude-plugins-official · v0.0.6</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="row">
+            <span class="ico">🧩</span>
+            <span class="tx"><span class="nm">superpowers</span><span class="ds">marketplace: superpowers-marketplace · v7.0.1</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="pager"><span>每页 20 ▾</span><button class="chip" disabled>上一页</button><button class="chip" disabled>下一页</button><span>1–4 / 4</span></div>
+        </div>
+        <div class="split"></div>
+        <aside class="detail">
+          <h3>ecc <span class="tag">插件</span></h3>
+          <p class="ds">marketplace: ecc · v2.2.3</p>
+          <div class="provides">
+            <h4>这个插件提供了什么</h4>
+            <div class="pchips">
+              <span class="pchip">⚡<b>311</b><span>技能</span></span>
+              <span class="pchip">🤖<b>71</b><span>Agents</span></span>
+              <span class="pchip">🔌<b>1</b><span>MCP</span></span>
+              <span class="pchip">🪝<b>1</b><span>Hooks</span></span>
+              <span class="pchip">📜<b>1</b><span>规则</span></span>
+            </div>
+            <p class="ds" style="margin-top:8px">MCP: chrome-devtools</p>
+          </div>
+          <dl>
+            <div class="kv"><dt>来源</dt><dd>插件</dd></div>
+            <div class="kv"><dt>优先级</dt><dd>最低 · 插件（rank 750）</dd></div>
+            <div class="kv"><dt>安装路径</dt><dd>/Users/you/.claude/plugins/cache/ecc/ecc/2.2.3</dd></div>
+            <div class="kv"><dt>DSH 内</dt><dd>已启用<span class="ds" style="display:block">只影响 DSH：Claude Code 里照旧可用。</span></dd></div>
+            <div class="kv"><dt>Claude 侧</dt><dd>已启用</dd></div>
+          </dl>
+          <div class="filebar"><button class="act">📄 查看内容</button><button class="act">复制路径</button></div>
+          <div class="acts">
+            <button class="act primary">更新</button>
+            <button class="act">回写 Claude：禁用</button>
+            <button class="act danger">卸载插件（Claude 侧）</button>
+          </div>
+          <p class="note">「回写 Claude」修改的是 Claude 官方 settings.json 的 enabledPlugins，对 Claude Code 和 DSH 同时生效。</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 2. 插件钻取 ══════════ -->
+<section class="stage" id="s-drill">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="meta"><span>项目目录：/Users/you/project</span><button class="act">选择目录</button></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav">
+          <div class="sec">Claude 桥接总览</div>
+          <button>插件<span class="cnt">20</span></button>
+          <button class="on">技能<span class="cnt">311</span></button>
+          <button>命令<span class="cnt">4</span></button>
+          <button>Agents<span class="cnt">107</span></button>
+          <button>规则<span class="cnt">6</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">5</span></button>
+          <button>🗑 回收站</button>
+        </nav>
+        <div class="split"></div>
+        <div class="list">
+          <div class="filterbar"><span>只看插件：ecc</span><button class="chip">显示全部</button></div>
+          <div class="tools"><input type="search" placeholder="搜索名称或描述"><button class="chip">搜索</button></div>
+          <div class="tools">
+            <button class="chip on">全部</button><button class="chip">插件</button><button class="chip">项目 .claude</button><button class="chip">用户 ~/.claude</button>
+            <span style="flex:1"></span><button class="chip">☰ 按插件聚合</button>
+          </div>
+          <div class="row">
+            <span class="ico">⚡</span>
+            <span class="tx"><span class="nm">python-reviewer<span class="tag">插件</span></span><span class="ds">Expert Python code reviewer…</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="row">
+            <span class="ico">⚡</span>
+            <span class="tx"><span class="nm">rust-reviewer<span class="tag">插件</span></span><span class="ds">Expert Rust code reviewer…</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="pager"><span>每页 20 ▾</span><button class="chip">上一页</button><button class="chip">下一页</button><span>1–20 / 311</span></div>
+        </div>
+        <div class="split"></div>
+        <aside class="detail">
+          <h3>python-reviewer <span class="tag">技能</span></h3>
+          <p class="ds">Expert Python code reviewer specializing in PEP 8 compliance…</p>
+          <div class="filebar"><button class="act">📄 查看内容</button><button class="act">复制路径</button></div>
+          <dl>
+            <div class="kv"><dt>来源</dt><dd>插件</dd></div>
+            <div class="kv"><dt>所属插件</dt><dd>ecc</dd></div>
+            <div class="kv"><dt>优先级</dt><dd>最低 · 插件（rank 750）</dd></div>
+            <div class="kv"><dt>文件路径</dt><dd>…/ecc/2.2.3/skills/python-reviewer/SKILL.md</dd></div>
+            <div class="kv"><dt>DSH 内</dt><dd>已启用<span class="ds" style="display:block">只影响 DSH：Claude Code 里照旧可用。</span></dd></div>
+          </dl>
+          <p class="note">这条属于插件，不能单独移出——那会破坏插件完整性。请用上方插件的「回写 Claude：禁用」或「卸载插件」，或在插件页关掉它的 DSH 开关。所属插件：ecc</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 3. 重复项展开 ══════════ -->
+<section class="stage" id="s-dup">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回（3）</button><button class="act">刷新</button></div></div>
+      <div class="meta"><span>项目目录：/Users/you/project</span><button class="act">选择目录</button></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav">
+          <div class="sec">Claude 桥接总览</div>
+          <button>插件<span class="cnt">20</span></button><button>技能<span class="cnt">404</span></button>
+          <button class="on">命令<span class="cnt">23</span></button>
+          <button>Agents<span class="cnt">107</span></button><button>规则<span class="cnt">6</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">5</span></button>
+          <button>🗑 回收站</button>
+        </nav>
+        <div class="split"></div>
+        <div class="list">
+          <div class="tools"><input type="search" placeholder="搜索名称或描述"><button class="chip">搜索</button></div>
+          <div class="tools">
+            <button class="chip on">全部</button><button class="chip">插件</button><button class="chip">项目 .claude</button><button class="chip">用户 ~/.claude</button>
+            <span style="flex:1"></span><button class="chip">☰ 按插件聚合</button><button class="chip on">重复项 19</button>
+          </div>
+          <div class="row sel">
+            <span class="ico">⌨️</span>
+            <span class="tx"><span class="nm">ask<span class="tag">插件</span><span class="tag dup">重复项 · 已用 skill</span></span><span class="ds">ask</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="row">
+            <span class="ico">⌨️</span>
+            <span class="tx"><span class="nm">autoresearch<span class="tag">插件</span><span class="tag dup">重复项 · 已用 skill</span></span><span class="ds">autoresearch</span></span>
+            <span class="sw"></span>
+          </div>
+          <div class="pager"><span>每页 20 ▾</span><button class="chip">上一页</button><button class="chip">下一页</button><span>1–23 / 23</span></div>
+        </div>
+        <div class="split"></div>
+        <aside class="detail">
+          <h3>ask <span class="tag">命令</span></h3>
+          <p class="ds">ask</p>
+          <div class="shadow">
+            <strong>这条是重复项，DSH 没有加载它</strong>
+            <p>同一个插件 oh-my-claudecode 里同时提供了两种副本：生效的是 <b>skill</b> 版（ask/SKILL.md）；你正在看的这条是 <b>command</b> 版。DSH 与 Claude Code 都按名字识别，一个名字只能加载一份，所以另一份被跳过。</p>
+            <p>要不要处理：不用。它不会重复运行，也不额外占用上下文，只是一个被忽略的副本。只有当你确实想用这份副本时，才需要处理——去关掉上面说的那条生效项，或在它所属的插件里禁用。</p>
+            <button class="act">跳到当前生效的那条</button>
+          </div>
+          <dl>
+            <div class="kv"><dt>来源</dt><dd>插件</dd></div>
+            <div class="kv"><dt>所属插件</dt><dd>oh-my-claudecode</dd></div>
+            <div class="kv"><dt>文件路径</dt><dd>…/commands/ask.md</dd></div>
+          </dl>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 4. 文件查看（铺满） ══════════ -->
+<section class="stage" id="s-file">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav"><div class="sec">Claude 桥接总览</div><button>插件<span class="cnt">20</span></button><button>技能<span class="cnt">404</span></button><button>命令<span class="cnt">23</span></button><button>Agents<span class="cnt">107</span></button><button class="on">规则<span class="cnt">6</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">5</span></button><button>🗑 回收站</button></nav>
+        <div class="split"></div>
+        <div class="list"><div class="row sel"><span class="ico">📜</span><span class="tx"><span class="nm">clickable-local-file-links.md<span class="tag">用户 ~/.claude</span></span><span class="ds">injected once per session as a system-reminder</span></span><span class="sw"></span></div></div>
+        <div class="split"></div>
+        <aside class="detail"></aside>
+        <!-- full-area viewer -->
+        <div class="viewer">
+          <div class="vhead">
+            <h3>clickable-local-file-links.md</h3>
+            <div class="hact">
+              <button class="act">🌐 翻译</button>
+              <button class="act">重新读取</button>
+              <button class="act">返回详情</button>
+            </div>
+          </div>
+          <div class="vpath">/Users/you/.claude/rules/clickable-local-file-links.md · 3.9 KB · 2026/11/13 14:50:32</div>
+          <pre># 可点击本地文件链接（全局）
+
+1. 凡是提到本机文件、目录、日志、截图、构建产物、附件等，一律输出为可点击链接。
+2. 链接目标必须来自本次会话真实获取到的绝对路径；不得猜测、不得编造。
+3. 使用本会话成功读取、创建或修改得到的实际路径。路径不确定、文件被移动或用户反馈失效时，先核实
+   存在性及可读性；不得编造目标。
+4. 不得只输出文件名、行内代码路径或代码块路径代替可点击链接。不要把整条 Markdown 链接包进反引号
+   或代码块。
+5. 保留完整文件名和扩展名，正确处理空格、括号、中文及其他特殊字符，避免链接截断或指向不同文件。
+
+```js
+// 代码块保持原样，不参与翻译
+const answer = 42;
+```
+
+## HTTP/HTTPS 资源
+
+1. 使用带 `http://` 或 `https://` 的完整、真实地址，并呈现为可点击链接。</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 5. 翻译 ══════════ -->
+<section class="stage" id="s-trans">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav"><div class="sec">Claude 桥接总览</div><button>插件<span class="cnt">20</span></button><button class="on">技能<span class="cnt">404</span></button><button>命令<span class="cnt">23</span></button><button>Agents<span class="cnt">107</span></button><button>规则<span class="cnt">6</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">5</span></button><button>🗑 回收站</button></nav>
+        <div class="split"></div>
+        <div class="list"><div class="row sel"><span class="ico">⚡</span><span class="tx"><span class="nm">browser-qa<span class="tag">插件</span></span><span class="ds">Run automated post-deploy UI verification…</span></span><span class="sw"></span></div></div>
+        <div class="split"></div>
+        <aside class="detail"></aside>
+        <div class="viewer">
+          <div class="vhead">
+            <h3>browser-qa</h3>
+            <div class="hact">
+              <button class="act">↩ 看原文</button>
+              <button class="act">重新读取</button>
+              <button class="act">返回详情</button>
+            </div>
+          </div>
+          <div class="vpath">…/skills/browser-qa/SKILL.md · 6.2 KB · 2026/11/16 09:12:04</div>
+          <div class="tnote">仅用于查看，不会修改原文件；代码块保持原样。 · 来自缓存 · 译为 zh-CN</div>
+          <pre># 浏览器 QA
+
+## 用途
+
+使用浏览器自动化 MCP（claude-in-chrome、Playwright 或 Puppeteer）在部署后运行自动化 UI 验证：
+控制台错误与 Core Web Vitals 冒烟检查、表单与登录流程交互测试、三种断点下的截图视觉回归，
+以及 axe-core 无障碍审计，最终给出 SHIP / DO-NOT-SHIP 结论。
+
+## 何时使用
+
+- 在预发或预览环境测试已部署的功能
+- 交付前端改动之前
+- 评审前端 PR
+- 检查响应式布局与无障碍
+
+```bash
+npx playwright test --project=chromium
+```
+
+结论必须给出明确判断，不要用"看起来没问题"代替证据。</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 6. 回收站 ══════════ -->
+<section class="stage" id="s-trash">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav"><div class="sec">Claude 桥接总览</div><button>插件<span class="cnt">20</span></button><button>技能<span class="cnt">404</span></button><button>命令<span class="cnt">23</span></button><button>Agents<span class="cnt">107</span></button><button>规则<span class="cnt">6</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">5</span></button><button class="on">🗑 回收站</button></nav>
+        <div class="split"></div>
+        <div class="list">
+          <div class="row sel"><span class="ico">🗑</span><span class="tx"><span class="nm">old-helper</span><span class="ds">…/.claude/skills/old-helper · 2026-11-16T06:10:22Z</span></span><button class="act">恢复</button></div>
+          <div class="row"><span class="ico">🗑</span><span class="tx"><span class="nm">legacy-rule.md</span><span class="ds">…/.claude/rules/legacy-rule.md · 2026-11-15T11:02:00Z</span></span><button class="act">恢复</button></div>
+        </div>
+        <div class="split"></div>
+        <aside class="detail">
+          <h3>old-helper</h3>
+          <dl>
+            <div class="kv"><dt>原路径</dt><dd>/Users/you/.claude/skills/old-helper</dd></div>
+            <div class="kv"><dt>移入时间</dt><dd>2026-11-16T06:10:22Z</dd></div>
+          </dl>
+          <div class="acts"><button class="act primary">恢复</button></div>
+          <p class="note">恢复会把文件移回原路径并重新启用。若该路径已被新建的同名文件占用，会拒绝并提示。</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 7. 空状态 ══════════ -->
+<section class="stage" id="s-empty">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="meta"><span>项目目录：/Users/you/empty-project</span><button class="act">选择目录</button></div>
+      <div class="hint">本项目中 Claude 桥接进 DSH 的全部内容。</div>
+      <div class="grid">
+        <nav class="nav"><div class="sec">Claude 桥接总览</div><button>插件<span class="cnt">0</span></button><button>技能<span class="cnt">0</span></button><button>命令<span class="cnt">0</span></button><button>Agents<span class="cnt">0</span></button><button>规则<span class="cnt">0</span></button><button>Hooks<span class="cnt">0</span></button><button>MCP<span class="cnt">0</span></button><button>🗑 回收站</button></nav>
+        <div class="split"></div>
+        <div class="list"><div class="empty">这个项目没有 Claude 配置。检查 <code>.claude/</code> 目录是否存在，或换个项目目录。</div></div>
+        <div class="split"></div>
+        <aside class="detail"><div class="empty">选择一个条目查看详情。</div></aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 8. 窄窗口 ══════════ -->
+<section class="stage narrow" id="s-narrow">
+  <div class="app">
+    <div class="rail"><div class="logo">ds</div><i>✚</i><i style="flex:1"></i><i>🧩</i><i>⏰</i><i class="on">🔀</i><i>⋯</i><i style="flex:1"></i><i>📁</i></div>
+    <div class="main">
+      <div class="head"><h1>Claude 桥接总览</h1><div class="hact"><button class="act">← 返回</button><button class="act">刷新</button></div></div>
+      <div class="hint">窄窗口下三栏退化为单列：分类横向滚动，详情落到列表下方。</div>
+      <div class="grid">
+        <nav class="nav"><button class="on">插件<span class="cnt">20</span></button><button>技能<span class="cnt">404</span></button><button>命令<span class="cnt">23</span></button><button>Agents<span class="cnt">107</span></button><button>规则<span class="cnt">6</span></button><button>MCP<span class="cnt">5</span></button></nav>
+        <div class="list">
+          <div class="row sel"><span class="ico">🧩</span><span class="tx"><span class="nm">ecc</span><span class="ds">marketplace: ecc · v2.2.3</span></span><span class="sw"></span></div>
+          <div class="row"><span class="ico">🧩</span><span class="tx"><span class="nm">context7</span><span class="ds">marketplace: claude-plugins-official</span></span><span class="sw"></span></div>
+        </div>
+        <aside class="detail">
+          <h3>ecc <span class="tag">插件</span></h3>
+          <div class="provides"><h4>这个插件提供了什么</h4>
+            <div class="pchips"><span class="pchip">⚡<b>311</b><span>技能</span></span><span class="pchip">🤖<b>71</b><span>Agents</span></span><span class="pchip">🔌<b>1</b><span>MCP</span></span></div>
+          </div>
+          <div class="filebar"><button class="act">📄 查看内容</button></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.querySelectorAll('.bar button[data-s]').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('.bar button[data-s]').forEach((x) => x.classList.remove('on'));
+    document.querySelectorAll('.stage').forEach((s) => s.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById('s-' + b.dataset.s).classList.add('on');
+  };
+});
+document.getElementById('theme').onclick = () => {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+};
+</script>
+</body>
+</html>

@@ -4,6 +4,27 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.3.0] — 2026-11-17
+
+### Added
+- **Inventory page (三栏管理台).** A sidebar entry and a dedicated page list every skill, command, agent, rule, hook, MCP server and plugin the bridge loads from Claude. Each item has an "enabled inside DSH" switch, **on by default**, persisted per project in `.dsh/claude-compat-state.json`; turning something off affects DSH injection only, never the Claude Code side.
+- **What a plugin provides.** Plugin rows report per-kind counts (skill / command / agent / MCP / hook / rule) plus MCP server names; each counter drills into that plugin's items only. Declared-but-unmounted plugin MCP servers are listed and labelled rather than silently missing.
+- **In-page file viewer.** Any file-backed item opens its content in a full-area pane with size, modification time and reload, plus a copy-path action that falls back to `execCommand` and reports success or failure.
+- **One-click translation (view only).** Markdown prose is translated to the current DSH locale through `ctx.translator`, falling back to a one-shot model call when that service is not mounted. Fenced code blocks are never translated and never sent to a provider. Results are cached on disk by content hash + target language, and a **Translate again** action force-refreshes a stale entry. The original file is never modified; original and translation are shown side by side.
+- **Back button** with a ten-entry view history covering tabs, filters, drill-downs, paging and row selection.
+- **`scripts/dsh-reload.sh`** deploys and hot-reloads the plugin without restarting the app or interrupting a session.
+
+### Fixed
+- **`readTextSafeSync` never worked.** It called `readFileSync` without importing it, so every call threw, the empty `catch` returned `undefined`, and callers always saw "file does not exist" — plugin MCP and hook detection had been silently returning zero. The helper now distinguishes a missing path from a programming error and rethrows the latter.
+- **URL patterns and server URLs normalized differently.** Node's `URL` leaves `/a/.x/..` untouched when the popped segment starts with a dot, so two spellings of one path disagreed. Dot-segment removal now follows RFC 3986 and applies to both sides. This also clears the property test that had been failing since the Node 22 upgrade.
+- **Counts disagreed across surfaces.** The sidebar, the list total and the duplicate badge are now derived from the same filtered set, and duplicates are hidden behind an explicit toggle whose badge counts one kind only.
+- **Layout and styling.** The three-column grid keeps exactly five direct children, long text wraps instead of scrolling horizontally, selected rows use a tint rather than a solid brand fill, and a widened detail column can no longer starve the list.
+
+### Verification
+- `npm run check`: 815 passed, 0 failed.
+- New suites: inventory aggregation and trash round-trips, translation chunking and cache reuse, reader regressions, and UI structure assertions (grid child order, no unlabeled buttons, en/zh key parity).
+- Hot reload verified with an unchanged app process; no restart was required for any of the above.
+
 ## [1.2.1] — 2026-11-08
 
 ### Fixed

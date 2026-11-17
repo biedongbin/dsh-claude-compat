@@ -1,0 +1,101 @@
+{
+  "duration": 41.295,
+  "fps": 30,
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.4,
+      "id": "",
+      "title": "dsh-claude-compat",
+      "beats": []
+    },
+    {
+      "start": 2.4,
+      "end": 12.156,
+      "id": "A",
+      "title": "一套配置，继续使用",
+      "beats": [
+        {
+          "text": "把已有的 Claude Code 配置带到 DSH。",
+          "focus": null,
+          "start": 3.3,
+          "end": 6.897,
+          "html": "把已有的 Claude Code 配置带到 DSH。"
+        },
+        {
+          "text": "复用技能、命令、规则与代理定义。",
+          "focus": null,
+          "start": 7.247,
+          "end": 11.356,
+          "html": "复用技能、命令、规则与代理定义。"
+        }
+      ]
+    },
+    {
+      "start": 12.156,
+      "end": 20.905,
+      "id": "B",
+      "title": "从命令开始",
+      "beats": [
+        {
+          "text": "用 cc-plugin 管理插件与市场。",
+          "focus": null,
+          "start": 13.056,
+          "end": 15.884,
+          "html": "用 cc-plugin 管理插件与市场。"
+        },
+        {
+          "text": "新增技能后，刷新当前会话目录。",
+          "focus": null,
+          "start": 16.234,
+          "end": 20.105,
+          "html": "新增技能后，刷新当前会话目录。"
+        }
+      ]
+    },
+    {
+      "start": 20.905,
+      "end": 30.185,
+      "id": "C",
+      "title": "让历史成为下一步的背景",
+      "beats": [
+        {
+          "text": "用 cc-resume 选择 Claude 历史会话。",
+          "focus": null,
+          "start": 21.805,
+          "end": 24.779,
+          "html": "用 cc-resume 选择 Claude 历史会话。"
+        },
+        {
+          "text": "交给 DSH 按需阅读，再总结任务状态。",
+          "focus": null,
+          "start": 25.129,
+          "end": 29.385,
+          "html": "交给 DSH 按需阅读，再总结任务状态。"
+        }
+      ]
+    },
+    {
+      "start": 30.185,
+      "end": 39.795,
+      "id": "D",
+      "title": "带着明确的边界迁移",
+      "beats": [
+        {
+          "text": "技能可刷新，MCP 与 hooks 变化需重启。",
+          "focus": null,
+          "start": 31.085,
+          "end": 35.25,
+          "html": "技能可刷新，MCP 与 hooks 变化需重启。"
+        },
+        {
+          "text": "代理定义通过委派技能接入。",
+          "focus": null,
+          "start": 35.6,
+          "end": 38.995,
+          "html": "代理定义通过委派技能接入。"
+        }
+      ]
+    }
+  ]
+}

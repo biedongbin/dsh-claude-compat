@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude 桥接总览页 · 3 种界面方案</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --panel:#ffffff; --border:#e3e3e8; --border2:#d6d6dd;
+    --label1:#1d1d1f; --label2:#6e6e73; --label3:#aeaeb2;
+    --brand:#4f6ef7; --brand-weak:#eef1fe; --ok:#34a853; --warn:#e8a100; --err:#ea4335;
+    --radius:12px; --font:-apple-system,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:#ececef;color:var(--label1);font-size:14px;line-height:1.5;padding:24px}
+  /* ── 方案切换器 ─────────────────────── */
+  .switcher{position:sticky;top:0;z-index:50;background:#ececefcc;backdrop-filter:blur(8px);
+    display:flex;gap:8px;align-items:center;padding:10px 14px;border:1px solid var(--border2);
+    border-radius:14px;margin-bottom:20px;flex-wrap:wrap}
+  .switcher strong{font-size:13px;color:var(--label2);margin-right:6px}
+  .switcher button{font:inherit;font-size:13px;padding:7px 14px;border-radius:9px;border:1px solid var(--border2);
+    background:var(--panel);cursor:pointer;color:var(--label1)}
+  .switcher button:hover{background:#f7f7fa}
+  .switcher button.on{background:var(--label1);color:#fff;border-color:var(--label1)}
+  .variant{display:none}
+  .variant.show{display:block}
+  /* ── 通用侧边栏 mock（三个方案共用骨架） ── */
+  .app{display:flex;gap:14px;height:calc(100vh - 120px);min-height:640px}
+  .sidebar{width:76px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:8px;flex-shrink:0}
+  .sidebar .logo{width:34px;height:34px;border-radius:9px;background:var(--label1);color:#fff;display:grid;
+    place-items:center;font-weight:700;font-size:13px;margin-bottom:6px}
+  .rail-item{width:46px;height:46px;border-radius:11px;display:grid;place-items:center;color:var(--label2);
+    cursor:pointer;position:relative;font-size:17px;user-select:none}
+  .rail-item:hover{background:#f2f2f5;color:var(--label1)}
+  .rail-item.on{background:var(--brand-weak);color:var(--brand)}
+  .rail-item .tip{position:absolute;left:56px;background:var(--label1);color:#fff;font-size:12px;
+    padding:4px 10px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;z-index:10}
+  .rail-item:hover .tip{opacity:1}
+  .rail-item .dot{position:absolute;top:9px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .main{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    display:flex;flex-direction:column;overflow:hidden;min-width:0}
+  /* toggle 开关 */
+  .tgl{position:relative;width:36px;height:21px;flex-shrink:0}
+  .tgl input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;z-index:2}
+  .tgl i{position:absolute;inset:0;background:#d3d3da;border-radius:20px;transition:.18s}
+  .tgl i::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#fff;
+    top:2px;left:2px;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .tgl input:checked+i{background:var(--ok)}
+  .tgl input:checked+i::after{left:17px}
+  .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:5px;border:1px solid var(--border2);
+    color:var(--label2);vertical-align:middle}
+  .badge.src-project{border-color:#b9c8fd;color:var(--brand);background:var(--brand-weak)}
+  .badge.src-user{border-color:#e2d3ad;color:#8a6d00;background:#fdf6e3}
+  .badge.src-plugin{border-color:#c9b8e8;color:#6b3fa0;background:#f4eefa}
+  .badge.dead{border-color:#f0c4bf;color:var(--err);background:#fdeeec}
+  .muted{color:var(--label2);font-size:12px}
+  .warn{color:var(--err)}
+  /* ══════════ 方案 A：分组仪表盘 ══════════ */
+  .va-head{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border)}
+  .va-head h1{font-size:17px}
+  .va-body{flex:1;overflow:auto;padding:20px 24px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .stat{border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;background:#fff}
+  .stat:hover{border-color:var(--brand)}
+  .stat.sel{border-color:var(--brand);background:var(--brand-weak)}
+  .stat b{font-size:22px;display:block;line-height:1.2}
+  .stat span{font-size:12px;color:var(--label2)}
+  .grp{border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .grp>summary{display:flex;align-items:center;gap:10px;list-style:none;cursor:pointer;padding:13px 16px;
+    font-weight:600;background:#fafafc;border-bottom:1px solid var(--border)}
+  .grp>summary::-webkit-details-marker{display:none}
+  .grp>summary .chev{margin-left:auto;transition:.15s;color:var(--label2)}
+  .grp[open]>summary .chev{transform:rotate(90deg)}
+  .va-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f0f0f3}
+  .va-row:last-child{border-bottom:none}
+  .va-row .nm{font-weight:600;overflow-wrap:anywhere}
+  .va-row .desc{font-size:12px;color:var(--label2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px}
+  .va-row .meta{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .va-row.off .nm{color:var(--label3);text-decoration:line-through}
+  .va-row.off .desc{display:none}
+  /* ══════════ 方案 B：三栏管理台 ══════════ */
+  .vb-wrap{flex:1;display:grid;grid-template-columns:210px 1fr 300px;min-height:0}
+  .vb-nav{border-right:1px solid var(--border);padding:14px 10px;overflow:auto;background:#fafafb}
+  .vb-nav .sec{font-size:11px;color:var(--label3);padding:8px 10px 4px;letter-spacing:.5px}
+  .vb-nav a{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;
+    color:var(--label1);text-decoration:none;font-size:13px;cursor:pointer}
+  .vb-nav a:hover{background:#f0f0f4}
+  .vb-nav a.on{background:var(--brand-weak);color:var(--brand);font-weight:600}
+  .vb-nav .cnt{font-size:11px;color:var(--label2);background:#fff;border:1px solid var(--border);border-radius:10px;padding:0 7px}
+  .vb-nav a.on .cnt{border-color:#b9c8fd}
+  .vb-list{overflow:auto;padding:16px 18px;min-width:0}
+  .vb-toolbar{display:flex;gap:8px;margin-bottom:14px}
+  .vb-toolbar input,.vb-toolbar select{font:inherit;font-size:13px;border:1px solid var(--border2);border-radius:8px;
+    padding:7px 10px;background:#fff;color:var(--label1)}
+  .vb-toolbar input{flex:1;min-width:120px}
+  .vb-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+    margin-bottom:8px;cursor:pointer;transition:.12s}
+  .vb-item:hover{border-color:var(--border2);background:#fbfbfd}
+  .vb-item.sel{border-color:var(--brand);background:var(--brand-weak)}
+  .vb-item .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:16px;
+    background:#f0f0f4;flex-shrink:0}
+  .vb-item .tx{min-width:0;flex:1}
+  .vb-item .nm{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vb-item .ds{font-size:12px;color:var(--label2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vb-item.off .nm,.vb-item.off .ds{color:var(--label3)}
+  .vb-item.off .nm{text-decoration:line-through}
+  .vb-detail{border-left:1px solid var(--border);overflow:auto;padding:16px;background:#fafafb}
+  .vb-detail h3{font-size:14px;margin-bottom:2px}
+  .vb-detail .kv{margin:14px 0;padding-bottom:14px;border-bottom:1px solid var(--border)}
+  .vb-detail .kv dt{font-size:11px;color:var(--label3);margin-bottom:3px}
+  .vb-detail .kv dd{font-size:13px;overflow-wrap:anywhere}
+  .vb-actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+  .btn{font:inherit;font-size:13px;border-radius:9px;border:1px solid var(--border2);background:#fff;
+    padding:8px 12px;cursor:pointer;text-align:center}
+  .btn:hover{background:#f5f5f8}
+  .btn.danger{color:var(--err);border-color:#f0c4bf}
+  .btn.danger:hover{background:#fdeeec}
+  .btn.ghost{border-style:dashed;color:var(--label2)}
+  /* ══════════ 方案 C：密集审计表 ══════════ */
+  .vc-head{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .vc-head h1{font-size:16px}
+  .vc-head .sp{flex:1}
+  .vc-body{flex:1;overflow:auto;padding:0 22px 20px}
+  table.audit{width:100%;border-collapse:collapse;font-size:13px}
+  .audit th{position:sticky;top:0;background:#fff;text-align:left;font-size:11px;color:var(--label3);
+    font-weight:600;letter-spacing:.4px;padding:10px 10px;border-bottom:1px solid var(--border2);z-index:5}
+  .audit td{padding:9px 10px;border-bottom:1px solid #f0f0f3;vertical-align:middle}
+  .audit tr:hover td{background:#fafafc}
+  .audit .nm{font-weight:600}
+  .audit code{font-size:11.5px;background:#f2f2f5;padding:1px 6px;border-radius:5px;color:var(--label2)}
+  .audit tr.off td{opacity:.55}
+  .audit tr.off .nm{text-decoration:line-through}
+  .mini{font-size:11px;border:1px solid var(--border2);background:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--label2)}
+  .mini:hover{color:var(--err);border-color:#f0c4bf}
+  .rankbar{display:inline-flex;height:5px;width:56px;border-radius:4px;background:#ececef;overflow:hidden;vertical-align:middle}
+  .rankbar i{display:block;height:100%;background:var(--brand)}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--label2);margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <strong>界面方案：</strong>
+  <button class="on" data-v="A">A · 卡片仪表盘</button>
+  <button data-v="B">B · 三栏管理台</button>
+  <button data-v="C">C · 密集审计表</button>
+  <span style="margin-left:auto" class="muted">左侧为侧边栏示意 · 新入口在「插件」下方（绿点图标）· 所有开关可点击试玩</span>
+</div>
+
+<!-- ══════════════════ 方案 A ══════════════════ -->
+<div class="variant show" id="vA">
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo">ds</div>
+      <div class="rail-item">✚<span class="tip">新会话</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">🧩<span class="tip">插件</span></div>
+      <div class="rail-item">⏰<span class="tip">自动化任务</span></div>
+      <div class="rail-item on"><span class="dot"></span>🔀<span class="tip">Claude 桥接总览（新）</span></div>
+      <div class="rail-item">⋯<span class="tip">更多</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">📁<span class="tip">工作区</span></div>
+    </div>
+    <div class="main">
+      <div class="va-head">
+        <h1>Claude 桥接总览</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn">刷新</button>
+          <button class="btn ghost">全局设置</button>
+        </div>
+      </div>
+      <div class="va-body">
+        <div class="stat-grid">
+          <div class="stat sel"><b>1,247</b><span>技能 Skills</span></div>
+          <div class="stat"><b>96</b><span>命令 Commands</span></div>
+          <div class="stat"><b>3</b><span>规则 Rules</span></div>
+          <div class="stat"><b>12</b><span>插件 Plugins</span></div>
+          <div class="stat"><b>8</b><span>Agents</span></div>
+          <div class="stat"><b>5</b><span>Hooks</span></div>
+          <div class="stat"><b>4</b><span>MCP 服务器</span></div>
+        </div>
+
+        <details class="grp" open>
+          <summary>🧩 插件 <span class="badge src-plugin">12 个来源 ~/.claude/plugins</span><span class="chev">▸</span></summary>
+          <div class="va-row">
+            <div><div class="nm">cc-sse-icons <span class="badge src-plugin">marketplace: thinksfast</span></div>
+            <div class="desc">Streaming icons for Claude Code UI</div></div>
+            <div class="meta"><span class="badge">rank 750</span>
+              <label class="tgl"><input type="checkbox" checked onchange="this.closest('.va-row').classList.toggle('off',!this.checked)"><i></i></label></div>
+          </div>
+          <div class="va-row off">
+            <div><div class="nm">drift-controller <span class="badge src-plugin">marketplace: drift</span></div>
+            <div class="desc">已被此开关禁用 · DSH 会话内不再注入</div></div>
+            <div class="meta"><span class="badge">rank 750</span>
+              <label class="tgl"><input type="checkbox" onchange="this.closest('.va-row').classList.toggle('off',!this.checked)"><i></i></label></div>
+          </div>
+        </details>
+
+        <details class="grp" open>
+          <summary>⚡ 技能 Skills <span class="badge">项目 214 · 用户 986 · 插件 47</span><span class="chev">▸</span></summary>
+          <div class="va-row">
+            <div><div class="nm">python-reviewer <span class="badge src-project">项目 .claude</span></div>
+            <div class="desc">Expert Python code reviewer specializing in PEP 8 compliance…</div></div>
+            <div class="meta"><span class="badge">rank 50</span>
+              <label class="tgl"><input type="checkbox" checked onchange="this.closest('.va-row').classList.toggle('off',!this.checked)"><i></i></label></div>
+          </div>
+          <div class="va-row">
+            <div><div class="nm">lark-im <span class="badge src-user">用户 ~/.claude</span></div>
+            <div class="desc">飞书即时通讯：收发消息和管理群聊</div></div>
+            <div class="meta"><span class="badge">rank 700</span>
+              <label class="tgl"><input type="checkbox" checked onchange="this.closest('.va-row').classList.toggle('off',!this.checked)"><i></i></label></div>
+          </div>
+          <div class="va-row">
+            <div><div class="nm">django-reviewer <span class="badge dead">未生效 · 被同名 DSH 原生项覆盖</span></div>
+            <div class="desc">Expert Django code reviewer…（rank 700 败给 DSH 原生 rank 600）</div></div>
+            <div class="meta"><span class="badge">rank 700</span>
+              <label class="tgl"><input type="checkbox" checked onchange="this.closest('.va-row').classList.toggle('off',!this.checked)"><i></i></label></div>
+          </div>
+          <div class="va-row" style="background:#fbfbfd">
+            <div class="muted" style="flex:1">… 其余 1,244 条 · <a href="#" style="color:var(--brand)">搜索 / 筛选</a></div>
+          </div>
+        </details>
+
+        <details class="grp">
+          <summary>⌨️ 命令 Commands <span class="badge">96 · 仅展示</span><span class="chev">▸</span></summary>
+        </details>
+        <details class="grp">
+          <summary>📜 规则 Rules <span class="badge">3 个文件 · 每会话注入 1 条 system-reminder</span><span class="chev">▸</span></summary>
+        </details>
+        <details class="grp">
+          <summary>🤖 Agents / 🪝 Hooks / 🔌 MCP <span class="badge">8 · 5 · 4</span><span class="chev">▸</span></summary>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ 方案 B ══════════════════ -->
+<div class="variant" id="vB">
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo">ds</div>
+      <div class="rail-item">✚<span class="tip">新会话</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">🧩<span class="tip">插件</span></div>
+      <div class="rail-item">⏰<span class="tip">自动化任务</span></div>
+      <div class="rail-item on"><span class="dot"></span>🔀<span class="tip">Claude 桥接总览（新）</span></div>
+      <div class="rail-item">⋯<span class="tip">更多</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">📁<span class="tip">工作区</span></div>
+    </div>
+    <div class="main">
+      <div class="va-head"><h1>Claude 桥接 · 能力治理</h1>
+        <span class="muted">项目 dsh-claude-compat · 状态文件 .dsh/claude-compat-state.json</span></div>
+      <div class="vb-wrap">
+        <nav class="vb-nav">
+          <div class="sec">加载清单</div>
+          <a class="on">🧩 插件 <span class="cnt">12</span></a>
+          <a>⚡ 技能 <span class="cnt">1247</span></a>
+          <a>⌨️ 命令 <span class="cnt">96</span></a>
+          <a>🤖 Agents <span class="cnt">8</span></a>
+          <div class="sec">会话注入</div>
+          <a>📜 规则 <span class="cnt">3</span></a>
+          <a>🪝 Hooks <span class="cnt">5</span></a>
+          <a>🔌 MCP <span class="cnt">4</span></a>
+          <div class="sec">治理</div>
+          <a>🗑️ 回收站 <span class="cnt">2</span></a>
+          <a>📋 操作审计 <span class="cnt">17</span></a>
+        </nav>
+        <div class="vb-list">
+          <div class="vb-toolbar">
+            <input placeholder="搜索名称 / 描述…">
+            <select><option>全部来源</option><option>项目 .claude</option><option>用户 ~/.claude</option><option>插件</option></select>
+            <select><option>全部状态</option><option>已启用</option><option>已禁用</option><option>未生效(冲突)</option></select>
+          </div>
+          <div class="vb-item sel">
+            <div class="ico">🧩</div>
+            <div class="tx"><div class="nm">cc-sse-icons <span class="badge src-plugin">thinksfast/marketplace</span></div>
+              <div class="ds">Streaming icons for Claude Code UI · 含 3 skills / 1 MCP</div></div>
+            <label class="tgl"><input type="checkbox" checked onchange="this.closest('.vb-item').classList.toggle('off',!this.checked)"><i></i></label>
+          </div>
+          <div class="vb-item">
+            <div class="ico">⚡</div>
+            <div class="tx"><div class="nm">lark-base <span class="badge src-user">用户 ~/.claude</span></div>
+              <div class="ds">飞书多维表格（Base）操作：建表、字段、记录、视图…</div></div>
+            <label class="tgl"><input type="checkbox" checked onchange="this.closest('.vb-item').classList.toggle('off',!this.checked)"><i></i></label>
+          </div>
+          <div class="vb-item off">
+            <div class="ico">⚡</div>
+            <div class="tx"><div class="nm">carrier-relationship-management <span class="badge src-user">用户</span></div>
+              <div class="ds">Manage truckload, LTL, and intermodal carrier portfolios…</div></div>
+            <label class="tgl"><input type="checkbox" onchange="this.closest('.vb-item').classList.toggle('off',!this.checked)"><i></i></label>
+          </div>
+          <div class="vb-item">
+            <div class="ico">⚡</div>
+            <div class="tx"><div class="nm">django-reviewer <span class="badge dead">未生效 · 被 DSH 原生覆盖</span></div>
+              <div class="ds">Expert Django code reviewer specializing in ORM correctness…</div></div>
+            <label class="tgl"><input type="checkbox" checked onchange="this.closest('.vb-item').classList.toggle('off',!this.checked)"><i></i></label>
+          </div>
+        </div>
+        <aside class="vb-detail">
+          <h3>cc-sse-icons</h3>
+          <span class="muted">插件 · thinksfast marketplace</span>
+          <dl>
+            <div class="kv"><dt>安装路径</dt><dd>~/.claude/plugins/cc-sse-icons</dd></div>
+            <div class="kv"><dt>提供内容</dt><dd>3 skills · 1 命令 · 1 MCP 服务器</dd></div>
+            <div class="kv"><dt>生效 rank</dt><dd>750（最低优先级，冲突时让位）</dd></div>
+            <div class="kv"><dt>DSH 内状态</dt><dd style="color:var(--ok)">● 已启用（默认全开）</dd></div>
+            <div class="kv"><dt>Claude 侧状态</dt><dd>● 已启用 · 未回写</dd></div>
+          </dl>
+          <div class="vb-actions">
+            <button class="btn">⟲ 回写 Claude（写入 disabled）</button>
+            <button class="btn danger">🗑 物理移除（移入回收站）</button>
+            <button class="btn ghost">查看清单快照</button>
+          </div>
+          <p class="muted" style="margin-top:12px">回写 / 移除均需二次确认并记入操作审计；移除内容可在「回收站」恢复。</p>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ 方案 C ══════════════════ -->
+<div class="variant" id="vC">
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo">ds</div>
+      <div class="rail-item">✚<span class="tip">新会话</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">🧩<span class="tip">插件</span></div>
+      <div class="rail-item">⏰<span class="tip">自动化任务</span></div>
+      <div class="rail-item on"><span class="dot"></span>🔀<span class="tip">Claude 桥接总览（新）</span></div>
+      <div class="rail-item">⋯<span class="tip">更多</span></div>
+      <div style="flex:1"></div>
+      <div class="rail-item">📁<span class="tip">工作区</span></div>
+    </div>
+    <div class="main">
+      <div class="vc-head">
+        <h1>Claude 加载审计</h1>
+        <input placeholder="过滤…" style="font:inherit;font-size:13px;border:1px solid var(--border2);border-radius:8px;padding:7px 10px;width:220px">
+        <select style="font:inherit;font-size:13px;border:1px solid var(--border2);border-radius:8px;padding:7px 10px">
+          <option>全部类型</option><option>skill</option><option>command</option><option>rule</option><option>plugin</option><option>hook</option><option>mcp</option></select>
+        <div class="sp"></div>
+        <span class="badge">共 1,375 条 · 已禁用 2 · 冲突覆盖 1</span>
+        <button class="btn">导出 CSV</button>
+      </div>
+      <div class="vc-body">
+        <table class="audit">
+          <thead><tr>
+            <th style="width:110px">类型</th><th>名称</th><th>来源</th><th>路径</th>
+            <th style="width:80px">rank</th><th style="width:130px">DSH 生效</th><th style="width:60px">回写</th><th style="width:80px"></th>
+          </tr></thead>
+          <tbody>
+            <tr><td>plugin</td><td class="nm">cc-sse-icons</td><td><span class="badge src-plugin">插件</span></td>
+              <td><code>~/.claude/plugins/cc-sse-icons</code></td>
+              <td><span class="rankbar"><i style="width:20%"></i></span> 750</td>
+              <td><label class="tgl"><input type="checkbox" checked onchange="this.closest('tr').classList.toggle('off',!this.checked)"><i></i></label></td>
+              <td><button class="mini">回写</button></td><td><button class="mini">移除</button></td></tr>
+            <tr><td>skill</td><td class="nm">python-reviewer</td><td><span class="badge src-project">项目</span></td>
+              <td><code>.claude/skills/python-reviewer</code></td>
+              <td><span class="rankbar"><i style="width:92%"></i></span> 50</td>
+              <td><label class="tgl"><input type="checkbox" checked onchange="this.closest('tr').classList.toggle('off',!this.checked)"><i></i></label></td>
+              <td><span class="muted">—</span></td><td><button class="mini">移除</button></td></tr>
+            <tr><td>skill</td><td class="nm">lark-sheets</td><td><span class="badge src-user">用户</span></td>
+              <td><code>~/.claude/skills/lark-sheets</code></td>
+              <td><span class="rankbar"><i style="width:28%"></i></span> 700</td>
+              <td><label class="tgl"><input type="checkbox" checked onchange="this.closest('tr').classList.toggle('off',!this.checked)"><i></i></label></td>
+              <td><span class="muted">—</span></td><td><button class="mini">移除</button></td></tr>
+            <tr class="off"><td>skill</td><td class="nm">carrier-relationship-management</td><td><span class="badge src-user">用户</span></td>
+              <td><code>~/.claude/skills/carrier-…</code></td>
+              <td><span class="rankbar"><i style="width:28%"></i></span> 700</td>
+              <td><label class="tgl"><input type="checkbox" onchange="this.closest('tr').classList.toggle('off',!this.checked)"><i></i></label></td>
+              <td><span class="muted">—</span></td><td><button class="mini">恢复</button></td></tr>
+            <tr><td>skill</td><td class="nm">django-reviewer <span class="badge dead">被覆盖</span></td><td><span class="badge src-user">用户</span></td>
+              <td><code>~/.claude/skills/django-reviewer</code></td>
+              <td><span class="rankbar"><i style="width:28%"></i></span> 700</td>
+              <td><span class="muted">未生效</span></td>
+              <td><span class="muted">—</span></td><td><button class="mini">移除</button></td></tr>
+            <tr><td>command</td><td class="nm">/cc-plugin</td><td><span class="badge">本插件</span></td>
+              <td><code>src/plugin-manager.js</code></td><td><span class="muted">—</span></td>
+              <td><span class="muted">仅展示</span></td><td><span class="muted">—</span></td><td></td></tr>
+            <tr><td>rule</td><td class="nm">git-author-policy.md</td><td><span class="badge">项目</span></td>
+              <td><code>.claude/rules/git-author-policy.md</code></td><td><span class="muted">注入</span></td>
+              <td><span class="muted">仅展示</span></td><td><span class="muted">—</span></td><td><button class="mini">移除</button></td></tr>
+            <tr><td>mcp</td><td class="nm">exa</td><td><span class="badge">.mcp.json</span></td>
+              <td><code>项目 .mcp.json</code></td><td><span class="muted">进程级</span></td>
+              <td><label class="tgl"><input type="checkbox" checked onchange="this.closest('tr').classList.toggle('off',!this.checked);document.getElementById('mcpNote').style.display=this.checked?'none':'block'"><i></i></label></td>
+              <td><button class="mini">回写</button></td><td><button class="mini">移除</button></td></tr>
+          </tbody>
+        </table>
+        <div class="legend">
+          <span>rank 越低优先级越高（50 项目 &gt; 600 DSH 原生 &gt; 700 用户 &gt; 750 插件）</span>
+        </div>
+        <p id="mcpNote" class="warn" style="display:none;margin-top:8px">⚠ MCP 开关变更需重启 DSH 生效</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.switcher button').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.switcher button').forEach(b=>b.classList.remove('on'));
+    document.querySelectorAll('.variant').forEach(v=>v.classList.remove('show'));
+    btn.classList.add('on');
+    document.getElementById('v'+btn.dataset.v).classList.add('show');
+  };
+});
+</script>
+</body>
+</html>
