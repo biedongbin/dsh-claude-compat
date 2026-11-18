@@ -27,13 +27,11 @@
 
 ![DSH 内的 Claude Code 插件管理](docs/demo-video/screenshots/zh-CN/plugin-navigation.png)
 
-## 演示视频 · 34 秒
+## 演示视频 · 61 秒 · 完整版
 
-https://github.com/user-attachments/assets/429c9039-ec83-49c4-8ba9-7553cc7bc1f4
+[观看／下载中文 MP4](docs/videos/dsh-claude-compat-2_0-complete-zh-CN.mp4) · [English video](docs/videos/dsh-claude-compat-2_0-complete-en.mp4)
 
-[观看／下载中文 MP4](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4) · [English video](docs/videos/dsh-claude-compat-interactive-en.mp4)
-
-展示完整插件页面、对话内管理卡片、历史接续和技能实际回复。录制使用明确标注的演示历史与临时演示技能，个人信息已遮盖。[录制源与剪辑说明](docs/demo-video/README.md)。
+在 2.0.0 真实界面上连续演示完整流程：界面安装入口、`/cc-plugin` 管理与筛选、桥接技能的实际模型回复、`/cc-resume` 预览并接续历史（真实总结）、Claude 桥接总览、能力下钻与即时搜索、源文件查看。1 倍速、无声；模型等待已剪去，回复完整保留。录制使用明确标注的演示历史与临时演示技能，个人信息已遮盖。[录制源与剪辑说明](docs/demo-video/complete-v2-production.md)。
 
 ## 快速开始
 
@@ -84,7 +82,7 @@ dsh web
 - **阅读与管理文件：** 在查看器打开有文件的条目、复制路径，并将受支持的项目文件移入项目回收站；恢复时不会覆盖已有文件。
 - **仅供查看的翻译：** 将正文译为当前 DSH 界面语言，原文与译文并排显示。原文件不变；围栏代码块原样保留，不发送给翻译提供方。结果按原文内容与目标语言缓存到磁盘；命中缓存不发起提供方调用，**重新翻译**会请求新译文。优先使用 DSH 翻译服务；未挂载该服务时，使用配置的默认模型逐段翻译，消耗模型 token，并可能产生费用。大文件可能需要多次调用。关闭并重新打开查看器可恢复进度；失败、取消或截断的输出不会作为成功译文保存。
 
-能力与升级边界见[桥接机制](docs/readme/zh-cn/bridge-behavior.md)、[命令说明](docs/readme/zh-cn/commands.md)及 [2.0.0 更新日志](CHANGELOG.zh-CN.md#200--2026-11-17)。上方演示视频早于本次总览页更新。
+能力与升级边界见[桥接机制](docs/readme/zh-cn/bridge-behavior.md)、[命令说明](docs/readme/zh-cn/commands.md)及 [2.0.0 更新日志](CHANGELOG.zh-CN.md#200--2026-11-17)。上方演示视频已包含总览页内容。
 
 ## 更新日志
 

@@ -27,6 +27,8 @@ WORK = ROOT / ".tmp/interaction-render"
 OUTPUT = ROOT / "docs/videos"
 EDIT = Path(__file__).with_name("interaction-edit.json")
 REPORT = OUTPUT / "interaction-verification.json"
+PREFIX = "dsh-claude-compat-interactive"
+REVIEW = OUTPUT / "interactive-review"
 LANGUAGES = ("zh-CN", "en")
 
 
@@ -258,17 +260,30 @@ def render_language(language: str, config: dict, prepared: tuple, overwrite: boo
     listing = work / "frames.ffconcat"
     write_concat(listing, pieces)
     duration = sum(length for _, length in pieces)
-    movie = OUTPUT / f"dsh-claude-compat-interactive-{language}.mp4"
-    poster = OUTPUT / f"dsh-claude-compat-interactive-{language}-poster.png"
+    movie = OUTPUT / f"{PREFIX}-{language}.mp4"
+    poster = OUTPUT / f"{PREFIX}-{language}-poster.png"
     mode = "-y" if overwrite else "-n"
     width, height = config["width"], config["height"]
-    run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", mode,
-         "-f", "concat", "-safe", "0", "-i", str(listing), "-t", f"{duration:.9f}",
+    # Sample the real timestamped frames at the delivery rate. MJPEG pipe works
+    # with older standalone encoders whose concat demuxer lacks option directives.
+    frame_count = math.ceil(duration * config["fps"])
+    payload = bytearray()
+    piece_index, piece_end = 0, pieces[0][1]
+    for index in range(frame_count):
+        instant = index / config["fps"]
+        while instant >= piece_end and piece_index < len(pieces) - 1:
+            piece_index += 1
+            piece_end += pieces[piece_index][1]
+        payload.extend(pieces[piece_index][0]["path"].read_bytes())
+    command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", mode,
+         "-f", "image2pipe", "-framerate", str(config["fps"]), "-c:v", "mjpeg",
+         "-i", "-", "-t", f"{duration:.9f}",
          "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2:out_range=tv,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,setparams=range=limited",
-         "-fps_mode", "cfr", "-r", str(config["fps"]), "-an", "-c:v", "libx264",
-         "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-color_range", "tv", "-movflags", "+faststart", str(movie)])
+         "-vsync", "cfr", "-r", str(config["fps"]), "-an", "-c:v", "libx264",
+         "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-color_range", "tv", "-movflags", "+faststart", str(movie)]
+    subprocess.run(command, input=payload, check=True, capture_output=True, cwd=ROOT, timeout=60)
     media = probe(movie, duration, config, ffprobe)
-    review = OUTPUT / "interactive-review" / language
+    review = REVIEW / language
     review.mkdir(parents=True, exist_ok=True)
     keyframes = []
     for scene in scenes:
@@ -290,15 +305,33 @@ def render_language(language: str, config: dict, prepared: tuple, overwrite: boo
 
 
 def main() -> int:
+    global SOURCE, EDIT, PREFIX, REPORT, WORK, REVIEW
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lang", choices=(*LANGUAGES, "both"), default="both")
     parser.add_argument("--render", action="store_true", help="explicitly enable encoding and final keyframe extraction")
     parser.add_argument("--preview", action="store_true", help="with --render, also identifies extracted actual per-scene review frames (always generated)")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--capture-root", type=Path, default=SOURCE,
+                        help="capture root containing language/scene directories")
+    parser.add_argument("--edit-manifest", type=Path, default=EDIT)
+    parser.add_argument("--output-prefix", default=PREFIX,
+                        help="filename stem in docs/videos; also isolates work and review directories")
+    parser.add_argument("--report", type=Path,
+                        help="verification JSON; defaults to a prefix-specific report for custom prefixes")
     args = parser.parse_args()
     if not args.render:
         parser.error("No encoding performed: --render is required; --help is safe before captures exist")
     try:
+        SOURCE = args.capture_root.resolve()
+        EDIT = args.edit_manifest.resolve()
+        prefix = scene_name(args.output_prefix)
+        if prefix != PREFIX:
+            WORK = ROOT / ".tmp" / f"{prefix}-render"
+            REVIEW = OUTPUT / f"{prefix}-review"
+            REPORT = OUTPUT / f"{prefix}-verification.json"
+        PREFIX = prefix
+        if args.report is not None:
+            REPORT = args.report.resolve()
         config = read_json(EDIT)
         if config.get("fps") != 30 or any(not isinstance(config.get(k), int) or config[k] < 2 or config[k] % 2 for k in ("width", "height")):
             raise ValueError("Expected fps30 and positive even output dimensions")
@@ -309,8 +342,8 @@ def main() -> int:
         prepared = {lang: prepare(lang, config) for lang in languages}
         report = read_json(REPORT) if REPORT.exists() else {"languages": {}}
         for lang in languages:
-            targets = [OUTPUT / f"dsh-claude-compat-interactive-{lang}{suffix}" for suffix in (".mp4", "-poster.png")]
-            targets += [OUTPUT / "interactive-review" / lang / f"{name}.png" for name in names]
+            targets = [OUTPUT / f"{PREFIX}-{lang}{suffix}" for suffix in (".mp4", "-poster.png")]
+            targets += [REVIEW / lang / f"{name}.png" for name in names]
             if not args.overwrite and any(p.exists() for p in targets):
                 raise FileExistsError(f"Existing output for {lang}; explicit --overwrite required")
         # Invalidate all selected prior success records BEFORE any output replacement.

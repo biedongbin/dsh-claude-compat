@@ -27,13 +27,11 @@ Skills can reload in the current session. MCP and hook configuration changes req
 
 ![Claude Code plugin management inside DSH](docs/demo-video/screenshots/en/plugin-navigation.png)
 
-## Demo video · 40 seconds
+## Demo video · 64 seconds · complete
 
-https://github.com/user-attachments/assets/795abf8f-bc05-4c34-849d-65c61f34afd7
+[Watch / download the English MP4](docs/videos/dsh-claude-compat-2_0-complete-en.mp4) · [中文版视频](docs/videos/dsh-claude-compat-2_0-complete-zh-CN.mp4)
 
-[Watch / download the English MP4](docs/videos/dsh-claude-compat-interactive-en.mp4) · [中文版视频](docs/videos/dsh-claude-compat-interactive-zh-CN.mp4)
-
-See the full plugin page, inline management cards, history handoff and a real skill response. The recording uses labelled demo history and a demo-only skill; private details are masked. [Recording source and editing notes](docs/demo-video/README.md).
+A continuous walkthrough of 2.0.0: the graphical install entry, `/cc-plugin` management and filtering, a real model reply from a bridged skill, `/cc-resume` previewing and resuming history (with an actual summary), the Claude bridge inventory, capability drill-down with live search, and source-file viewing. 1× speed, silent; model waits are cut while replies stay complete. The recording uses labelled demo history and a demo-only skill; private details are masked. [Recording source and editing notes](docs/demo-video/complete-v2-production.md).
 
 ## Quick start
 

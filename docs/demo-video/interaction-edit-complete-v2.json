@@ -1,0 +1,147 @@
+{
+  "description": "Complete product demonstration on version 2.0.0: installation entry, inline plugin manager, actual skill response, history handoff and summary, followed by the current inventory, plugin drill-down and file viewer. Only current 2.0.0 recordings are admitted; no 1.2.1 footage, generated UI, synthetic replies, acceleration or added holds.",
+  "source_baseline": {
+    "product_version": "2.0.0",
+    "commit": "3a4b9e8",
+    "dsh_runtime": "0.2.2-rc.3"
+  },
+  "assembly_status": "ready_all_16_captures_verified_actual_marks_finalized",
+  "width": 1440,
+  "height": 900,
+  "fps": 30,
+  "scenes": [
+    {
+      "name": "install",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "plugins",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "skill",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "history",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "summary",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "overview",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "drill",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "viewer",
+      "speed": 1,
+      "keep": null
+    }
+  ],
+  "languages": {
+    "zh-CN": {
+      "skill": {
+        "keep": [
+          {
+            "start": 0.021,
+            "end": 4.234,
+            "speed": 1
+          },
+          {
+            "start": 14.046,
+            "end": 17.854,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      },
+      "summary": {
+        "keep": [
+          {
+            "start": 0.022,
+            "end": 2.6420000000000003,
+            "speed": 1
+          },
+          {
+            "start": 6.901,
+            "end": 11.207,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      },
+      "history": {
+        "keep": [
+          {
+            "start": 0.028,
+            "end": 5.227,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      }
+    },
+    "en": {
+      "skill": {
+        "keep": [
+          {
+            "start": 0.037,
+            "end": 5.527,
+            "speed": 1
+          },
+          {
+            "start": 15.945999999999998,
+            "end": 19.758,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      },
+      "summary": {
+        "keep": [
+          {
+            "start": 0.024,
+            "end": 5.423,
+            "speed": 1
+          },
+          {
+            "start": 8.181,
+            "end": 12.491,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      },
+      "history": {
+        "keep": [
+          {
+            "start": 0.063,
+            "end": 5.252,
+            "speed": 1
+          }
+        ],
+        "speed": 1
+      }
+    }
+  },
+  "source_roots": {
+    "install_plugins_skill_history_summary": ".tmp/complete-v2-capture/{language}/{scene}",
+    "overview_drill_viewer": ".tmp/interaction-capture-v2-take2/{language}/{scene}",
+    "staged_capture_root": ".tmp/complete-v2-source/{language}/{scene}",
+    "skill": ".tmp/complete-v2-capture/{language}/skill-good"
+  },
+  "editing_contract": "All scene/range speeds1. Actual skill and summary markers determine first-frame through submit+0.8, then result-0.3 through capture end, clamped to valid bounds. History ends no later than handoff+0.5. Only model wait is removed; other scenes retain actual elapsed time. All16 current2.0 captures verified before rendering; no old-footage fallback."
+}

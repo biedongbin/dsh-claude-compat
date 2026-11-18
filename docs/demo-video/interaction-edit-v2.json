@@ -1,0 +1,24 @@
+{
+  "description": "2.0.0 real browser interaction recordings at normal speed; separate v2 source and output paths.",
+  "width": 1440,
+  "height": 900,
+  "fps": 30,
+  "scenes": [
+    {
+      "name": "overview",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "drill",
+      "speed": 1,
+      "keep": null
+    },
+    {
+      "name": "viewer",
+      "speed": 1,
+      "keep": null
+    }
+  ],
+  "languages": {}
+}
